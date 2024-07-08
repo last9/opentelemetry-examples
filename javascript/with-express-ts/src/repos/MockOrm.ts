@@ -1,14 +1,4 @@
-
-
-import jsonfile from 'jsonfile';
-
-import { IUser } from '@src/models/User';
-
-
-// **** Variables **** //
-
-const DB_FILE_NAME = 'database.json';
-
+import { IUser } from "@src/models/User";
 
 // **** Types **** //
 
@@ -16,6 +6,28 @@ interface IDb {
   users: IUser[];
 }
 
+let dbFile = {
+  users: [
+    {
+      id: 366115170645,
+      name: "Sean Maxwell",
+      email: "smaxwell@example.com",
+      created: new Date("2024-03-22T05:14:36.252Z"),
+    },
+    {
+      id: 310946254456,
+      name: "John Smith",
+      email: "john.smith@example.com",
+      created: new Date("2024-03-22T05:20:55.079Z"),
+    },
+    {
+      id: 143027113460,
+      name: "Gordan Freeman",
+      email: "nova@prospect.com",
+      created: new Date("2024-03-22T05:42:18.895Z"),
+    },
+  ],
+};
 
 // **** Functions **** //
 
@@ -23,16 +35,20 @@ interface IDb {
  * Fetch the json from the file.
  */
 function openDb(): Promise<IDb> {
-  return jsonfile.readFile(__dirname + '/' + DB_FILE_NAME) as Promise<IDb>;
+  return new Promise((resolve, reject) => {
+    resolve(dbFile);
+  });
 }
 
 /**
  * Update the file.
  */
 function saveDb(db: IDb): Promise<void> {
-  return jsonfile.writeFile((__dirname + '/' + DB_FILE_NAME), db);
+  return new Promise((resolve, reject) => {
+    dbFile = db;
+    resolve();
+  });
 }
-
 
 // **** Export default **** //
 

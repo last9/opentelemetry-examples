@@ -1,7 +1,6 @@
-import { IUser } from '@src/models/User';
-import { getRandomInt } from '@src/util/misc';
-import orm from './MockOrm';
-
+import { IUser } from "@src/models/User";
+import { getRandomInt } from "@src/util/misc";
+import orm from "./MockOrm";
 
 // **** Functions **** //
 
@@ -79,7 +78,6 @@ async function delete_(id: number): Promise<void> {
     }
   }
 }
-
 
 // **** Export default **** //
 
