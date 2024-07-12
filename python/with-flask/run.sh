@@ -13,4 +13,4 @@ echo "Environment variables exported successfully."
 
 # Run the Flask app
 
-opentelemetry-instrument flask run 
+opentelemetry-instrument flask run
