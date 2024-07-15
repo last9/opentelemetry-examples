@@ -11,7 +11,7 @@ import { Resource } from "@opentelemetry/resources";
 
 const providerConfig: TracerConfig = {
   resource: new Resource({
-    [SEMRESATTRS_SERVICE_NAME]: "express-service",
+    [SEMRESATTRS_SERVICE_NAME]: "express-api-service",
   }),
 };
 
@@ -29,5 +29,11 @@ provider.register();
 
 // Automatically instrument HTTP and Express (additional instrumentations can be added similarly)
 registerInstrumentations({
-  instrumentations: [getNodeAutoInstrumentations()],
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      "@opentelemetry/instrumentation-fs": {
+        enabled: false,
+      },
+    }),
+  ],
 });
