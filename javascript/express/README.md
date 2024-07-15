@@ -13,6 +13,11 @@ npx degit last9/opentelemetry-examples/javascript/express express
 2. In the `express/env` directory create `.env` file and add the contents of
    `.env.example` file.
 
+   ```bash
+   cd env
+   cp .env.example .env
+   ```
+
 3. Obtain the OTLP endpoint and the Auth Header from the Last9 dashboard and
    modify the values of the `OTLP_ENDPOINT` and `OTLP_AUTH_HEADER` variables
    accordingly in the `.env` file.
