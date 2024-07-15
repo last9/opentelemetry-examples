@@ -31,6 +31,7 @@ provider.register();
 registerInstrumentations({
   instrumentations: [
     getNodeAutoInstrumentations({
+      // instrumentation-fs is disabled to reduce the noise of spans related to file operations
       "@opentelemetry/instrumentation-fs": {
         enabled: false,
       },
