@@ -29,13 +29,13 @@ npx degit last9/opentelemetry-examples/javascript/express express
 npm install
 ```
 
-4. To build the project, run the following command in the `express` directory:
+5. To build the project, run the following command in the `express` directory:
 
 ```bash
 npm run build
 ```
 
-5. Start the server by running the following command:
+6. Start the server by running the following command:
 
 ```bash
 npm run start
@@ -50,7 +50,7 @@ endpoints are:
 - PUT `/api/users/update` - Update a user
 - DELETE `/api/users/delete/:id` - Delete a user
 
-6. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
+7. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
    dashboard to see the traces in action.
 
 ![Traces](./traces.png)
