@@ -40,6 +40,13 @@ export OTEL_METRICS_EXPORTER=otlp
 opentelemetry-instrument flask run
 ```
 
+Alternatively, you can programmatically instrument the application as shown in
+the `run_app.py` file.
+
+```bash
+python run_app.py
+```
+
 6. Once the server is running, you can access the application at
    `http://127.0.0.1:5000` by default. Where you can make CRUD operations. The
    API endpoints are:
