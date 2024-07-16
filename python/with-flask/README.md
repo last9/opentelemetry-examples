@@ -40,5 +40,19 @@ export OTEL_METRICS_EXPORTER=otlp
 opentelemetry-instrument flask run
 ```
 
+6. Once the server is running, you can access the application at
+   `http://127.0.0.1:5000` by default. Where you can make CRUD operations. The
+   API endpoints are:
+
+- GET `/users` - Get all users
+- GET `/users/:id` - Get a user by ID
+- POST `/users` - Create a new user
+- PUT `/users/:id` - Update a user
+- DELETE `/users/:id` - Delete a user
+
+- GET `/products` - Get all products
+- GET `/products/:id` - Get a product by ID
+- POST `/products` - Create a new product
+
 6. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
    dashboard to see the traces and metrics in action.
