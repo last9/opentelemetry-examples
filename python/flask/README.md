@@ -56,3 +56,5 @@ opentelemetry-instrument flask run
 
 6. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
    dashboard to see the traces and metrics in action.
+
+![Traces](./traces.png)
