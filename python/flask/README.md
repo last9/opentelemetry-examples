@@ -27,7 +27,7 @@ opentelemetry-bootstrap -a install
 export OTEL_SERVICE_NAME=flask-app
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<BASIC_AUTH_HEADER>"
-export OTEL_TRACES_EXPORTER=console,otlp
+export OTEL_TRACES_EXPORTER=otlp
 export OTEL_METRICS_EXPORTER=otlp
 ```
 
