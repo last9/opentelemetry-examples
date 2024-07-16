@@ -11,23 +11,24 @@ import { Resource } from '@opentelemetry/resources';
 
 const providerConfig: TracerConfig = {
   resource: new Resource({
-    [SEMRESATTRS_SERVICE_NAME]: 'nestjs-service',
+    [SEMRESATTRS_SERVICE_NAME]: 'nestjs-api-service',
   }),
 };
 
 // Initialize and register the tracer provider
 const provider = new NodeTracerProvider(providerConfig);
-const otlp = new OTLPTraceExporter({
-  url: process.env.OTLP_ENDPOINT,
-  headers: {
-    Authorization: process.env.OTLP_AUTH_HEADER,
-  },
-}); // Configure the OTLP exporter
+const otlp = new OTLPTraceExporter();
 
 provider.addSpanProcessor(new BatchSpanProcessor(otlp));
 provider.register();
 
 // Automatically instrument NestJS (additional instrumentations can be added similarly)
 registerInstrumentations({
-  instrumentations: [getNodeAutoInstrumentations()],
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      '@opentelemetry/instrumentation-fs': {
+        enabled: false, // Disable the instrumentation for the fs module to avoid unnecessary spans
+      },
+    }),
+  ],
 });
