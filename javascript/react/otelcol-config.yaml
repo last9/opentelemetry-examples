@@ -13,9 +13,9 @@ processors:
 
 exporters:
   otlp:
-    endpoint: "https://otlp.last9.io:4317"
+    endpoint: "otlp.last9.io:443"
     headers:
-      Authorization: "<AUTH-HEADER>"
+      Authorization: "<BASIC_AUTH-HEADER>"
 
 service:
   pipelines:

@@ -23,14 +23,10 @@ const providerConfig: TracerConfig = {
 
 const otlp = new OTLPTraceExporter({
   url: import.meta.env.VITE_OTLP_ENDPOINT,
-  headers: {
-    Authorization: import.meta.env.VITE_OTLP_AUTH_HEADER,
-  },
 });
 
 const provider = new WebTracerProvider(providerConfig);
 
-// we will use ConsoleSpanExporter to check the generated spans in dev console
 provider.addSpanProcessor(new BatchSpanProcessor(otlp));
 
 provider.register({
