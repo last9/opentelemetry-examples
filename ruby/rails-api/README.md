@@ -1,24 +1,49 @@
-# README
+# Auto instrumentating Ruby on rails application using OpenTelemetry
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+This example demonstrates how to instrument a simple Ruby on rails application
+with OpenTelemetry.
 
-Things you may want to cover:
+1. Install the packages using following command:
 
-* Ruby version
+```bash
+bundle install
+```
 
-* System dependencies
+2. Obtain the OTLP Auth Header from the [Last9 dashboard](https://app.last9.io).
+   The Auth header is required in the next step.
 
-* Configuration
+3. Next, run the commands below to set the environment variables.
 
-* Database creation
+```bash
+touch .env
+cp .env.example .env
+```
 
-* Database initialization
+4. In the `.env` file, set the value of `OTEL_EXPORTER_OTLP_HEADERS` to the OTLP
+   Authorization Header obtained from the Last9 dashboard and make sure the
+   value of the header is URL encoded.
 
-* How to run the test suite
+```bash
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=<BASIC_AUTH_HEADER>"
+```
 
-* Services (job queues, cache servers, search engines, etc.)
+5. Run the Ruby on rails application:
 
-* Deployment instructions
+```bash
+bin/rails server
+```
 
-* ...
+6. Once the server is running, you can access the application at
+   `http://localhost:3000` by default. Where you can make CRUD operations. The
+   API endpoints are:
+
+- GET `/api/v1/users` - Get all users
+- GET `/api/v1/users/:id` - Get a user by ID
+- POST `/api/v1/users` - Create a new user
+- PUT `/api/v1/users/:id` - Update a user
+- DELETE `/api/v1/users/:id` - Delete a user
+
+7. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
+   dashboard to see the traces and metrics in action.
+
+![Traces](./traces.png)
