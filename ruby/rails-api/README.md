@@ -16,7 +16,7 @@ bundle install
 
 ```bash
 touch .env
-cp .env.example .env
+cp .env.example.erb .env
 ```
 
 4. In the `.env` file, set the value of `OTEL_EXPORTER_OTLP_HEADERS` to the OTLP
@@ -27,15 +27,14 @@ cp .env.example .env
 OTEL_EXPORTER_OTLP_HEADERS="Authorization=<BASIC_AUTH_HEADER>"
 ```
 
-5. Run the Ruby on rails application:
+5. Run the Ruby on Rails application:
 
 ```bash
 bin/rails server
 ```
 
 6. Once the server is running, you can access the application at
-   `http://localhost:3000` by default. Where you can make CRUD operations. The
-   API endpoints are:
+   `http://localhost:3000` by default. The API endpoints are:
 
 - GET `/api/v1/users` - Get all users
 - GET `/api/v1/users/:id` - Get a user by ID
