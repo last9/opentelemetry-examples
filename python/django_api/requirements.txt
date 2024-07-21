@@ -1,0 +1,4 @@
+python-dotenv
+django
+opentelemetry-distro
+opentelemetry-exporter-otlp
