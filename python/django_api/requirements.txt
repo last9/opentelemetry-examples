@@ -1,4 +1,5 @@
 python-dotenv
 django
+djangorestframework
 opentelemetry-distro
 opentelemetry-exporter-otlp

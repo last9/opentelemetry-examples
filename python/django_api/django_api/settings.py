@@ -1,3 +1,4 @@
+from os import environ
 """
 Django settings for django_api project.
 
@@ -20,13 +21,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-u15mzsk0f$!rd!=g^)bn&&lv4xuu%*b-+_br3cdu3$5pn(z^in'
+SECRET_KEY = 'django-insecure-v)p=j=7f46ul*mno4fle=o!7oxg1_90m0wi8rkp_nsn^r1=1-6'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = bool(environ.get('DEBUG', default=False))
 
-ALLOWED_HOSTS = ['*']
 
+ALLOWED_HOSTS = ['127.0.0.1']
 
 # Application definition
 
@@ -37,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'items'
 ]
 
 MIDDLEWARE = [
