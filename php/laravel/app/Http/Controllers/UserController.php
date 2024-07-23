@@ -8,58 +8,36 @@ class UserController extends Controller
 {
     public function index()
     {
-        $users = User::all();
-        return view('users.index', compact('users'));
+        return "Hello World";
     }
 
     public function create()
     {
-        return view('users.create');
+        return "Hello World";
     }
 
     public function store(Request $request)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|min:8',
-        ]);
-
-        $user = User::create([
-            'name' => $validatedData['name'],
-            'email' => $validatedData['email'],
-            'password' => bcrypt($validatedData['password']),
-        ]);
-
-        return redirect()->route('users.index');
+        return "Hello World";
     }
 
     public function show(User $user)
     {
-        return view('users.show', compact('user'));
+        return "Hello World";
     }
 
     public function edit(User $user)
     {
-        return view('users.edit', compact('user'));
+        return "Hello World";
     }
 
     public function update(Request $request, User $user)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id,
-            'password' => 'sometimes|min:8',
-        ]);
-
-        $user->update($validatedData);
-
-        return redirect()->route('users.show', $user);
+        return "Hello World";
     }
 
     public function destroy(User $user)
     {
-        $user->delete();
-        return redirect()->route('users.index');
+        return "Hello World";
     }
 }
