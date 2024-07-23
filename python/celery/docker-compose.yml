@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    command: python run_task.py
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
