@@ -6,10 +6,8 @@ use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
 use OpenTelemetry\Contrib\Otlp\SpanExporter;
 use OpenTelemetry\SDK\Trace\SpanProcessor\SimpleSpanProcessor;
 use OpenTelemetry\SDK\Trace\TracerProvider;
-use OpenTelemetry\SDK\Common\Time\ClockInterface;
 
 define('LARAVEL_START', microtime(true));
-
 
 // Determine if the application is in maintenance mode...
 if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
@@ -27,11 +25,18 @@ $tracerProvider =  new TracerProvider(
 );
 
 $tracer = $tracerProvider->getTracer('io.opentelemetry.contrib.php');
-$tracer->spanBuilder('root')->startSpan()->end();
 
 $request = Request::capture();
+$span = $tracer->spanBuilder($request->url())->startSpan();
+$spanScope = $span->activate();
 
+$span->setAttribute('service.name', 'laravel-api-service');
+$span->setAttribute('http.method', $request->method());
 
 // Bootstrap Laravel and handle the request...
 (require_once __DIR__.'/../bootstrap/app.php')
-    ->handleRequest($request);
+->handleRequest($request);
+
+
+$span->end();
+$spanScope->detach();

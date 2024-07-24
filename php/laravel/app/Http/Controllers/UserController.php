@@ -16,27 +16,17 @@ class UserController extends Controller
         return "Hello World";
     }
 
-    public function store(Request $request)
+    public function show()
     {
         return "Hello World";
     }
 
-    public function show(User $user)
+    public function update()
     {
         return "Hello World";
     }
 
-    public function edit(User $user)
-    {
-        return "Hello World";
-    }
-
-    public function update(Request $request, User $user)
-    {
-        return "Hello World";
-    }
-
-    public function destroy(User $user)
+    public function destroy()
     {
         return "Hello World";
     }
