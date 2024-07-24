@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Auto instrumenting Next.js application with OpenTelemetry
 
-## Getting Started
+This example demonstrates how to auto-instrument a Next.js application with
+OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your
+machine.
 
-First, run the development server:
+1. To clone this example run the following command:
+
+```bash
+npx degit last9/opentelemetry-examples/javascript/nextjs nextjs
+```
+
+2. Now, navigate to the `nextjs` directory and install the dependencies:
+
+```bash
+cd nextjs
+npm install
+```
+
+3. Obtain the Basic Auth credentials from the
+   [Last9 dashboard](https://app.last9.io). We will use these credentials in
+   next steps.
+
+4. Next create a `.env.local` file by copying the contents of the `.env.example`
+   file:
+
+```bash
+cp .env.example .env.local
+```
+
+5. Update the `OTEL_EXPORTER_OTLP_HEADERS` variable in the `.env.local` file
+   with the basic authentication values obtained from the Last9 dashboard.
+
+   ```env
+    OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <BASIC_AUTH_TOKEN>"
+   ```
+
+6. Start the server by running the following command:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Once the server is running, you can access the application at
+`http://localhost:3000` by default. The API endpoints are:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- GET `/` - Home page
+- GET `/api/users`
+- GET `/api/users/:id`
+- POST `/api/users`
+- PUT `/api/users/:id`
+- DELETE `/api/users/:id`
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+7. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
+   dashboard to see the traces in action.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+![Traces](./traces.png)
