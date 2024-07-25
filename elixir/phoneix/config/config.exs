@@ -65,12 +65,16 @@ config :phoenix, :json_library, Jason
 
 config :opentelemetry, :processors,
   otel_batch_processor: %{
-    exporter: :otel_exporter_stdout
+    exporter:
+      {:opentelemetry_exporter,
+       %{
+         endpoints: [System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") || "http://localhost:4317"],
+         headers: [{"Authorization", System.get_env("OTEL_EXPORTER_OTLP_AUTH_HEADER")}]
+       }}
   }
 
 config :opentelemetry, :resource, service: %{name: "phoenix_app"}
-
-config :opentelemetry_phoenix, :tracer, service_name: "phoenix_app"
+config :opentelemetry_phoenix, :tracer, service_name: System.get_env("OTEL_SERVICE_NAME")
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
