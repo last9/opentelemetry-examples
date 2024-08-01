@@ -6,12 +6,16 @@ import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'; // Use Batch
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'; // Import OTLPTraceExporter
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { SEMRESATTRS_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
+import {
+  SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
+  SEMRESATTRS_SERVICE_NAME,
+} from '@opentelemetry/semantic-conventions';
 import { Resource } from '@opentelemetry/resources';
 
 const providerConfig: TracerConfig = {
   resource: new Resource({
     [SEMRESATTRS_SERVICE_NAME]: 'nestjs-api-service',
+    [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
   }),
 };
 
