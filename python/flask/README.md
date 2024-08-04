@@ -32,7 +32,9 @@ export OTEL_METRICS_EXPORTER=otlp
 ```
 
 > Note: `BASIC_AUTH_HEADER` should be replaced with the URL encoded value of the
-> basic authorization header. Read this post to know how [Python Otel SDK](https://last9.io/blog/whitespace-in-otlp-headers-and-opentelemetry-python-sdk/) handles whitespace in headers for more details.
+> basic authorization header. Read this post to know how
+> [Python Otel SDK](https://last9.io/blog/whitespace-in-otlp-headers-and-opentelemetry-python-sdk/)
+> handles whitespace in headers for more details.
 
 5. Run the Flask application:
 
