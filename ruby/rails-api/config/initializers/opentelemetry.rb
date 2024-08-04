@@ -14,8 +14,8 @@ OpenTelemetry::SDK.configure do |c|
   c.resource = OpenTelemetry::SDK::Resources::Resource.create({
     OpenTelemetry::SemanticConventions::Resource::SERVICE_NAME => 'ruby-on-rails-api-service',
     OpenTelemetry::SemanticConventions::Resource::SERVICE_VERSION => "0.0.0",
-    OpenTelemetry::SemanticConventions::Resource::DEPLOYMENT_ENVIRONMENT => Rails.env
+    OpenTelemetry::SemanticConventions::Resource::DEPLOYMENT_ENVIRONMENT => Rails.env.to_s
   })
-  
+
   c.use_all() # enables all instrumentation!
 end
