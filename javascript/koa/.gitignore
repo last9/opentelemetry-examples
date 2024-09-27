@@ -1,0 +1,3 @@
+# .gitignore for javascript projects
+node_modules
+.env

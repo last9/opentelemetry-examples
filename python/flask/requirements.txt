@@ -1,0 +1,4 @@
+python-dotenv
+flask
+opentelemetry-distro
+opentelemetry-exporter-otlp
