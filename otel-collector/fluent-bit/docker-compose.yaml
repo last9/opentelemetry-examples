@@ -1,0 +1,23 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    container_name: otel-collector
+    ports:
+      - "4317:4317"   # for OTLP/gRPC
+      - "4318:4318"   # for OTLP/HTTP
+    volumes:
+      - ./otel-config.yaml:/etc/otel-collector/config.yaml
+    command: ["--config", "/etc/otel-collector/config.yaml"]
+    restart: unless-stopped
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.1.4
+    container_name: fluent-bit
+    volumes:
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+    environment:
+      - FLUENT_OTLP_HOST=otel-collector
+      - FLUENT_OTLP_PORT=4318
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
