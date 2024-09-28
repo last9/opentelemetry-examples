@@ -105,9 +105,6 @@ GEM
     google-protobuf (4.27.5-x86_64-linux)
       bigdecimal
       rake (>= 13)
-    google-protobuf (4.27.2-x86_64-linux)
-      bigdecimal
-      rake (>= 13)
     googleapis-common-protos-types (1.15.0)
       google-protobuf (>= 3.18, < 5.a)
     i18n (1.14.5)
