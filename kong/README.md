@@ -111,7 +111,9 @@ curl -X POST http://localhost:8001/plugins \
    "headers": {
      "Authorization": "Basic <last9_api_key>"
    }
+ }
 }'
+```
 
 > Read more about [Kong OpenTelemetry Plugin](https://docs.konghq.com/hub/kong-inc/opentelemetry/).
 
