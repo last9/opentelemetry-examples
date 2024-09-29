@@ -1,0 +1,54 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        include_metadata: true
+      http:
+        include_metadata: true
+
+  fluentforward:
+    endpoint: 0.0.0.0:8006
+
+processors:
+  # keep it as first processor
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 85
+    spike_limit_percentage: 15
+  batch:
+    timeout: 5s
+    send_batch_size: 100000
+  transform/logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+        # Extract containe name as service.name
+        - set(resource.attributes["service.name"], attributes["container_name"])
+        # Extract ENV as deployment.environment
+        - set(resource.attributes["deployment.environment"], attributes["ENV"])
+        # Add additional attributes as needed
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/last9:
+    endpoint: <last9_otlp_endpoint>
+    headers:
+      Authorization: "Basic <last9_api_key>"
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp, fluentforward]
+      processors: [memory_limiter, batch, transform/logs]
+      exporters: [otlp/last9]
+
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/last9]
+
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/last9]
