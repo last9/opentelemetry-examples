@@ -15,10 +15,6 @@ processors:
   batch:
     timeout: 5s
     send_batch_size: 100000
-    metadata_keys:
-      - X-Logging-Host
-      - X-Logging-Name
-      - X-Logging-Env
   resource:
     attributes:
     - key: host
@@ -38,5 +34,5 @@ service:
   pipelines:
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, batch, resource]
+      processors: [memory_limiter, resource, batch]
       exporters: [debug]
