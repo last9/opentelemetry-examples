@@ -6,6 +6,14 @@
 - `otel-config.yaml`: Configuration file for OpenTelemetry Collector
 - `fluent.conf`: Configuration file for FluentD
 
+## Kong Version
+
+This example uses Kong Gateway 3.7.x. It is expected to work with older 3.x versions as well.
+
+## Data flow
+
+![Data flow](./kong-otel-instrumentation-to-last9.png)
+
 ## Running the Services
 
 ```bash
@@ -106,8 +114,7 @@ curl -X POST http://localhost:8001/plugins \
    {
  "name": "opentelemetry",
  "config": {
-   "traces_endpoint": "<last9_otlp_traces_endpoint>",
-   "logs_endpoint": "<last9_otlp_logs_endpoint>",
+   "endpoint": "<last9_otlp_traces_endpoint>",
    "headers": {
      "Authorization": "Basic <last9_api_key>"
    }
@@ -115,6 +122,6 @@ curl -X POST http://localhost:8001/plugins \
 }'
 ```
 
-> Read more about [Kong OpenTelemetry Plugin](https://docs.konghq.com/hub/kong-inc/opentelemetry/).
+> Read more about [Kong OpenTelemetry Plugin](https://docs.konghq.com/hub/kong-inc/opentelemetry/3.7.x/how-to/basic-example/).
 
 Now, you should be able to see Kong Gateway traces in Last9. The Service Name will be `kong`.

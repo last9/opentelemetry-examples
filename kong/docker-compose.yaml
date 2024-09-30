@@ -18,7 +18,7 @@ services:
       - kong_data:/var/lib/postgresql/data
 
   kong-migration:
-    image: kong/kong-gateway:3.4.1.0
+    image: kong/kong:3.7.1
     command: kong migrations bootstrap
     environment:
       KONG_DATABASE: postgres
@@ -30,7 +30,7 @@ services:
 
   kong:
     container_name: kong
-    image: kong:latest
+    image: kong/kong:3.7.1
     environment:
       KONG_DATABASE: postgres
       KONG_PG_HOST: kong-database
