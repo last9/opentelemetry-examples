@@ -4,7 +4,10 @@ GEM
     base64 (0.2.0)
     bigdecimal (3.1.8)
     dotenv (3.1.2)
-    google-protobuf (4.27.2-x86_64-darwin)
+    google-protobuf (4.27.5-x86_64-darwin)
+      bigdecimal
+      rake (>= 13)
+    google-protobuf (4.27.5-x86_64-linux)
       bigdecimal
       rake (>= 13)
     googleapis-common-protos-types (1.15.0)
@@ -229,6 +232,7 @@ GEM
 
 PLATFORMS
   x86_64-darwin-22
+  x86_64-linux
 
 DEPENDENCIES
   dotenv
