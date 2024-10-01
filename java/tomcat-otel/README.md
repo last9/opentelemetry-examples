@@ -1,10 +1,19 @@
-OpenTelemetry Tomcat Example
+# Tomcat Java OpenTelemetry Example
 
-This example demonstrates how to instrument a Tomcat web application using OpenTelemetry.
+## Setup
 
-## Prerequisites
+1. Copy the properties template file:
+   ```
+   cp src/main/resources/last9.properties.template src/main/resources/last9.properties
+   ```
 
-- Java JDK (11 or later)
-- Maven (3.6.3 or later)
-- Tomcat (9.0 or later)
+2. Edit `src/main/resources/last9.properties` and replace the placeholder values with your actual Last9 credentials.
 
+3. Build the project:
+   ```
+   mvn clean package
+   ```
+
+4. Deploy the WAR file to your Tomcat server.
+
+...

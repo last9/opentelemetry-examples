@@ -1,0 +1,4 @@
+*.jar
+start.sh
+target/
+src/main/resources/last9.properties
