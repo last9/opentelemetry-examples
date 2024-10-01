@@ -33,6 +33,11 @@ Before running the application, make sure to set the following environment varia
 - `OTEL_SERVICE_NAME`: The name of your service (default: tomcat-otel-example)
 - `OTEL_EXPORTER_OTLP_USERNAME`: Your Last9 username (if using basic auth)
 - `OTEL_EXPORTER_OTLP_HEADERS`: Additional headers for the OTLP exporter (optional)
+- `OTEL_TRACES_EXPORTER: otlp`
+- `OTEL_METRICS_EXPORTER: otlp`
+- `OTEL_LOGS_EXPORTER: otlp`
+- `OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf`
+- `OTEL_METRIC_EXPORT_INTERVAL: 60000`
 
 7. Start Tomcat using the `start.sh` script:
    ```
