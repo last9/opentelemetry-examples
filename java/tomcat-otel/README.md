@@ -25,7 +25,16 @@
    cp target/tomcat-otel-example.war /opt/homebrew/Cellar/tomcat/10.1.30/libexec/webapps/
    ```
 
-6. Start Tomcat using the `start.sh` script:
+6. ## Environment Variables
+
+Before running the application, make sure to set the following environment variables in your `start.sh` script or your environment:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: The endpoint for your OpenTelemetry collector (default: https://otlp.last9.io)
+- `OTEL_SERVICE_NAME`: The name of your service (default: tomcat-otel-example)
+- `OTEL_EXPORTER_OTLP_USERNAME`: Your Last9 username (if using basic auth)
+- `OTEL_EXPORTER_OTLP_HEADERS`: Additional headers for the OTLP exporter (optional)
+
+7. Start Tomcat using the `start.sh` script:
    ```
    ./start.sh
    ```
@@ -41,3 +50,4 @@ This will display a simple "Hello, OpenTelemetry!" message and generate telemetr
 ## Troubleshooting
 
 If you encounter any issues, check the Tomcat logs for error messages. Ensure that the OpenTelemetry Java agent JAR file is present in the project root directory and that your Last9 credentials are correctly set in the `last9.properties` file.
+
