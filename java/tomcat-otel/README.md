@@ -15,8 +15,15 @@
    ```
 
 4. Download the OpenTelemetry Java agent JAR file and place it in the project root directory.
+   ```
+   curl -L https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar -o opentelemetry-javaagent.jar
+   ```
 
 5. Deploy the WAR file to your Tomcat server.
+   **Example** command on Mac: Use your local Tomcat path
+   ```
+   cp target/tomcat-otel-example.war /opt/homebrew/Cellar/tomcat/10.1.30/libexec/webapps/
+   ```
 
 6. Start Tomcat using the `start.sh` script:
    ```
