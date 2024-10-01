@@ -10,21 +10,21 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 
 from app import app
 
+# Instrument Flask
+FlaskInstrumentor().instrument_app(app)
+FlaskInstrumentor().instrument(enable_commenter=True, commenter_options={})
 
 resource = Resource(attributes={
-    ResourceAttributes.SERVICE_NAME: "flask-api-service", # replace with env variable or acutal service name
-    ResourceAttributes.DEPLOYMENT_ENVIRONMENT: "dev", # replace with env variable
+    ResourceAttributes.SERVICE_NAME: "flask-api-service", # replace with acutal service name
+    ResourceAttributes.DEPLOYMENT_ENVIRONMENT: "dev", # Replace with app environment
 })
 
 provider = TracerProvider(resource=resource)
 processor = BatchSpanProcessor(OTLPSpanExporter())
 
 provider.add_span_processor(processor)
+
 # Sets the global default tracer provider
 trace.set_tracer_provider(provider)
-
-instrumentor = FlaskInstrumentor()
-
-instrumentor.instrument_app(app)
 
 app.run(port=5000)

@@ -15,7 +15,29 @@ pip install -r requirements.txt
    tool:
 
 ```bash
-opentelemetry-bootstrap -a install
+opentelemetry-bootstrap -a requirements
+```
+It will output the packages that you can add to `requirements.txt`.
+
+```bash
+opentelemetry-instrumentation-asyncio==0.48b0
+opentelemetry-instrumentation-dbapi==0.48b0
+opentelemetry-instrumentation-logging==0.48b0
+opentelemetry-instrumentation-sqlite3==0.48b0
+opentelemetry-instrumentation-threading==0.48b0
+opentelemetry-instrumentation-urllib==0.48b0
+opentelemetry-instrumentation-wsgi==0.48b0
+opentelemetry-instrumentation-flask==0.48b0
+opentelemetry-instrumentation-grpc==0.48b0
+opentelemetry-instrumentation-jinja2==0.48b0
+opentelemetry-instrumentation-requests==0.48b0
+opentelemetry-instrumentation-urllib3==0.48b0
+```
+
+Copy these packages to your `requirements.txt` file and run the command again to install the packages.
+
+```bash
+pip install -r requirements.txt
 ```
 
 3. Obtain the OTLP Auth Header from the [Last9 dashboard](https://app.last9.io).
