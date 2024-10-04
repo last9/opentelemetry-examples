@@ -1,0 +1,62 @@
+receivers:
+ otlp:
+   protocols:
+     grpc:
+       endpoint: 0.0.0.0:4317
+     http:
+       endpoint: 0.0.0.0:4318
+# Detailed configuration options can be found at https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver
+ filelog:
+   include: [/var/log/app/*.log]
+   include_file_path: true
+   operators:
+     - type: json_parser
+     - type: severity_parser
+       parse_from: attributes.level
+       mapping:
+         critical: 50
+         error: 40
+         warning: 30
+         info: 20
+         debug: 10
+
+
+processors:
+ transform/add_timestamp:
+   log_statements:
+     - context: log
+       statements:
+         - set(observed_time, Now())
+         - set(time, Now())
+ attributes:
+   actions:
+     - key: test.name
+       value: "jammytest"
+       action: insert
+     - key: deployment.environment
+       value: "production"
+       action: insert
+     - key: otel.processed
+       value: true
+       action: insert
+ batch:
+   timeout: 1s
+   send_batch_size: 1024
+
+
+exporters:
+ debug:
+   verbosity: detailed
+ otlp/last9:
+   endpoint: Use Otlp endpoint from Integration page
+   headers:
+     "Authorization": Use Auth header details from Integrations page
+   timeout: 30s
+
+
+service:
+ pipelines:
+   logs:
+     receivers: [filelog]
+     processors: [attributes, batch, transform/add_timestamp]
+     exporters: [debug, otlp/last9]
