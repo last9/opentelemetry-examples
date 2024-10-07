@@ -1,0 +1,64 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'yace'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['localhost:5000']
+
+processors:
+  filter:
+    metrics:
+      include:
+        match_type: regexp
+        metric_names:
+          - "aws_ec2_.*"
+          - "yace_.*"
+
+  metricstransform:
+    transforms:
+      - include: aws_ec2_cpuutilization_average
+        action: update
+        new_name: aws.ec2.cpu.utilization
+      - include: aws_ec2_network_in_sum
+        action: update
+        new_name: aws.ec2.network.in.bytes
+      - include: aws_ec2_network_out_sum
+        action: update
+        new_name: aws.ec2.network.out.bytes
+      # Add more transformations as needed
+
+  attributes:
+    actions:
+      - key: metric_type
+        value: "aws_ec2"
+        action: insert
+      - key: cloud.provider
+        value: "aws"
+        action: insert
+      - key: cloud.platform
+        value: "ec2"
+        action: insert
+
+exporters:
+  prometheusremotewrite:
+    endpoint: "Use Metrics TSDB endpoint from Integration page"
+    headers:
+      "Authorization": "Use Base64 component of username/password as Auth header details"
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  logging:
+    loglevel: debug
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      processors: [filter, metricstransform, attributes]
+      exporters: [logging, prometheusremotewrite]
