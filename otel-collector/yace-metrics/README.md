@@ -6,9 +6,10 @@ This guide explains how to use Levitate's OpenTelemetry metrics endpoint to inge
 
 1. Install OpenTelemetry Collector
 2. Create an AWS IAM user
-3. Create access keys
-4. Create an EC2 instance
-5. Enable managed monitoring for your EC2 instance
+3. Add the required IAM role to the user
+4. Create access keys
+5. Create an EC2 instance
+6. Enable managed monitoring for your EC2 instance
 
 ## Installation Steps
 
@@ -25,7 +26,40 @@ sudo dpkg -i otelcol-contrib_0.110.0_linux_amd64.deb
 
 For more installation options, refer to the [official documentation](https://opentelemetry.io/docs/collector/installation/).
 
-### 2. Install Docker
+### 2. Create AWS IAM User and Role
+
+Create an AWS IAM user and add the following IAM role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "tag:GetResources",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "apigateway:GET",
+        "aps:ListWorkspaces",
+        "autoscaling:DescribeAutoScalingGroups",
+        "dms:DescribeReplicationInstances",
+        "dms:DescribeReplicationTasks",
+        "ec2:DescribeTransitGatewayAttachments",
+        "ec2:DescribeSpotFleetRequests",
+        "shield:ListProtections",
+        "storagegateway:ListGateways",
+        "storagegateway:ListTagsForResource",
+        "iam:ListAccountAliases"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### 3. Install Docker
 
 ```bash
 # Add Docker's official GPG key
@@ -49,7 +83,7 @@ sudo docker run hello-world
 
 For more Docker installation options, see the [official Docker documentation](https://docs.docker.com/engine/install/).
 
-### 3. Install AWS CLI
+### 4. Install AWS CLI
 
 ```bash
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
