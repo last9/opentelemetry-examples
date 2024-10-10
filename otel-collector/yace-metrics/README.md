@@ -1,15 +1,15 @@
-# Installing YACE Exporter to Scrape AWS Cloudwatch Metrics for AWS EC2 Instances
+# Installing YACE Exporter to Scrape AWS Cloudwatch Metrics
 
-This guide explains how to use Levitate's OpenTelemetry metrics endpoint to ingest metrics from AWS Cloudwatch using the OpenTelemetry Collector.
+This guide explains how to use Levitate's OpenTelemetry metrics endpoint to ingest metrics from AWS Cloudwatch using YACE Exporter and OpenTelemetry Collector.
 
 ## Prerequisites
 
 1. Install OpenTelemetry Collector
 2. Create an AWS IAM user
 3. Add the required IAM role to the user
-4. Create access keys
-5. Create an EC2 instance
-6. Enable managed monitoring for your EC2 instance
+4. Create access keys (or use AssumeRole in YACE config)
+5. Install Docker
+6. Install AWS CLI
 
 ## Installation Steps
 
@@ -115,36 +115,16 @@ processors:
       include:
         match_type: regexp
         metric_names:
-          - "aws_ec2_.*"
-          - "yace_.*"
-
-  metricstransform:
-    transforms:
-      - include: aws_ec2_cpuutilization_average
-        action: update
-        new_name: aws.ec2.cpu.utilization
-      - include: aws_ec2_network_in_sum
-        action: update
-        new_name: aws.ec2.network.in.bytes
-      - include: aws_ec2_network_out_sum
-        action: update
-        new_name: aws.ec2.network.out.bytes
-      # Add more transformations as needed
+          - ".*"  # Include all metrics
 
   attributes:
     actions:
-      - key: metric_type
-        value: "aws_ec2"
-        action: insert
-      - key: cloud.provider
-        value: "aws"
-        action: insert
-      - key: cloud.platform
-        value: "ec2"
+      - key: scraper
+        value: "yace"
         action: insert
 
 exporters:
-  prometheusremotewrite:
+  otlp/last9:
     endpoint: "Use Metrics TSDB endpoint from Integration page"
     headers:
       "Authorization": "Use Base64 component of username/password as Auth header details"
@@ -155,55 +135,122 @@ exporters:
       max_interval: 30s
       max_elapsed_time: 300s
 
-  logging:
-    loglevel: debug
+  debug:
+    verbosity: detailed
 
 service:
   pipelines:
     metrics:
       receivers: [prometheus]
-      processors: [filter, metricstransform, attributes]
-      exporters: [logging, prometheusremotewrite]
+      processors: [filter, attributes]
+      exporters: [logging, otlp/last9]
 ```
 
-### YACE Configuration for EC2
+### YACE Configuration
 
-Create a file named `ec2config.yml` with the following content:
+Create a file named `yace_config.yml` with the following content:
 
 ```yaml
 apiVersion: v1alpha1
 discovery:
+  exportedTagsOnMetrics:
+    # EC2/EBS
+    AWS/EC2:
+      - instance-id
+      - Name
+    AWS/ApplicationELB:
+      - LoadBalancer
+      - TargetGroup
+    AWS/NetworkELB:
+      - LoadBalancer
+      - TargetGroup
+
   jobs:
     - type: AWS/EC2
       regions:
-        - ap-south-1
+        - ap-south-1  # Adjust this to your specific region
       period: 300
       length: 300
       metrics:
         - name: CPUUtilization
-          statistics: [Average]
-        - name: NetworkIn
-          statistics: [Average, Sum]
-        - name: NetworkOut
-          statistics: [Average, Sum]
-        - name: NetworkPacketsIn
+          statistics: [Average, Maximum, Minimum]
+        - name: DiskReadOps
           statistics: [Sum]
-        - name: NetworkPacketsOut
+        - name: DiskWriteOps
           statistics: [Sum]
         - name: DiskReadBytes
           statistics: [Sum]
         - name: DiskWriteBytes
           statistics: [Sum]
-        - name: DiskReadOps
+        - name: NetworkIn
           statistics: [Sum]
-        - name: DiskWriteOps
+        - name: NetworkOut
           statistics: [Sum]
         - name: StatusCheckFailed
           statistics: [Sum]
-        - name: StatusCheckFailed_Instance
+        # Add more EC2 metrics as needed
+
+    - type: AWS/ELB  # Classic Load Balancer
+      regions:
+        - ap-south-1  # Adjust this to your specific region
+      period: 300
+      length: 300
+      metrics:
+        - name: RequestCount
           statistics: [Sum]
-        - name: StatusCheckFailed_System
+        - name: HealthyHostCount
+          statistics: [Average]
+        - name: UnHealthyHostCount
+          statistics: [Average]
+        - name: Latency
+          statistics: [Average]
+        - name: HTTPCode_Backend_2XX
           statistics: [Sum]
+        - name: HTTPCode_Backend_4XX
+          statistics: [Sum]
+        - name: HTTPCode_Backend_5XX
+          statistics: [Sum]
+        # Add more ELB metrics as needed
+
+    - type: AWS/ApplicationELB  # Application Load Balancer
+      regions:
+        - ap-south-1  # Adjust this to your specific region
+      period: 300
+      length: 300
+      metrics:
+        - name: RequestCount
+          statistics: [Sum]
+        - name: TargetResponseTime
+          statistics: [Average]
+        - name: HealthyHostCount
+          statistics: [Average]
+        - name: UnHealthyHostCount
+          statistics: [Average]
+        - name: HTTPCode_Target_2XX_Count
+          statistics: [Sum]
+        - name: HTTPCode_Target_4XX_Count
+          statistics: [Sum]
+        - name: HTTPCode_Target_5XX_Count
+          statistics: [Sum]
+        # Add more ALB metrics as needed
+
+    - type: AWS/NetworkELB  # Network Load Balancer
+      regions:
+        - ap-south-1  # Adjust this to your specific region
+      period: 300
+      length: 300
+      metrics:
+        - name: ActiveFlowCount
+          statistics: [Average]
+        - name: ConsumedLCUs
+          statistics: [Sum]
+        - name: HealthyHostCount
+          statistics: [Average]
+        - name: UnHealthyHostCount
+          statistics: [Average]
+        - name: ProcessedBytes
+          statistics: [Sum]
+        # Add more NLB metrics as needed
 ```
 
 For more YACE configuration options, see the [YACE documentation](https://github.com/nerdswords/yet-another-cloudwatch-exporter).
@@ -214,7 +261,7 @@ For more YACE configuration options, see the [YACE documentation](https://github
 
 ```bash
 sudo docker run --rm \
-  -v $PWD/ec2config.yml:/tmp/config.yml \
+  -v $PWD/yace_config.yml:/tmp/config.yml \
   -e AWS_ACCESS_KEY_ID="ACCESS_KEY_ID" \
   -e AWS_SECRET_ACCESS_KEY="SECRET_ACCESS_KEY" \
   -e AWS_DEFAULT_REGION=ap-south-1 \
@@ -226,7 +273,7 @@ sudo docker run --rm \
 2. Verify metrics are being collected:
 
 ```bash
-curl https://localhost:5000/metrics
+curl http://localhost:5000/metrics
 ```
 
 3. Run the OpenTelemetry Collector:
@@ -237,10 +284,7 @@ otelcol-contrib --config /etc/otelcol-contrib/config.yaml
 
 ## Verifying Metrics
 
-1. Go to the Last9(Levitate) dashboard
-2. Explore the Managed Grafana dashboard with the cluster selected from the integrations page
-3. Check if the metrics are being populated
-4. Query the metrics to see the output
+This will push the metrics from YACE config to be sent to Levitate. To see the data in action, visit the [Grafana Dashboard](https://app.last9.io/).
 
 ## Troubleshooting
 
