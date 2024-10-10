@@ -34,4 +34,4 @@ service:
     metrics:
       receivers: [prometheus]
       processors: [filter, attributes]
-      exporters: [logging, otlp/last9]
+      exporters: [debug, otlp/last9]
