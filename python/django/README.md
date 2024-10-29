@@ -1,11 +1,12 @@
 # uwsgi Django App with OpenTelemetry Instrumentation
 
-A simple Django polling application where users can vote on questions and view results with OpenTelemetry instrumentation.
+A simple Django polling application where users can vote on questions and view results with OpenTelemetry instrumentation. This example shows how to instrument Django apps running with uwsgi using OpenTelemetry.
 
 ## Prerequisites
 
 - Python 3.x
 - Django 5.1.2
+- uwsgi
 
 ## Installation
 
@@ -30,12 +31,12 @@ python manage.py runserver
 
 4. Instrument the application
 
-``` 
-pip install aws-opentelemetry-distro opentelemetry-exporter-otlp 
+```
+pip install aws-opentelemetry-distro opentelemetry-exporter-otlp
 ```
 
-``` 
-opentelemetry-bootstrap -a install 
+```
+opentelemetry-bootstrap -a install
 ```
 
 > You can freeze the requirements by running `pip freeze > requirements.txt` after this step.
@@ -50,7 +51,7 @@ export OTEL_PYTHON_DISTRO="aws_distro" # This is the OpenTelemetry Python Distro
 export OTEL_PYTHON_CONFIGURATOR="aws_configurator" # This is the OpenTelemetry Python Configurator that will be used for the instrumentation
 export OTEL_EXPORTER_PROTOCOL="http/protobuf" # This is the protocol that will be used for the instrumentation
 export OTEL_AWS_PYTHON_DEFER_TO_WORKERS_ENABLED=true # This is to defer the instrumentation to the worker threads spawned by uwsgi instead of the master process
-
+```
 
 7. Update the uwsgi.ini file to include the following
 
@@ -62,6 +63,8 @@ The `last9_apm.py` file is a custom module that is used to instrument the applic
 
 8. Run the application with uwsgi
 
-``` opentelemetry-instrument uwsgi --http 8000 --ini uwsgi.ini```
+```
+opentelemetry-instrument uwsgi --http 8000 --ini uwsgi.ini
+```
 
 9. View traces in Last9 here: https://app.last9.io/traces
