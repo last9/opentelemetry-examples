@@ -53,7 +53,7 @@ export OTEL_AWS_PYTHON_DEFER_TO_WORKERS_ENABLED=true # This is to defer the inst
 5. Update the uwsgi.ini file to include the following
 
 ```ini
-import last9_apm.py
+import = last9_apm.py
 ```
 
 The `last9_apm.py` file is a custom module that is used to instrument the application for each worker spawned by uwsgi. Make sure to update your existing `uwsgi.ini` file with this import statement.
