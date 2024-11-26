@@ -1,6 +1,11 @@
-# MySQL/MariaDB Monitoring with OpenTelemetry
+# Monitoring MariaDB with OpenTelemetry
 
-A guide for setting up MySQL/MariaDB monitoring using mysqld_exporter and OpenTelemetry Collector with Last9.
+A guide for setting up MariaDB/MySQL monitoring using `mysqld_exporter` and OpenTelemetry Collector with Last9. It collects host metrics, MySQL metrics, and MySQL logs and sends them to Last9.
+
+## Supported versions:
+
+MySQL >= 5.6.
+MariaDB >= 10.3
 
 ## Installation
 
@@ -97,9 +102,17 @@ Type=simple
 ExecStart=/usr/local/bin/mysqld_exporter \
   --config.my-cnf=/etc/.mysqld_exporter.cnf \
   --collect.global_status \
+  --collect.global_variables \
   --collect.info_schema.innodb_metrics \
   --collect.info_schema.processlist \
+  --collect.info_schema.tables \
+  --collect.info_schema.tables.databases='*' \
   --collect.perf_schema.eventsstatements \
+  --collect.perf_schema.file_events \
+  --collect.perf_schema.indexiowaits \
+  --collect.perf_schema.tableiowaits \
+  --collect.perf_schema.tablelocks \
+  --collect.slave_status \
   --web.listen-address=:9104
 
 [Install]
@@ -125,30 +138,7 @@ Configure collector:
 sudo nano /etc/otelcol-contrib/config.yaml
 ```
 
-```yaml
-receivers:
-  prometheus:
-    config:
-      scrape_configs:
-      - job_name: 'mariadb'
-        scrape_interval: 5s
-        static_configs:
-        - targets: ['localhost:9104']
-
-exporters:
-  otlp/last9:
-    endpoint: "https://otlp.last9.io:443"
-    headers:
-      "Authorization": "Basic YOUR_AUTH_TOKEN"
-  debug:
-    verbosity: detailed
-
-service:
-  pipelines:
-    metrics:
-      receivers: [prometheus]
-      exporters: [debug, otlp/last9]
-```
+Copy the configuration from [here](./otel-config.yaml) and update in `/etc/otelcol-contrib/config.yaml`.
 
 Start collector:
 ```bash

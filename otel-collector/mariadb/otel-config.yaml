@@ -1,0 +1,78 @@
+receivers:
+# Detailed configuration options can be found at https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver
+  filelog:
+    # File path pattern to read logs from. Update this to the destination from where you want to read logs.
+    include: [/var/log/mysql/*.log]
+    include_file_path: true
+    retry_on_failure:
+      enabled:
+        true
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.logical.count:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+          system.memory.limit:
+            enabled: true
+      load:
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+      paging:
+  prometheus:
+    config:
+      scrape_configs:
+      - job_name: 'mariadb'
+        scrape_interval: 30s
+        static_configs:
+        - targets: ['localhost:9104']
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+  transform/hostmetrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["host.name"], resource.attributes["host.name"])
+          - set(attributes["cloud.account.id"], resource.attributes["cloud.account.id"])
+          - set(attributes["cloud.availability_zone"], resource.attributes["cloud.availability_zone"])
+          - set(attributes["cloud.platform"], resource.attributes["cloud.platform"])
+          - set(attributes["cloud.provider"], resource.attributes["cloud.provider"])
+          - set(attributes["cloud.region"], resource.attributes["cloud.region"])
+          - set(attributes["host.type"], resource.attributes["host.type"])
+          - set(attributes["host.image.id"], resource.attributes["host.image.id"])
+
+exporters:
+  otlp/last9:
+    endpoint: "<LAST9_OTEL_ENDPOINT>"
+    headers:
+      "Authorization": "Basic <LAST9_OAUTH_TOKEN>"
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch, resourcedetection/system]
+      exporters: [otlp/last9]
+    metrics:
+      receivers: [prometheus]
+      processors: [batch, resourcedetection/system, transform/hostmetrics]
+      exporters: [otlp/last9]
