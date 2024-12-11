@@ -1,0 +1,26 @@
+receivers:
+  nginx:
+    endpoint: "http://localhost:8080/nginx_status"
+    collection_interval: 10s
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+  attributes/localnginx:
+    actions:
+      - key: endpoint
+        value: localhost
+        action: insert
+exporters:
+  otlp/last9:
+    endpoint: <last9_otlp_endpoint>
+    headers:
+      "Authorization": <last9_auth_header>
+  debug:
+    verbosity: detailed
+service:
+  pipelines:
+    metrics:
+      receivers: [nginx]
+      processors: [attributes/localnginx, batch]
+      exporters: [otlp/last9, debug]
