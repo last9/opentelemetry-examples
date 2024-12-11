@@ -46,13 +46,31 @@ receivers:
     collection_interval: 10s
 processors:
   batch:
-    send_batch_size: 1000
-    timeout: 10s
-  attributes/localnginx:
-    actions:
-      - key: endpoint
-        value: localhost
-        action: insert
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+  resourcedetection/ec2:
+    detectors: ["ec2"]
+    ec2:
+      tags:
+        - ^Name$
+        - ^app$
+  transform/hostmetrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["host.name"], resource.attributes["host.name"])
+          - set(attributes["cloud.account.id"], resource.attributes["cloud.account.id"])
+          - set(attributes["cloud.availability_zone"], resource.attributes["cloud.availability_zone"])
+          - set(attributes["cloud.platform"], resource.attributes["cloud.platform"])
+          - set(attributes["cloud.provider"], resource.attributes["cloud.provider"])
+          - set(attributes["cloud.region"], resource.attributes["cloud.region"])
+          - set(attributes["host.type"], resource.attributes["host.type"])
+          - set(attributes["host.image.id"], resource.attributes["host.image.id"])
 exporters:
   otlp/last9:
     endpoint: <last9_otlp_endpoint>
