@@ -1,6 +1,6 @@
 # Installing Nginx and collect the metrics from the source
 
-This guide explains how to use Levitate's OpenTelemetry metrics endpoint to ingest nginx metrics from localhost using OpenTelemetry Collector.
+This guide explains how to use Last9's OpenTelemetry metrics endpoint to ingest nginx metrics from localhost using OpenTelemetry Collector.
 
 ## Prerequisites
 
@@ -124,7 +124,7 @@ otelcol-contrib --config /etc/otelcol-contrib/config.yaml
 
 ## Verifying Metrics
 
-This will push the metrics from nginx config to be sent to Levitate. To see the data in action, visit the [Grafana Dashboard](https://app.last9.io/).
+This will push the metrics from nginx config to be sent to Last9. To see the data in action, visit the [Grafana Dashboard](https://app.last9.io/).
 
 ## Troubleshooting
 
