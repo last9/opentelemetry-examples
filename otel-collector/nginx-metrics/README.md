@@ -82,7 +82,7 @@ service:
   pipelines:
     metrics:
       receivers: [nginx]
-      processors: [attributes/localnginx, batch]
+      processors: [batch, resourcedetection/system, resourcedetection/ec2, transform/hostmetrics]
       exporters: [otlp/last9, debug]
 ```
 
