@@ -1,6 +1,6 @@
-# Installing Nginx and collect the metrics from the source
+# Monitoring nginx with OpenTelemetry and Last9
 
-This guide explains how to use Last9's OpenTelemetry metrics endpoint to ingest nginx metrics from localhost using OpenTelemetry Collector.
+This guide explains using Last9's OpenTelemetry metrics endpoint to ingest nginx metrics using OpenTelemetry Collector.
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Edit the configuration file at `/etc/otelcol-contrib/config.yaml`:
 receivers:
   nginx:
     endpoint: "http://localhost:8080/nginx_status"
-    collection_interval: 10s
+    collection_interval: 30s
 processors:
   batch:
     timeout: 5s
@@ -53,13 +53,14 @@ processors:
     detectors: ["system"]
     system:
       hostname_sources: ["os"]
+  # optional: enable only if you are using EC2 instances.
   resourcedetection/ec2:
     detectors: ["ec2"]
     ec2:
       tags:
         - ^Name$
         - ^app$
-  transform/hostmetrics:
+  transform/ec2_metadata:
     metric_statements:
       - context: datapoint
         statements:
@@ -82,11 +83,17 @@ service:
   pipelines:
     metrics:
       receivers: [nginx]
-      processors: [batch, resourcedetection/system, resourcedetection/ec2, transform/hostmetrics]
-      exporters: [otlp/last9, debug]
+      processors: [batch, resourcedetection/system, resourcedetection/ec2, transform/ec2_metadata]
+      exporters: [otlp/last9]
 ```
 
-### Nginx Conf
+### Nginx Configuration
+
+This guide uses the nginx `ngx_http_stub_status_module` module to monitor nginx. 
+The `ngx_http_stub_status_module` module provides access to basic status information.
+
+This module is not built by default, it should be enabled with the `--with-http_stub_status_module` configuration parameter.
+
 Edit the configuration file at `/etc/nginx/conf.d/status.conf`:
 
 ```bash
@@ -103,14 +110,14 @@ server {
 
 ## Running the Services
 
-1. Test and reload NGINX configuration:
+1. Test and reload nginx configuration:
 
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-2. Check NGINX Status:
+2. Check nginx status:
 
 ```bash
 curl http://localhost:8080/nginx_status
@@ -124,7 +131,7 @@ otelcol-contrib --config /etc/otelcol-contrib/config.yaml
 
 ## Verifying Metrics
 
-This will push the metrics from nginx config to be sent to Last9. To see the data in action, visit the [Grafana Dashboard](https://app.last9.io/).
+This will push the metrics from nginx to Last9. To see the data in action, visit the [Last9](https://app.last9.io/).
 
 ## Troubleshooting
 
