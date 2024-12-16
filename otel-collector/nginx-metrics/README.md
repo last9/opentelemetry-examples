@@ -89,7 +89,7 @@ service:
 
 ### Nginx Configuration
 
-This guide uses the nginx `ngx_http_stub_status_module` module to monitor nginx. 
+This guide uses the nginx [`ngx_http_stub_status_module`](https://nginx.org/en/docs/http/ngx_http_stub_status_module.html) module to monitor nginx. 
 The `ngx_http_stub_status_module` module provides access to basic status information.
 
 This module is not built by default, it should be enabled with the `--with-http_stub_status_module` configuration parameter.
