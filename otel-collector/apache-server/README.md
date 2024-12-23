@@ -28,10 +28,10 @@ Add the below configuration in the conf file:
     Require host localhost
 </Location>
 ```
-Note: Replace `localhost` with your domain name
+Note: Replace `localhost` with your domain name.
 
 ```bash
-# Restart MariaDB
+# Restart Apache
 sudo systemctl restart apache2
 ```
 
