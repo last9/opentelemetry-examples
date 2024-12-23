@@ -1,6 +1,10 @@
 # PHP 7.3 Manual-Instrumentation with OpenTelemetry and Last9
 
-This guide explains how to use Last9's OpenTelemetry traces endpoint to ingest PHP 7.3 application traces using OpenTelemetry Auto-Instrumentation.
+This guide explains how to use Last9's OpenTelemetry traces endpoint to ingest PHP 7.3 application traces using OpenTelemetry.
+
+## Note
+
+Note that this is a manual instrumentation, which means that you need to instrument each endpoint manually. OpenTelemetry Auto-Instrumentation is not supported for PHP 7.3 which is why we need to do this manually.
 
 ## Prerequisites
 
@@ -8,6 +12,14 @@ This guide explains how to use Last9's OpenTelemetry traces endpoint to ingest P
 - Composer
 
 ## Setting up instrumentation
+
+Add the following to your `composer.json` file:
+
+```
+"require": {
+    "guzzlehttp/guzzle": "^7.0"
+}
+```
 
 Create `instrumentation.php` file with the following content:
 ```
