@@ -6,7 +6,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - .:/var/www/html
+      - ./:/var/www/html:cached
     environment:
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_EXPORTER_OTLP_ENDPOINT=${LAST_OTEL_EXPORTER_OTLP_ENDPOINT}
