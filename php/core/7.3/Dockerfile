@@ -18,6 +18,9 @@ WORKDIR /var/www/html
 # Copy composer files first
 COPY composer.json ./
 
+# Copy the last9 directory
+# COPY last9/ ./last9/
+
 # Debug: List contents after copying composer.json
 RUN ls -la && \
     # Run composer install with verbose output
