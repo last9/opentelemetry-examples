@@ -6,8 +6,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     libzip-dev \
     default-mysql-client \
-    && docker-php-ext-install zip pdo pdo_mysql \
-    && docker-php-ext-enable pdo_mysql
+    && docker-php-ext-install zip mysqli pdo pdo_mysql \
+    && docker-php-ext-enable pdo_mysql mysqli
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
@@ -19,8 +19,8 @@ WORKDIR /var/www/html
 COPY composer.json ./
 
 # Copy the last9 directory
-# COPY last9/ ./last9/
-
+COPY last9/ ./last9/
+#
 # Debug: List contents after copying composer.json
 RUN ls -la && \
     # Run composer install with verbose output

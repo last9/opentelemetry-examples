@@ -2,16 +2,26 @@
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/last9/instrumentation.php';
 
-// Use our DB class instead of PDO directly
-$pdo = \Last9\DB::connect(
-    "mysql:host=" . getenv('DB_HOST') . ";dbname=" . getenv('DB_NAME'),
+use Last9\InstrumentedHttpClient;
+use Last9\InstrumentedMySQLi as mysqli;
+
+// Create mysqli connection
+$mysqli = new mysqli(
+    getenv('DB_HOST'),
     getenv('DB_USER'),
-    getenv('DB_PASSWORD')
+    getenv('DB_PASSWORD'),
+    getenv('DB_NAME')
 );
+
+// Check connection
+if ($mysqli->connect_errno) {
+    error_log("Failed to connect to MySQL: " . $mysqli->connect_error);
+    exit("Database connection failed");
+}
 
 // Create table if not exists
 try {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS dice_rolls (
+    $mysqli->query("CREATE TABLE IF NOT EXISTS dice_rolls (
         id INT AUTO_INCREMENT PRIMARY KEY,
         roll_value INT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -24,7 +34,7 @@ try {
 $http = new \Last9\InstrumentedHttpClient([
     'timeout' => 5,
     'connect_timeout' => 2,
-    'verify' => false  // Added to handle HTTPS issues
+    'verify' => false
 ]);
 
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -38,19 +48,31 @@ try {
         case '/rolldice':
             $result = random_int(1, 6);
             
-            // Insert new roll
-            $stmt = $pdo->prepare("INSERTT INTO dice_rolls (roll_value) VALUES (?)");
-            $stmt->execute([$result]);
+            // Insert new roll using prepared statement with error handling
+            $stmt = $mysqli->prepare("INSERT INTO dice_rolls (roll_value) VALUES (?)");
+            if ($stmt === false) {
+                throw new \Exception("Prepare failed: " . $mysqli->error);
+            }
             
-            // Get last 5 rolls with error logging
-            try {
-                $stmt = $pdo->prepare("SELECT roll_value, created_at FROM dice_rolls ORDER BY created_at DESC LIMIT 5");
-                $stmt->execute();
-                $previousRolls = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-                // error_log("Previous rolls: " . print_r($previousRolls, true));
-            } catch (\Exception $e) {
-                error_log("Error fetching previous rolls: " . $e->getMessage());
-                $previousRolls = [];
+            $stmt->bind_param("i", $result);
+            if (!$stmt->execute()) {
+                throw new \Exception("Execute failed: " . $stmt->error);
+            }
+            
+            // Get last 5 rolls with error handling
+            $previousRolls = [];
+            $stmt = $mysqli->prepare("SELECT roll_value, created_at FROM dice_rolls ORDER BY created_at DESC LIMIT 5");
+            if ($stmt === false) {
+                throw new \Exception("Prepare failed for select: " . $mysqli->error);
+            }
+            
+            if (!$stmt->execute()) {
+                throw new \Exception("Execute failed for select: " . $stmt->error);
+            }
+            
+            $query_result = $stmt->get_result();
+            while ($row = $query_result->fetch_assoc()) {
+                $previousRolls[] = $row;
             }
             
             // Make external API call with error handling
@@ -60,10 +82,10 @@ try {
                         'Accept' => 'text/plain',
                         'User-Agent' => 'PHP/1.0'
                     ],
-                    'verify' => false,  // Disable SSL verification for testing
+                    'verify' => false,
                     'timeout' => 30
                 ]);
-                $numberFact = $response->getBody();
+                $numberFact = $response->getBody()->getContents();
                 error_log("Number fact API response: " . $numberFact);
             } catch (\Exception $e) {
                 error_log("Error fetching number fact: " . $e->getMessage() . "\n" . $e->getTraceAsString());
@@ -72,11 +94,10 @@ try {
             
             $response = [
                 'current_roll' => $result,
-                'fact' => "test",
+                'fact' => $numberFact,
                 'previous_rolls' => $previousRolls
             ];
             
-//          error_log("Sending response: " . print_r($response, true));
             echo json_encode($response, JSON_PRETTY_PRINT);
             break;
 

@@ -3,17 +3,18 @@ namespace Last9;
 
 use GuzzleHttp\Client;
 
-require_once __DIR__ . '/instrumentPDO.php';
+require_once __DIR__ . '/instrumentMySQLi.php';
 require_once __DIR__ . '/instrumentHttpClient.php';
 
-if (!class_exists('\PDO')) {
-    error_log("[PDO Debug] Aliasing PDO class");
-    class_alias('\Last9\InstrumentedPDO', '\PDO');
+// After other aliases
+if (!class_exists('\mysqli')) {
+    error_log("[MySQLi Debug] Aliasing MySQLi class");
+    class_alias('\Last9\InstrumentedMySQLi', '\mysqli');
 } else {
-    error_log("[PDO Debug] PDO class already exists, current class: " . get_class(new \PDO('sqlite::memory:', null, null)));
+    error_log("[MySQLi Debug] MySQLi class already exists");
 }
 
-define('OTLP_COLLECTOR_URL', 'https://$last9_otlp_url/v1/traces');
+define('OTLP_COLLECTOR_URL', getenv('OTEL_EXPORTER_OTLP_ENDPOINT') . '/v1/traces');
 
 function createSpan($name, $parentSpanId = null, $attributes = []) {
     $spanId = bin2hex(random_bytes(8));
@@ -34,7 +35,7 @@ function createSpan($name, $parentSpanId = null, $attributes = []) {
     return ['span' => $span, 'startTime' => $timestamp];
 }
 
-function endSpan(&$spanData, $status = ['code' => 1], $additionalAttributes = []) {
+function endSpan(&$spanData, $status = ['code' => 1], $additionalAttributes = [], $events = []) {
     $endTime = (int)(microtime(true) * 1e6);
     $spanData['span']['endTimeUnixNano'] = $endTime * 1000;
     $spanData['span']['status'] = $status;
@@ -42,6 +43,11 @@ function endSpan(&$spanData, $status = ['code' => 1], $additionalAttributes = []
         $spanData['span']['attributes'], 
         $additionalAttributes
     );
+    
+    // Add events if any
+    if (!empty($events)) {
+        $spanData['span']['events'] = $events;
+    }
     
     Instrumentation::addSpan($spanData['span']);
     return $spanData;
@@ -104,7 +110,7 @@ class Instrumentation {
             ['key' => 'http.target', 'value' => ['stringValue' => $_SERVER['REQUEST_URI'] ?? '']],
             ['key' => 'http.host', 'value' => ['stringValue' => $_SERVER['HTTP_HOST'] ?? '']],
             ['key' => 'http.scheme', 'value' => ['stringValue' => isset($_SERVER['HTTPS']) ? 'https' : 'http']],
-            ['key' => 'http.status_code', 'value' => ['intValue' => http_response_code()]],
+            ['key' => 'http.status_code', 'value' => ['intValue' => (int)http_response_code()]],
             ['key' => 'http.user_agent', 'value' => ['stringValue' => $_SERVER['HTTP_USER_AGENT'] ?? '']],
             ['key' => 'net.peer.ip', 'value' => ['stringValue' => $_SERVER['REMOTE_ADDR'] ?? '']]
         ];
@@ -155,12 +161,14 @@ class Instrumentation {
                 'timeout' => 5,
                 'connect_timeout' => 2
             ]);
+
+            // error_log("[OpenTelemetry] Trace payload: " . json_encode($tracePayload));
             
             $response = $client->post(OTLP_COLLECTOR_URL, [
                 'json' => $tracePayload,
                 'headers' => [
                     'Content-Type' => 'application/json',
-                    'Authorization' => 'Basic $last9_otlp_header'
+                    'Authorization' => getenv('OTEL_EXPORTER_OTLP_HEADERS')
                 ]
             ]);
             
@@ -185,7 +193,19 @@ register_shutdown_function(function() {
         // PHP Error occurred
         Instrumentation::finish(
             ['code' => 2, 'message' => $error['message']],
-            [['key' => 'error.message', 'value' => ['stringValue' => $error['message']]]]
+            [['key' => 'error.message', 'value' => ['stringValue' => $error['message']]]],
+            [ // Add events array for error
+                [
+                    'name' => 'exception',
+                    'timeUnixNano' => (int)(microtime(true) * 1e9),
+                    'attributes' => [
+                        ['key' => 'exception.type', 'value' => ['stringValue' => 'PHPError']],
+                        ['key' => 'exception.message', 'value' => ['stringValue' => $error['message']]],
+                        ['key' => 'exception.file', 'value' => ['stringValue' => $error['file']]],
+                        ['key' => 'exception.line', 'value' => ['intValue' => $error['line']]]
+                    ]
+                ]
+            ]
         );
     } elseif ($httpCode >= 400) {
         // HTTP error occurred (4xx or 5xx)
@@ -193,14 +213,25 @@ register_shutdown_function(function() {
             ['code' => 2, 'message' => 'HTTP ' . $httpCode],
             [
                 ['key' => 'error.type', 'value' => ['stringValue' => 'HTTPError']],
-                ['key' => 'http.status_code', 'value' => ['intValue' => $httpCode]]
+                ['key' => 'http.status_code', 'value' => ['intValue' => (int)$httpCode]]
+            ],
+            [ // Add events array for error
+                [
+                    'name' => 'exception',
+                    'timeUnixNano' => (int)(microtime(true) * 1e9),
+                    'attributes' => [
+                        ['key' => 'exception.type', 'value' => ['stringValue' => 'HTTPError']],
+                        ['key' => 'exception.message', 'value' => ['stringValue' => 'HTTP ' . $httpCode]],
+                        ['key' => 'http.status_code', 'value' => ['intValue' => (int)$httpCode]]
+                    ]
+                ]
             ]
         );
     } else {
         // Success case
         Instrumentation::finish(
             ['code' => 1],
-            [['key' => 'http.status_code', 'value' => ['intValue' => $httpCode]]]
+            [['key' => 'http.status_code', 'value' => ['intValue' => (int)$httpCode]]]
         );
     }
 });

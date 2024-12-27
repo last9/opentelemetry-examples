@@ -11,9 +11,9 @@ class InstrumentedHttpClient {
     }
 
     public function request($method, $uri, array $options = []) {
-        $spanData = \Last9\createSpan(
+        $spanData = createSpan(
             'http.client',
-            \Last9\Instrumentation::getRootSpanId(),
+            Instrumentation::getRootSpanId(),
             [
                 ['key' => 'http.method', 'value' => ['stringValue' => $method]],
                 ['key' => 'http.url', 'value' => ['stringValue' => $uri]],
@@ -25,18 +25,29 @@ class InstrumentedHttpClient {
 
         try {
             $response = $this->client->request($method, $uri, $options);
-            \Last9\endSpan($spanData, 
+            endSpan($spanData, 
                 ['code' => 1],
                 [
-                    ['key' => 'http.status_code', 'value' => ['intValue' => $response->getStatusCode()]],
-                    ['key' => 'http.response.body.size', 'value' => ['intValue' => strlen($response->getBody())]]
+                    ['key' => 'http.status_code', 'value' => ['intValue' => (int)$response->getStatusCode()]],
+                    ['key' => 'http.response.body.size', 'value' => ['intValue' => (int)strlen($response->getBody())]]
                 ]
             );
             return $response;
         } catch (\Exception $e) {
-            \Last9\endSpan($spanData, 
+            endSpan($spanData, 
                 ['code' => 2, 'message' => $e->getMessage()],
-                [['key' => 'error.message', 'value' => ['stringValue' => $e->getMessage()]]]
+                [['key' => 'error.message', 'value' => ['stringValue' => $e->getMessage()]]],
+                [ // Add events array for error
+                    [
+                        'name' => 'exception',
+                        'timeUnixNano' => (int)(microtime(true) * 1e9),
+                        'attributes' => [
+                            ['key' => 'exception.type', 'value' => ['stringValue' => get_class($e)]],
+                            ['key' => 'exception.message', 'value' => ['stringValue' => $e->getMessage()]],
+                            ['key' => 'exception.stacktrace', 'value' => ['stringValue' => $e->getTraceAsString()]]
+                        ]
+                    ]
+                ]
             );
             throw $e;
         }
