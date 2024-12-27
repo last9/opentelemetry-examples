@@ -49,11 +49,11 @@ function endSpan(&$spanData, $status = ['code' => 1], $additionalAttributes = []
 
 class Instrumentation {
     public static $traceId = null;
-    public static $parentSpanId = null;
     private static $spans = [];
     private static $rootSpan = null;
+    private static $parentSpanId = null;
 
-    public static function extractTraceContext() {
+    private static function extractTraceContext() {
         $headers = getallheaders();
         if (isset($headers['traceparent'])) {
             // traceparent format: 00-<trace-id>-<parent-id>-<trace-flags>
@@ -79,16 +79,16 @@ class Instrumentation {
         if (self::$rootSpan === null) {
             $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
             $method = $_SERVER['REQUEST_METHOD'];
-
-            // Extract trace context or generate new one
+            
+            // Extract trace context or generate new if not found
             if (!self::extractTraceContext()) {
                 self::$traceId = bin2hex(random_bytes(16));
             }
-
+            
             self::$spans = [];
             self::$rootSpan = self::createRootSpan("$method $uri");
-
-            // Set parent span ID if we got it from traceparent
+            
+            // Set parent span ID if it exists
             if (self::$parentSpanId) {
                 self::$rootSpan['span']['parentSpanId'] = self::$parentSpanId;
             }
