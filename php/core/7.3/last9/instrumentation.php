@@ -15,7 +15,6 @@ if (!class_exists('\PDO')) {
 
 define('OTLP_COLLECTOR_URL', 'https://$last9_otlp_url/v1/traces');
 
-
 function createSpan($name, $parentSpanId = null, $attributes = []) {
     $spanId = bin2hex(random_bytes(8));
     $timestamp = (int)(microtime(true) * 1e6);
@@ -52,6 +51,21 @@ class Instrumentation {
     public static $traceId = null;
     private static $spans = [];
     private static $rootSpan = null;
+    private static $parentSpanId = null;
+
+    private static function extractTraceContext() {
+        $headers = getallheaders();
+        if (isset($headers['traceparent'])) {
+            // traceparent format: 00-<trace-id>-<parent-id>-<trace-flags>
+            $parts = explode('-', $headers['traceparent']);
+            if (count($parts) === 4) {
+                self::$traceId = $parts[1];
+                self::$parentSpanId = $parts[2];
+                return true;
+            }
+        }
+        return false;
+    }
 
     public static function getRootSpanId() {
         return self::$rootSpan['span']['spanId'] ?? null;
@@ -65,9 +79,19 @@ class Instrumentation {
         if (self::$rootSpan === null) {
             $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
             $method = $_SERVER['REQUEST_METHOD'];
-            self::$traceId = bin2hex(random_bytes(16));
+            
+            // Extract trace context or generate new if not found
+            if (!self::extractTraceContext()) {
+                self::$traceId = bin2hex(random_bytes(16));
+            }
+            
             self::$spans = [];
             self::$rootSpan = self::createRootSpan("$method $uri");
+            
+            // Set parent span ID if it exists
+            if (self::$parentSpanId) {
+                self::$rootSpan['span']['parentSpanId'] = self::$parentSpanId;
+            }
         }
         return self::$rootSpan;
     }
@@ -152,7 +176,6 @@ class Instrumentation {
 // Auto-initialize instrumentation
 Instrumentation::autoInit();
 
-// Register shutdown function
 // Register shutdown function
 register_shutdown_function(function() {
     $error = error_get_last();
