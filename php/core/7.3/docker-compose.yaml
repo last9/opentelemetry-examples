@@ -13,3 +13,24 @@ services:
       - OTEL_SERVICE_NAME=my-demo-service
       - OTEL_DEPLOYMENT_ENVIRONMENT=production
       - OTEL_LOG_LEVEL=debug
+      - DB_HOST=db
+      - DB_USER=diceuser
+      - DB_PASSWORD=dicepass
+      - DB_NAME=dicedb
+    depends_on:
+      - db
+
+  db:
+    image: mariadb:10.5
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: dicedb
+      MYSQL_USER: diceuser
+      MYSQL_PASSWORD: dicepass
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+volumes:
+  db_data:
