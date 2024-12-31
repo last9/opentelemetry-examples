@@ -1,0 +1,26 @@
+{
+    "require": {
+        "guzzlehttp/guzzle": "^7.9",
+        "open-telemetry/opentelemetry": "^1.0",
+        "php-http/httplug": "^2.4",
+        "open-telemetry/exporter-otlp": "^1.1",
+        "php-http/guzzle7-adapter": "^1.1",
+        "open-telemetry/opentelemetry-auto-curl": "^0.0.2",
+        "open-telemetry/opentelemetry-auto-guzzle": "^1.0",
+        "open-telemetry/opentelemetry-auto-psr15": "^1.0",
+        "open-telemetry/opentelemetry-auto-slim": "^1.0",
+        "open-telemetry/sdk": "^1.1",
+        "open-telemetry/sem-conv": "^1.27"
+    },
+    "autoload": {
+        "psr-4": {
+            "OpenTelemetry\\Contrib\\Instrumentation\\MySqli\\": "src/OpenTelemetry/Contrib/Instrumentation/MySqli/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        }
+    }
+}
