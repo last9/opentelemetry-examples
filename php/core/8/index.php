@@ -10,6 +10,8 @@ use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\Context\Context;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Instrumentation\Configurator;
+use OpenTelemetry\API\Instrumentation\CachedInstrumentation;
+use OpenTelemetry\Contrib\Instrumentation\MySqli\MysqliInstrumentation;
 
 // Your existing OTLP setup
 $transport = (new OtlpHttpTransportFactory())->create(getenv('OTEL_EXPORTER_OTLP_ENDPOINT'), 'application/json');
@@ -17,6 +19,9 @@ $exporter = new SpanExporter($transport);
 $tracerProvider = new TracerProvider(
    new BatchSpanProcessor($exporter, ClockFactory::getDefault())
 );
+
+// Add mysqli instrumentation
+MysqliInstrumentation::register(new CachedInstrumentation('io.opentelemetry.contrib.php.mysqli'));
 
 // Register the TracerProvider with Globals
 Globals::registerInitializer(function (Configurator $configurator) use ($tracerProvider) {
