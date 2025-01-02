@@ -14,7 +14,8 @@
     },
     "autoload": {
         "psr-4": {
-            "OpenTelemetry\\Contrib\\Instrumentation\\MySqli\\": "src/OpenTelemetry/Contrib/Instrumentation/MySqli/"
+            "OpenTelemetry\\Contrib\\Instrumentation\\MySqli\\": "src/OpenTelemetry/Contrib/Instrumentation/MySqli/",
+            "Last9\\": "src/Last9/"
         }
     },
     "config": {
