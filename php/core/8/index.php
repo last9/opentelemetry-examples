@@ -109,16 +109,12 @@ try {
            } catch (\Exception $e) {
                throw $e;
            }
-<<<<<<< HEAD
            $instrumentation->setSuccess();
-=======
->>>>>>> 339c63609672e1ebd4d1dccfaaaa6ee0ff684d33
            break;
 
        default:
            http_response_code(404);
            echo "404 Not Found";
-<<<<<<< HEAD
            $instrumentation->setError(new Exception("404 Not Found"));
            break;
    }
@@ -129,24 +125,3 @@ try {
    http_response_code(500);
    echo "Error: " . $e->getMessage();
 }
-=======
-           break;
-   }
-   $rootSpan->setStatus(StatusCode::STATUS_OK);
-
-} catch (Exception $e) {
-   $rootSpan->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
-   error_log("Main error: " . $e->getMessage());
-   http_response_code(500);
-   echo "Error: " . $e->getMessage();
-} finally {
-   // End the root scope and span last
-   $scope->detach();
-   $rootSpan->end();
-}
-
-// Register shutdown function to handle final export
-register_shutdown_function(function() use ($tracerProvider) {
-   $tracerProvider->shutdown();
-});
->>>>>>> 339c63609672e1ebd4d1dccfaaaa6ee0ff684d33
