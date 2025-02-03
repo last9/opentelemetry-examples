@@ -11,6 +11,11 @@ import {
   SEMRESATTRS_SERVICE_NAME,
 } from '@opentelemetry/semantic-conventions';
 import { Resource } from '@opentelemetry/resources';
+import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+
+
+// Then initialize OpenTelemetry
+diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 
 const providerConfig: TracerConfig = {
   resource: new Resource({
@@ -23,16 +28,47 @@ const providerConfig: TracerConfig = {
 const provider = new NodeTracerProvider(providerConfig);
 const otlp = new OTLPTraceExporter();
 
+// Configure OTLP exporter for Last9
+const otlpExporter = new OTLPTraceExporter({
+  url: process.env.LAST9_URL,
+  headers: {
+    'Authorization': process.env.LAST9_AUTH,
+  },
+});
+
 provider.addSpanProcessor(new BatchSpanProcessor(otlp));
 provider.register();
 
-// Automatically instrument NestJS (additional instrumentations can be added similarly)
+// Register auto-instrumentations
 registerInstrumentations({
   instrumentations: [
     getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': {
-        enabled: false, // Disable the instrumentation for the fs module to avoid unnecessary spans
+        enabled: false,
+      },
+      '@opentelemetry/instrumentation-http': {
+        enabled: true,
+        ignoreIncomingPaths: [/\/debug-sentry/],
+      },
+      '@opentelemetry/instrumentation-express': {
+        enabled: true,
+      },
+      '@opentelemetry/instrumentation-nestjs-core': {
+        enabled: true,
       },
     }),
   ],
+});
+
+console.log('OpenTelemetry Instrumentations Registered');
+
+// Initialize Sentry after OpenTelemetry
+import * as Sentry from "@sentry/nestjs";
+
+// Initialize Sentry first
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  profilesSampleRate: 1.0,
+  environment: process.env.NODE_ENV || 'development'
 });
