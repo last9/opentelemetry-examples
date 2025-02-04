@@ -40,7 +40,10 @@ export OTEL_AWS_PYTHON_DEFER_TO_WORKERS_ENABLED=true
 
 ### With uWSGI
 
-1. Add to your `uwsgi.ini`:
+1. Add the [last9_uwsgi.py](/mysite/last9_uwsgi.py) to your `uwsgi.ini`:
+
+This file is responsible for initializing the OpenTelemetry instrumentation after the worker is spawned by uwsgi.
+
 ```ini
 import = last9_uwsgi.py
 env = DJANGO_SETTINGS_MODULE=mysite.settings # This is the name of your settings file
@@ -57,6 +60,9 @@ Set the environment variable for the settings file:
 ```bash
 export DJANGO_SETTINGS_MODULE=mysite.settings
 ```
+
+Use the [last9_gunicorn.py](/mysite/last9_gunicorn.py) as configuration file for gunicorn.
+This file is responsible for initializing the OpenTelemetry instrumentation after the worker is spawned by gunicorn.
 
 Start the server:
 ```bash
