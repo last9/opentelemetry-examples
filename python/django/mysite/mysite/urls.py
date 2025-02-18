@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from last9_uwsgi import multi_api_call
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('multi-api/', multi_api_call, name='multi_api_call')
 ]
