@@ -1,0 +1,21 @@
+services:
+  nginx:
+    image: nginx:latest
+    container_name: nginx-server
+    ports:
+      - "8000:80"
+    restart: unless-stopped
+    labels:
+      - "collect-logs=true"
+    volumes:
+      - nginx_logs:/var/log/nginx
+    networks:
+      - nginx_network
+
+networks:
+  nginx_network:
+    name: nginx_network
+
+volumes:
+  nginx_logs:
+    name: nginx_logs

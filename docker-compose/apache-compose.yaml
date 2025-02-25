@@ -1,0 +1,15 @@
+services:
+  apache:
+    image: httpd:2.4
+    container_name: apache-server
+    ports:
+      - "8002:80"
+    volumes:
+      - ./app:/usr/local/apache2/htdocs/
+    restart: unless-stopped
+    networks:
+      - apache_network
+
+networks:
+  apache_network:
+    name: apache_network
