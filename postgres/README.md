@@ -148,3 +148,39 @@ To monitor multiple Postgres databases:
 - Create separate instances of Postgres Exporter in your docker-compose.yaml
 - Configure each with different database credentials
 - Update the OpenTelemetry Collector configuration to scrape metrics from all exporters
+
+## Required Postgres Permissions
+
+The Postgres Exporter needs specific permissions to access system catalog tables and views, especially for the custom queries defined in `queries.yaml`. For the `slow_queries` query, which accesses `pg_stat_activity`, you need to create a dedicated monitoring user with appropriate permissions:
+
+```sql
+-- Create a dedicated user for monitoring
+CREATE USER postgres_exporter WITH PASSWORD 'your_secure_password';
+
+-- Grant permissions required for monitoring
+GRANT pg_monitor TO postgres_exporter;
+
+-- If using PostgreSQL version earlier than 10, you'll need these specific grants instead:
+-- GRANT SELECT ON pg_stat_activity TO postgres_exporter;
+-- GRANT SELECT ON pg_stat_replication TO postgres_exporter;
+-- GRANT SELECT ON pg_stat_database TO postgres_exporter;
+```
+
+When configuring the Postgres Exporter in your `docker-compose.yaml`, make sure to use this dedicated monitoring user:
+
+```yaml
+environment:
+  - DATA_SOURCE_URI=<DB_HOST>/<DB_NAME>
+  - DATA_SOURCE_USER=<DB_USER>
+  - DATA_SOURCE_PASS=<DB_PASSWORD>
+```
+
+### Additional Permissions for Custom Metrics
+
+If you add more custom queries to `queries.yaml` that access other system tables or views, you may need to grant additional permissions. For example:
+
+- For table statistics: `GRANT SELECT ON pg_statio_user_tables TO postgres_exporter;`
+- For index usage: `GRANT SELECT ON pg_stat_user_indexes TO postgres_exporter;`
+- For replication monitoring: `GRANT SELECT ON pg_stat_replication TO postgres_exporter;`
+
+Always follow the principle of least privilege by granting only the permissions necessary for monitoring purposes.
