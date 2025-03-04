@@ -52,7 +52,7 @@ export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
 > [Python Otel SDK](https://last9.io/blog/whitespace-in-otlp-headers-and-opentelemetry-python-sdk/)
 > handles whitespace in headers for more details.
 
-5. Run the Flask application:
+5. Run the FastAPI application:
 
 ```bash
 opentelemetry-instrument python app.py
