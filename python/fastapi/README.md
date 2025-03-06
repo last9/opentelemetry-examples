@@ -65,7 +65,7 @@ opentelemetry-instrument python app.py
 - GET `/` - Hello World
 - GET `/items/:id` - Get items by ID
 
-6. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
-   dashboard to see the traces and metrics in action.
+7. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
+   dashboard to see the traces in action.
 
 ![Traces](./traces.png)
