@@ -1,75 +1,116 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"syscall"
-	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"kafka-hello-world/last9"
+
+	"github.com/IBM/sarama"
+	"github.com/dnwe/otelsarama"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {
-	// Kafka configuration
-	config := &kafka.ConfigMap{
-		"bootstrap.servers":  "localhost:9092",
-		"group.id":           "hello-world-consumer-group",
-		"auto.offset.reset":  "earliest",
-		"enable.auto.commit": "true",
-	}
+	// Initialize instrumentation
+	instrumentation := last9.NewInstrumentation()
+	defer instrumentation.TracerProvider.Shutdown(context.Background())
 
-	// Create a new consumer instance
-	consumer, err := kafka.NewConsumer(config)
-	if err != nil {
-		log.Fatalf("Failed to create consumer: %s", err)
-	}
-	defer consumer.Close()
+	// Sarama configuration
+	config := sarama.NewConfig()
+	config.Version = sarama.V2_8_0_0
+	config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRoundRobin
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 
-	// Subscribe to the topic
+	// Create consumer group
+	group := "hello-world-consumer-group"
 	topic := "hello-world-topic"
-	err = consumer.SubscribeTopics([]string{topic}, nil)
+
+	consumerGroup, err := sarama.NewConsumerGroup([]string{"localhost:9092"}, group, config)
 	if err != nil {
-		log.Fatalf("Failed to subscribe to topic %s: %v", topic, err)
+		log.Fatalf("Failed to create consumer group: %v", err)
 	}
-	fmt.Printf("Subscribed to topic: %s\n", topic)
+	defer consumerGroup.Close()
 
-	// Capture SIGINT to cleanly shut down
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create consumer handler and wrap it with OpenTelemetry instrumentation
+	handler := &ConsumerGroupHandler{}
+	wrappedHandler := otelsarama.WrapConsumerGroupHandler(handler)
+
+	// Handle shutdown signals
 	sigchan := make(chan os.Signal, 1)
-	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigchan, os.Interrupt)
+	go func() {
+		<-sigchan
+		log.Println("Caught shutdown signal. Cancelling consumer group...")
+		cancel()
+	}()
 
-	// Start consuming messages
-	run := true
-	for run {
-		select {
-		case sig := <-sigchan:
-			fmt.Printf("Caught signal %v: terminating\n", sig)
-			run = false
-		default:
-			// Poll for messages
-			ev := consumer.Poll(100)
-			if ev == nil {
-				continue
+	// Start consuming
+	fmt.Printf("Starting consumer group %s\n", group)
+	for {
+		err := consumerGroup.Consume(ctx, []string{topic}, wrappedHandler)
+		if err != nil {
+			if err == context.Canceled {
+				break
 			}
-
-			// Process message
-			switch e := ev.(type) {
-			case *kafka.Message:
-				fmt.Printf("Received message: %s\n", string(e.Value))
-				// Process the message here
-			case kafka.Error:
-				fmt.Printf("Error: %v\n", e)
-				if e.Code() == kafka.ErrAllBrokersDown {
-					run = false
-				}
-			default:
-				// Ignore other event types
-			}
+			log.Printf("Error from consumer: %v", err)
+		}
+		if ctx.Err() != nil {
+			break
 		}
 	}
 
-	// Wait a bit before closing to make sure all logs are flushed
-	time.Sleep(1 * time.Second)
 	fmt.Println("Consumer shut down")
+}
+
+// ConsumerGroupHandler represents the consumer group handler
+type ConsumerGroupHandler struct{}
+
+func (h *ConsumerGroupHandler) Setup(_ sarama.ConsumerGroupSession) error   { return nil }
+func (h *ConsumerGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
+
+func printMessage(msg *sarama.ConsumerMessage) {
+	// Extract tracing info from message
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), otelsarama.NewConsumerMessageCarrier(msg))
+
+	tr := otel.Tracer("consumer")
+	_, span := tr.Start(ctx, "consume message", trace.WithAttributes(
+		attribute.Key(semconv.MessagingSystemKey).String(semconv.MessagingSystemKafka.Value.AsString()),
+		attribute.Key(semconv.MessagingOperationTypeKey).String(semconv.MessagingOperationTypePublish.Value.AsString()),
+		attribute.Key("topic").String(msg.Topic),
+		attribute.Key("partition").Int64(int64(msg.Partition)),
+		attribute.Key("offset").Int64(msg.Offset),
+	))
+	defer span.End()
+
+	// Process the message
+	log.Printf("Message topic:%q partition:%d offset:%d\n\tkey:%s value:%s\n",
+		msg.Topic, msg.Partition, msg.Offset,
+		string(msg.Key), string(msg.Value))
+}
+
+func (h *ConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	for {
+		select {
+		case message := <-claim.Messages():
+			if message == nil {
+				return nil
+			}
+
+			printMessage(message)
+			session.MarkMessage(message, "")
+
+		case <-session.Context().Done():
+			return nil
+		}
+	}
 }

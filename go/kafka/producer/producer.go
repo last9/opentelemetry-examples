@@ -1,74 +1,73 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"kafka-hello-world/last9"
+
+	"github.com/IBM/sarama"
+	"github.com/dnwe/otelsarama"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {
-	// Kafka configuration
-	config := &kafka.ConfigMap{
-		"bootstrap.servers": "localhost:9092",
-		"client.id":         "hello-world-producer",
-		"acks":              "all",
+	// Initialize instrumentation
+	instrumentation := last9.NewInstrumentation()
+	defer instrumentation.TracerProvider.Shutdown(context.Background())
+
+	// Sarama configuration
+	config := sarama.NewConfig()
+	config.Version = sarama.V2_8_0_0
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	// Create a new producer
+	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, config)
+	if err != nil {
+		log.Fatalf("Failed to create producer: %v", err)
 	}
 
-	// Create a new producer instance
-	producer, err := kafka.NewProducer(config)
-	if err != nil {
-		log.Fatalf("Failed to create producer: %s", err)
-	}
+	// Wrap the producer with OpenTelemetry instrumentation
+	producer = otelsarama.WrapSyncProducer(config, producer)
 	defer producer.Close()
 
-	// Handle delivery reports
-	go func() {
-		for e := range producer.Events() {
-			switch ev := e.(type) {
-			case *kafka.Message:
-				if ev.TopicPartition.Error != nil {
-					fmt.Printf("Failed to deliver message: %v\n", ev.TopicPartition.Error)
-				} else {
-					fmt.Printf("Successfully produced message to topic %s (partition %d at offset %d)\n",
-						*ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
-				}
-			}
-		}
-	}()
-
-	// Capture SIGINT to cleanly shut down
+	// Create a signal channel for graceful shutdown
 	sigchan := make(chan os.Signal, 1)
-	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigchan, os.Interrupt)
 
-	// Topic to produce messages to
 	topic := "hello-world-topic"
-
-	// Produce messages until SIGINT
 	counter := 0
 	run := true
+
 	for run {
 		select {
 		case <-sigchan:
 			fmt.Println("Caught shutdown signal. Closing producer...")
 			run = false
 		default:
-			// Create a message to send
 			message := fmt.Sprintf("Hello, World! #%d", counter)
 
-			// Produce the message
-			err = producer.Produce(&kafka.Message{
-				TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-				Value:          []byte(message),
-				Key:            []byte(fmt.Sprintf("key-%d", counter)),
-			}, nil)
+			// Create and send message
+			msg := &sarama.ProducerMessage{
+				Topic: topic,
+				Key:   sarama.StringEncoder(fmt.Sprintf("key-%d", counter)),
+				Value: sarama.StringEncoder(message),
+			}
 
+			partition, offset, err := producer.SendMessage(msg)
 			if err != nil {
-				log.Printf("Failed to produce message: %v\n", err)
+				log.Printf("Failed to send message: %v\n", err)
+			} else {
+				fmt.Printf("Message sent to partition %d at offset %d: %s\n",
+					partition, offset, message)
 			}
 
 			counter++
@@ -76,7 +75,25 @@ func main() {
 		}
 	}
 
-	// Wait for message deliveries before shutting down
-	producer.Flush(15 * 1000)
 	fmt.Println("Producer shut down")
+}
+
+func printMessage(msg *sarama.ConsumerMessage) {
+	// Extract tracing info from message
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), otelsarama.NewConsumerMessageCarrier(msg))
+
+	tr := otel.Tracer("consumer")
+	_, span := tr.Start(ctx, "consume message", trace.WithAttributes(
+		attribute.Key(semconv.MessagingSystemKey).String(semconv.MessagingSystemKafka.Value.AsString()),
+		attribute.Key(semconv.MessagingOperationTypeKey).String(semconv.MessagingOperationTypePublish.Value.AsString()),
+		attribute.Key("topic").String(msg.Topic),
+		attribute.Key("partition").Int64(int64(msg.Partition)),
+		attribute.Key("offset").Int64(msg.Offset),
+	))
+	defer span.End()
+
+	// Process the message
+	log.Printf("Message topic:%q partition:%d offset:%d\n\tkey:%s value:%s\n",
+		msg.Topic, msg.Partition, msg.Offset,
+		string(msg.Key), string(msg.Value))
 }
