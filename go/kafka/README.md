@@ -112,3 +112,50 @@ The producer will start sending "Hello, World!" messages to the Kafka topic, and
 
 - [Confluent Kafka Go Client Documentation](https://docs.confluent.io/platform/current/clients/confluent-kafka-go/index.html)
 - [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
+
+# Kafka OpenTelemetry Example
+
+This example demonstrates how to use OpenTelemetry instrumentation with Kafka producers and consumers using the Sarama client library.
+
+## OpenTelemetry Configuration
+
+The application supports the following OpenTelemetry configurations:
+
+### Environment Variables
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: The endpoint for the OpenTelemetry collector (default: "localhost:4317")
+- `OTEL_SERVICE_NAME`: The name of your service (default: "kafka-hello-world")
+- `OTEL_TRACES_SAMPLER`: Sampling strategy (default: "always_on")
+
+### Supported Features
+
+- **Distributed Tracing**: Full support for distributed tracing across producer and consumer
+- **Trace Context Propagation**: Automatic propagation of trace context through Kafka messages
+- **Semantic Conventions**: Following OpenTelemetry semantic conventions for messaging systems
+
+### Trace Operations
+
+The following operations are traced:
+
+- Producer:
+  - `publish`: When a message is published to Kafka
+
+- Consumer:
+  - `receive`: When a message is received from Kafka
+  - `process`: When a message is being processed
+
+### Example Spans
+
+```
+
+## Running the Example
+
+1. Start Kafka and the OpenTelemetry Collector
+2. Run the producer: `go run producer/producer.go`
+3. Run the consumer: `go run consumer/consumer.go`
+
+## Dependencies
+
+- OpenTelemetry SDK version: v1.24.0
+- Sarama Client
+- otelsarama instrumentation
