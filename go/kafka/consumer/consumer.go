@@ -1,4 +1,4 @@
-package consumer
+package main
 
 import (
 	"fmt"
