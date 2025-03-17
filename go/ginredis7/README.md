@@ -38,6 +38,76 @@ It generates traces for HTTP requests, database queries, Redis commands, and ext
 - External API calls using [otelhttp](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/instrumentation/net/http/otelhttp)
 - For external API calls, use the `otelhttp` package to wrap the `http.Client` object. Refer to `getRandomJoke()` in [main.go](./main.go) for more details.
 
+### RabbitMQ Monitoring with OpenTelemetry
+
+#### Overview
+This implementation includes OpenTelemetry instrumentation for RabbitMQ operations, providing detailed tracing for message publishing, consumption, and processing flows.
+
+#### Key Features
+- Complete trace context propagation through RabbitMQ messages
+- Detailed spans for queue operations, message publishing, and consumption
+- Job processing spans linked to their parent message operations
+- Comprehensive messaging system attributes for better observability
+
+#### 1. Message Broker Interface
+```go
+type MessageBroker interface {
+    PublishMessage(ctx context.Context, queueName string, data []byte) error
+    ConsumeMessages(ctx context.Context, queueName string) (<-chan Message, error)
+    AckMessage(ctx context.Context, msg *amqp.Delivery) error
+    NackMessage(ctx context.Context, msg *amqp.Delivery, requeue bool) error
+}
+```
+
+#### 2. Trace Context Propagation
+The implementation automatically handles trace context propagation:
+- Injects trace context into message headers during publishing
+- Extracts and continues trace context during message consumption
+- Maintains parent-child relationship between spans
+
+#### 3. Monitored Operations
+Each operation creates its own span with detailed attributes:
+
+- Queue Declaration:
+  ```go
+  // Attributes included:
+  - messaging.system: "rabbitmq"
+  - messaging.destination: <queue_name>
+  - messaging.destination_kind: "queue"
+  - messaging.operation: "declare"
+  ```
+
+- Message Publishing:
+  ```go
+  // Attributes included:
+  - messaging.system: "rabbitmq"
+  - messaging.destination: <queue_name>
+  - messaging.destination_kind: "queue"
+  - messaging.protocol: "AMQP"
+  - messaging.protocol_version: "0.9.1"
+  - messaging.operation: "publish"
+  - messaging.message_size: <size_in_bytes>
+  ```
+
+- Message Consumption:
+  ```go
+  // Attributes included:
+  - messaging.system: "rabbitmq"
+  - messaging.destination: <queue_name>
+  - messaging.destination_kind: "queue"
+  - messaging.operation: "process"
+  - messaging.message_id: <message_id>
+  - messaging.conversation_id: <correlation_id>
+  ```
+
+#### 3. Message Acknowledgment:
+```go
+// Acknowledge successful processing
+broker.AckMessage(ctx, msg.Original)
+
+// For failed processing
+broker.NackMessage(ctx, msg.Original, shouldRequeue)
+```
 ### Instrumentation packages
 
 Following packages are used to instrument the Gin application. You can install them using the following commands:
