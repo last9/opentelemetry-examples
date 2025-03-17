@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/wzy9607/amqp091otel"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -20,7 +18,7 @@ type RabbitMQConfig struct {
 
 type RabbitMQClient struct {
 	conn    *amqp.Connection
-	channel *amqp091otel.Channel
+	channel *amqp.Channel
 	tracer  trace.Tracer
 }
 
@@ -46,18 +44,9 @@ func NewRabbitMQClient(config *RabbitMQConfig, tracer trace.Tracer) (*RabbitMQCl
 		return nil, fmt.Errorf("failed to open channel: %v", err)
 	}
 
-	// Create instrumented channel
-	tracedCh, err := amqp091otel.NewChannel(ch, url,
-		amqp091otel.WithTracerProvider(otel.GetTracerProvider()))
-	if err != nil {
-		ch.Close()
-		conn.Close()
-		return nil, fmt.Errorf("failed to create traced channel: %v", err)
-	}
-
 	return &RabbitMQClient{
 		conn:    conn,
-		channel: tracedCh,
+		channel: ch,
 		tracer:  tracer,
 	}, nil
 }
