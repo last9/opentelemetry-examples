@@ -18,4 +18,5 @@ type MessageBroker interface {
 type Message struct {
 	Body     []byte
 	Original *amqp.Delivery
+	Context  context.Context
 }

@@ -2,7 +2,6 @@ package last9
 
 import (
 	"context"
-	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.opentelemetry.io/otel"
@@ -14,17 +13,22 @@ import (
 // amqpHeadersCarrier implements TextMapCarrier for RabbitMQ headers
 type amqpHeadersCarrier amqp.Table
 
+// Get retrieves a value from the carrier
 func (c amqpHeadersCarrier) Get(key string) string {
-	if val, ok := (amqp.Table(c))[key]; ok {
-		return fmt.Sprintf("%v", val)
+	if value, ok := (amqp.Table(c))[key]; ok {
+		if str, ok := value.(string); ok {
+			return str
+		}
 	}
 	return ""
 }
 
+// Set stores a value in the carrier
 func (c amqpHeadersCarrier) Set(key string, value string) {
 	(amqp.Table(c))[key] = value
 }
 
+// Keys lists the keys stored in this carrier
 func (c amqpHeadersCarrier) Keys() []string {
 	keys := make([]string, 0, len(c))
 	for k := range c {
@@ -113,19 +117,13 @@ func (b *RabbitMQBroker) PublishMessage(ctx context.Context, queueName string, d
 		))
 	defer span.End()
 
-	// Ensure queue exists
-	_, err := b.declareQueue(ctx, queueName)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
 	// Create headers and inject trace context
 	headers := make(amqp.Table)
-	headers = injectTraceContext(ctx, headers)
+	carrier := amqpHeadersCarrier(headers)
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	headers = amqp.Table(carrier)
 
-	err = b.client.PublishWithContext(ctx,
+	err := b.client.PublishWithContext(ctx,
 		"",        // exchange
 		queueName, // routing key
 		false,     // mandatory
@@ -133,7 +131,7 @@ func (b *RabbitMQBroker) PublishMessage(ctx context.Context, queueName string, d
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        data,
-			Headers:     headers, // Include trace context in headers
+			Headers:     headers,
 		},
 	)
 
@@ -187,29 +185,15 @@ func (b *RabbitMQBroker) ConsumeMessages(ctx context.Context, queueName string) 
 	go func() {
 		defer close(messages)
 		for d := range deliveries {
-			// Extract trace context from headers
-			msgCtx := extractTraceContext(ctx, d.Headers)
+			// Extract the parent context from the message headers
+			parentCtx := extractTraceContext(ctx, d.Headers)
 
-			// Create a new span as a child of the extracted context
-			msgCtx, msgSpan := b.tracer.Start(msgCtx, "rabbitmq.message.process",
-				trace.WithAttributes(
-					attribute.String("messaging.system", messagingSystemRabbitMQ),
-					attribute.String("messaging.destination", queueName),
-					attribute.String("messaging.destination_kind", "queue"),
-					attribute.String("messaging.protocol", "AMQP"),
-					attribute.String("messaging.protocol_version", "0.9.1"),
-					attribute.String("messaging.operation", messagingOperationProcess),
-					attribute.Int("messaging.message_size", len(d.Body)),
-					attribute.String("messaging.rabbitmq.routing_key", d.RoutingKey),
-					attribute.String("messaging.message_id", d.MessageId),
-					attribute.String("messaging.conversation_id", d.CorrelationId),
-				))
-
+			// Now create message processing span as child of the extracted context
 			messages <- Message{
 				Body:     d.Body,
 				Original: &d,
+				Context:  parentCtx, // Pass the extracted context with the message
 			}
-			msgSpan.End()
 		}
 	}()
 
@@ -218,6 +202,7 @@ func (b *RabbitMQBroker) ConsumeMessages(ctx context.Context, queueName string) 
 
 // Update the Ack/Nack methods to accept the delivery
 func (b *RabbitMQBroker) AckMessage(ctx context.Context, msg *amqp.Delivery) error {
+	// Create ack span as child of the provided context
 	ctx, span := b.tracer.Start(ctx, "rabbitmq.ack",
 		trace.WithAttributes(
 			attribute.String("messaging.system", messagingSystemRabbitMQ),
@@ -239,6 +224,7 @@ func (b *RabbitMQBroker) AckMessage(ctx context.Context, msg *amqp.Delivery) err
 }
 
 func (b *RabbitMQBroker) NackMessage(ctx context.Context, msg *amqp.Delivery, requeue bool) error {
+	// Create nack span as child of the provided context
 	ctx, span := b.tracer.Start(ctx, "rabbitmq.nack",
 		trace.WithAttributes(
 			attribute.String("messaging.system", messagingSystemRabbitMQ),

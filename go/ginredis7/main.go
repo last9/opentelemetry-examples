@@ -95,7 +95,8 @@ func (p *JobProcessor) StartConsumer(ctx context.Context, queueName string) erro
 
 	go func() {
 		for msg := range msgs {
-			jobCtx, span := otel.Tracer("job-processor").Start(ctx, "process.job",
+			// Use the context from the message instead of the parent context
+			jobCtx, jobSpan := otel.Tracer("job-processor").Start(msg.Context, "process.job",
 				trace.WithAttributes(
 					attribute.String("messaging.system", "rabbitmq"),
 					attribute.String("messaging.destination", queueName),
@@ -107,27 +108,29 @@ func (p *JobProcessor) StartConsumer(ctx context.Context, queueName string) erro
 
 			var job Job
 			if err := json.Unmarshal(msg.Body, &job); err != nil {
-				span.RecordError(err)
-				span.SetStatus(codes.Error, "failed to unmarshal job")
+				jobSpan.RecordError(err)
+				jobSpan.SetStatus(codes.Error, "failed to unmarshal job")
 				p.broker.NackMessage(jobCtx, msg.Original, false)
-				span.End()
+				jobSpan.End()
 				continue
 			}
 
-			// Add job details to span
-			span.SetAttributes(
+			jobSpan.SetAttributes(
 				attribute.String("job.id", job.ID),
 				attribute.String("job.type", job.Type),
 				attribute.String("job.status", string(job.Status)),
 			)
 
-			// Execute handler with the traced context
 			if handler, ok := p.handlers[job.Type]; ok {
+				// Create handler span as child of job span
 				handlerCtx, handlerSpan := otel.Tracer("job-processor").Start(jobCtx, "execute.handler",
 					trace.WithAttributes(
-						attribute.String("messaging.system", "rabbitmq"),
 						attribute.String("job.id", job.ID),
 						attribute.String("job.type", job.Type),
+						attribute.String("messaging.system", "rabbitmq"),
+						attribute.String("messaging.destination", queueName),
+						attribute.String("messaging.destination_kind", "queue"),
+						attribute.String("messaging.operation", "process"),
 						attribute.String("messaging.message_id", msg.Original.MessageId),
 						attribute.String("messaging.conversation_id", msg.Original.CorrelationId),
 					))
@@ -139,24 +142,26 @@ func (p *JobProcessor) StartConsumer(ctx context.Context, queueName string) erro
 					log.Printf("Failed to process job %s: %v", job.ID, err)
 					job.Status = JobStatusFailed
 					job.Error = err.Error()
-					p.broker.NackMessage(jobCtx, msg.Original, false)
+					// Use handlerCtx for NackMessage to make it a child of handler span
+					p.broker.NackMessage(handlerCtx, msg.Original, false)
 				} else {
 					now := time.Now()
 					job.Status = JobStatusComplete
 					job.CompletedAt = &now
 					handlerSpan.SetStatus(codes.Ok, "job completed successfully")
-					p.broker.AckMessage(jobCtx, msg.Original)
+					// Use handlerCtx for AckMessage to make it a child of handler span
+					p.broker.AckMessage(handlerCtx, msg.Original)
 				}
 				handlerSpan.End()
 			} else {
 				err := fmt.Errorf("no handler for job type: %s", job.Type)
-				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
+				jobSpan.RecordError(err)
+				jobSpan.SetStatus(codes.Error, err.Error())
 				log.Printf("No handler for job type: %s", job.Type)
 				p.broker.NackMessage(jobCtx, msg.Original, false)
 			}
 
-			span.End()
+			jobSpan.End()
 		}
 	}()
 
