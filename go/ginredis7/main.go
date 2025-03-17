@@ -3,23 +3,165 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"gin_example/last9"
 	"gin_example/users"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptrace"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+type JobStatus string
+
+const (
+	JobStatusPending  JobStatus = "pending"
+	JobStatusComplete JobStatus = "complete"
+	JobStatusFailed   JobStatus = "failed"
+)
+
+type Job struct {
+	ID          string      `json:"id"`
+	Type        string      `json:"type"`
+	Payload     interface{} `json:"payload"`
+	Status      JobStatus   `json:"status"`
+	CreatedAt   time.Time   `json:"created_at"`
+	CompletedAt *time.Time  `json:"completed_at,omitempty"`
+	Error       string      `json:"error,omitempty"`
+}
+
+type JobHandler func(context.Context, *Job) error
+
+type JobProcessor struct {
+	broker   last9.MessageBroker
+	handlers map[string]JobHandler
+}
+
+func NewJobProcessor(broker last9.MessageBroker) *JobProcessor {
+	return &JobProcessor{
+		broker:   broker,
+		handlers: make(map[string]JobHandler),
+	}
+}
+
+func (p *JobProcessor) RegisterHandler(jobType string, handler JobHandler) {
+	p.handlers[jobType] = handler
+}
+
+func (p *JobProcessor) PublishJob(ctx context.Context, queueName string, jobType string, payload interface{}) (*Job, error) {
+	// Create new job
+	job := &Job{
+		ID:        uuid.New().String(),
+		Type:      jobType,
+		Payload:   payload,
+		Status:    JobStatusPending,
+		CreatedAt: time.Now(),
+	}
+
+	// Marshal job to JSON
+	jobBytes, err := json.Marshal(job)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal job: %v", err)
+	}
+
+	// Publish the message
+	err = p.broker.PublishMessage(ctx, queueName, jobBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to publish job: %v", err)
+	}
+
+	return job, nil
+}
+
+func (p *JobProcessor) StartConsumer(ctx context.Context, queueName string) error {
+	msgs, err := p.broker.ConsumeMessages(ctx, queueName)
+	if err != nil {
+		return fmt.Errorf("failed to start consumer: %v", err)
+	}
+
+	go func() {
+		for msg := range msgs {
+			jobCtx, span := otel.Tracer("job-processor").Start(ctx, "process.job",
+				trace.WithAttributes(
+					attribute.String("messaging.system", "rabbitmq"),
+					attribute.String("messaging.destination", queueName),
+					attribute.String("messaging.destination_kind", "queue"),
+					attribute.String("messaging.operation", "process"),
+					attribute.String("messaging.message_id", msg.Original.MessageId),
+					attribute.String("messaging.conversation_id", msg.Original.CorrelationId),
+				))
+
+			var job Job
+			if err := json.Unmarshal(msg.Body, &job); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "failed to unmarshal job")
+				p.broker.NackMessage(jobCtx, msg.Original, false)
+				span.End()
+				continue
+			}
+
+			// Add job details to span
+			span.SetAttributes(
+				attribute.String("job.id", job.ID),
+				attribute.String("job.type", job.Type),
+				attribute.String("job.status", string(job.Status)),
+			)
+
+			// Execute handler with the traced context
+			if handler, ok := p.handlers[job.Type]; ok {
+				handlerCtx, handlerSpan := otel.Tracer("job-processor").Start(jobCtx, "execute.handler",
+					trace.WithAttributes(
+						attribute.String("messaging.system", "rabbitmq"),
+						attribute.String("job.id", job.ID),
+						attribute.String("job.type", job.Type),
+						attribute.String("messaging.message_id", msg.Original.MessageId),
+						attribute.String("messaging.conversation_id", msg.Original.CorrelationId),
+					))
+
+				err := handler(handlerCtx, &job)
+				if err != nil {
+					handlerSpan.RecordError(err)
+					handlerSpan.SetStatus(codes.Error, err.Error())
+					log.Printf("Failed to process job %s: %v", job.ID, err)
+					job.Status = JobStatusFailed
+					job.Error = err.Error()
+					p.broker.NackMessage(jobCtx, msg.Original, false)
+				} else {
+					now := time.Now()
+					job.Status = JobStatusComplete
+					job.CompletedAt = &now
+					handlerSpan.SetStatus(codes.Ok, "job completed successfully")
+					p.broker.AckMessage(jobCtx, msg.Original)
+				}
+				handlerSpan.End()
+			} else {
+				err := fmt.Errorf("no handler for job type: %s", job.Type)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				log.Printf("No handler for job type: %s", job.Type)
+				p.broker.NackMessage(jobCtx, msg.Original, false)
+			}
+
+			span.End()
+		}
+	}()
+
+	return nil
+}
 
 func main() {
 	r := gin.Default()
@@ -56,6 +198,45 @@ func main() {
 	c := users.NewUsersController(redisClient)
 	h := users.NewUsersHandler(c, i.Tracer)
 
+	// Initialize RabbitMQ broker
+	rmqConfig := &last9.RabbitMQConfig{
+		Host:     getEnv("RABBITMQ_HOST", "localhost"),
+		Port:     getEnv("RABBITMQ_PORT", "5672"),
+		Username: getEnv("RABBITMQ_USER", "myuser"),
+		Password: getEnv("RABBITMQ_PASS", "mypassword"),
+		VHost:    getEnv("RABBITMQ_VHOST", "/"),
+	}
+
+	rmqBroker, err := last9.NewRabbitMQBroker(rmqConfig, i.Tracer)
+	if err != nil {
+		log.Fatalf("Failed to initialize RabbitMQ broker: %v", err)
+	}
+	defer rmqBroker.Close()
+
+	// Initialize job processor with the broker
+	jobProcessor := NewJobProcessor(rmqBroker)
+
+	// Register handlers
+	jobProcessor.RegisterHandler("email", func(ctx context.Context, job *Job) error {
+		// Simulate email processing
+		time.Sleep(time.Second)
+
+		log.Println("processing job")
+		payload, ok := job.Payload.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("invalid payload type")
+		}
+
+		log.Printf("Sending email to %v: %v", payload["to"], payload["subject"])
+		return nil
+	})
+
+	// Start the consumer
+	err = jobProcessor.StartConsumer(context.Background(), "email_queue")
+	if err != nil {
+		log.Fatalf("Failed to start job consumer: %v", err)
+	}
+
 	r.Use(otelgin.Middleware("gin-server"))
 
 	// Routes
@@ -67,6 +248,26 @@ func main() {
 	// New route for fetching a random joke
 	r.GET("/joke", func(c *gin.Context) {
 		getRandomJoke(c, i)
+	})
+
+	// Add a route for submitting email jobs
+	r.POST("/send-email", func(c *gin.Context) {
+		payload := map[string]interface{}{
+			"to":      "admin@example.com",
+			"subject": "test subject",
+			"body":    "test body",
+		}
+
+		job, err := jobProcessor.PublishJob(c.Request.Context(), "email_queue", "email", payload)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusAccepted, gin.H{
+			"job_id": job.ID,
+			"status": job.Status,
+		})
 	})
 
 	r.Run()
@@ -122,4 +323,12 @@ func getRandomJoke(c *gin.Context, i *last9.Instrumentation) {
 	)
 
 	c.JSON(http.StatusOK, joke)
+}
+
+// Helper function to get environment variables with default values
+func getEnv(key, fallback string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return fallback
 }
