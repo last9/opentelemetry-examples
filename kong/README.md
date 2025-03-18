@@ -94,17 +94,17 @@ The fluentd container is configured to receive logs from the Kong container and 
 
 The OpenTelemetry Collector is configured to receive logs from the FluentD container and export them to Last9.
 
-> Additionally, the OpenTelemetry Collector sets service name to container_name tag and deployment.environment to ENV environment variable.
+> Additionally, the OpenTelemetry Collector sets the service name to container_name tag and deployment.environment to ENV environment variable.
 
 ## Sending Traces to OpenTelemetry Collector
 
-First of all, enable tracing for Kong Gateway by setting following [configuration options](https://docs.konghq.com/gateway/3.7.x/reference/configuration/#tracing_instrumentations):
+First of all, enable tracing for Kong Gateway by setting the following [configuration options](https://docs.konghq.com/gateway/3.7.x/reference/configuration/#tracing_instrumentations):
 
 ```
 KONG_TRACING_INSTRUMENTATIONS: all
 KONG_TRACING_SAMPLING_RATE: 1.0
 ```
-Send following curL call to add OpenTelemetry plugin to the Kong Gateway.
+Send the following curL call to add the OpenTelemetry plugin to the Kong Gateway.
 
 ```bash
 curl -X POST http://localhost:8001/plugins \
@@ -114,7 +114,7 @@ curl -X POST http://localhost:8001/plugins \
    {
  "name": "opentelemetry",
  "config": {
-   "endpoint": "<last9_otlp_traces_endpoint>",
+   "endpoint": "<last9_otlp_endpoint>/v1/traces",
    "headers": {
      "Authorization": "Basic <last9_api_key>"
    }
