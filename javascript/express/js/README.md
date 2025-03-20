@@ -7,7 +7,7 @@ machine.
 1. To clone this example run the following command:
 
 ```bash
-npx degit last9/opentelemetry-examples/javascript/express express
+npx degit last9/opentelemetry-examples/javascript/express/js express
 ```
 
 2. In the `express/env` directory create `.env` file and add the contents of
@@ -42,13 +42,15 @@ npm run start
 ```
 
 Once the server is running, you can access the application at
-`http://localhost:8081` by default. Where you can make CRUD operations. The API
+`http://localhost:3001` by default. Where you can make CRUD operations. The API
 endpoints are:
 
-- POST `/api/users/add` - Create a new user
-- GET `/api/users/all` - Get all users
-- PUT `/api/users/update` - Update a user
-- DELETE `/api/users/delete/:id` - Delete a user
+- GET `/` - Welcome message
+- GET `/api/users` - Get all users
+- GET `/api/users/:id` - Get user by ID
+- POST `/api/users/create` - Create a user
+- PUT `/api/users/update/:id` - Update a user
+- DELETE `/api/users/delete/:id` - Delete a user (added to match service)
 
 7. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
    dashboard to see the traces in action.
