@@ -7,7 +7,7 @@ machine.
 1. To clone this example run the following command:
 
 ```bash
-npx degit last9/opentelemetry-examples/javascript/express express
+npx degit last9/opentelemetry-examples/javascript/express/typescript express
 ```
 
 2. In the `express/env` directory create `.env` file and add the contents of
