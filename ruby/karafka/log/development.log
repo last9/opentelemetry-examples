@@ -1,0 +1,1529 @@
+E, [2025-03-20T20:11:10.711074 #78400] ERROR -- : rdkafka: [thrd:127.0.0.1:9092/bootstrap]: 127.0.0.1:9092/bootstrap: Connect to ipv4#127.0.0.1:9092 failed: Connection refused (after 0ms in state CONNECT)
+E, [2025-03-20T20:11:11.716803 #78400] ERROR -- : rdkafka: [thrd:127.0.0.1:9092/bootstrap]: 127.0.0.1:9092/bootstrap: Connect to ipv4#127.0.0.1:9092 failed: Connection refused (after 0ms in state CONNECT, 1 identical error(s) suppressed)
+E, [2025-03-20T20:11:41.809955 #78400] ERROR -- : rdkafka: [thrd:127.0.0.1:9092/bootstrap]: 127.0.0.1:9092/bootstrap: Connect to ipv4#127.0.0.1:9092 failed: Connection refused (after 0ms in state CONNECT, 32 identical error(s) suppressed)
+I, [2025-03-20T20:11:53.737306 #78400]  INFO -- : rdkafka: [thrd:127.0.0.1:9092/bootstrap]: 127.0.0.1:9092/bootstrap: Disconnected while requesting ApiVersion: might be caused by incorrect security.protocol configuration (connecting to a SSL listener?) or broker version is < 0.10 (see api.version.request) (after 1ms in state APIVERSION_QUERY)
+I, [2025-03-20T20:12:15.029863 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'xml_data' topic took 12.17 ms
+I, [2025-03-20T20:12:15.029963 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'xml_data' topic took 0.02 ms
+I, [2025-03-20T20:12:15.029993 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'xml_data' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030042 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.02 ms
+I, [2025-03-20T20:12:15.030067 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030091 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030117 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030144 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030170 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030194 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030218 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030244 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030267 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'counters' topic took 0.01 ms
+I, [2025-03-20T20:12:15.030303 #85654]  INFO -- : [waterdrop-b738977bfe19] Async producing of a message to 'ping' topic took 0.02 ms
+I, [2025-03-20T20:12:15.030318 #85654]  INFO -- : [waterdrop-b738977bfe19] Closing producer
+I, [2025-03-20T20:12:15.189329 #85654]  INFO -- : [waterdrop-b738977bfe19] Closing producer took 158.99 ms
+I, [2025-03-20T20:12:23.807803 #86691]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:12:23.807862 #86691]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:12:23.825439 #86691]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:12:23.825478 #86691]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:12:23.825485 #86691]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:12:26.657263 #86691]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:12:26.657355 #86691]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:12:27.615793 #86691]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:12:28.007805 #86691]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:12:28.008024 #86691]  INFO -- : [waterdrop-37d64f0747cc] Closing producer
+I, [2025-03-20T20:12:28.008226 #86691]  INFO -- : [waterdrop-37d64f0747cc] Closing producer took 0.21 ms
+I, [2025-03-20T20:12:32.922347 #87556]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:12:32.922403 #87556]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:12:32.937939 #87556]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:12:32.937972 #87556]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:12:32.937979 #87556]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:12:37.072977 #87556]  INFO -- : [4cc307a281f9] Polled 14 messages in 1003.66ms
+I, [2025-03-20T20:12:37.073947 #87556]  INFO -- : [9581e4b11e5b] Consume job for CountersConsumer on counters/0 started
+I, [2025-03-20T20:12:37.074504 #87556]  INFO -- : Sum of 10 elements equals to: 5.641495923673503
+I, [2025-03-20T20:12:37.074200 #87556]  INFO -- : [ec583a2371ce] Consume job for XmlMessagesConsumer on xml_data/0 started
+I, [2025-03-20T20:12:37.075760 #87556]  INFO -- : Consumed following message: {"message"=>{"new"=>"home-0.18886568100424805"}}
+I, [2025-03-20T20:12:37.076219 #87556]  INFO -- : Consumed following message: {"message"=>{"new"=>"home-0.9065594544669454"}}
+I, [2025-03-20T20:12:37.074299 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:12:37.076866 #87556]  INFO -- : Ping consumer with hits: 1
+I, [2025-03-20T20:12:37.074089 #87556]  INFO -- : [b282186bd042] Consume job for XmlMessagesConsumer on xml_data/1 started
+I, [2025-03-20T20:12:37.077755 #87556]  INFO -- : Consumed following message: {"message"=>{"new"=>"home-0.49070984467800705"}}
+I, [2025-03-20T20:12:37.077820 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.76 ms
+I, [2025-03-20T20:12:37.077550 #87556]  INFO -- : [ec583a2371ce] Consume job for XmlMessagesConsumer on xml_data/0 finished in 2.59 ms
+I, [2025-03-20T20:12:37.078061 #87556]  INFO -- : [b282186bd042] Consume job for XmlMessagesConsumer on xml_data/1 finished in 0.47 ms
+I, [2025-03-20T20:12:37.078133 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 finished in 1.29 ms
+I, [2025-03-20T20:12:37.103529 #87556]  INFO -- : [9581e4b11e5b] Consume job for CountersConsumer on counters/0 finished in 29.1 ms
+I, [2025-03-20T20:12:38.107512 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.68ms
+I, [2025-03-20T20:12:38.109195 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:12:39.073085 #87556]  INFO -- : Pong consumer with hits: 2
+I, [2025-03-20T20:12:39.073958 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.41 ms
+I, [2025-03-20T20:12:39.074351 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 finished in 965.04 ms
+I, [2025-03-20T20:12:40.082969 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1008.22ms
+I, [2025-03-20T20:12:40.083428 #87556]  INFO -- : [ef7659db726b] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:12:40.083592 #87556]  INFO -- : Ping consumer with hits: 3
+I, [2025-03-20T20:12:40.083842 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.15 ms
+I, [2025-03-20T20:12:40.084018 #87556]  INFO -- : [ef7659db726b] Consume job for Pong::PingConsumer on ping/4 finished in 0.45 ms
+I, [2025-03-20T20:12:41.087603 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.37ms
+I, [2025-03-20T20:12:41.089496 #87556]  INFO -- : [9edcb299dd2f] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:12:41.458816 #87556]  INFO -- : Pong consumer with hits: 4
+I, [2025-03-20T20:12:41.459149 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.13 ms
+I, [2025-03-20T20:12:41.459419 #87556]  INFO -- : [9edcb299dd2f] Consume job for Pong::PongConsumer on pong/4 finished in 369.83 ms
+I, [2025-03-20T20:12:42.467527 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1006.69ms
+I, [2025-03-20T20:12:42.468197 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:12:42.468371 #87556]  INFO -- : Ping consumer with hits: 5
+I, [2025-03-20T20:12:42.469488 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.95 ms
+I, [2025-03-20T20:12:42.472104 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 finished in 3.34 ms
+I, [2025-03-20T20:12:43.476657 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.83ms
+I, [2025-03-20T20:12:43.476924 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:12:44.445173 #87556]  INFO -- : Pong consumer with hits: 6
+I, [2025-03-20T20:12:44.445501 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.14 ms
+I, [2025-03-20T20:12:44.445655 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 finished in 968.68 ms
+I, [2025-03-20T20:12:45.449252 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.45ms
+I, [2025-03-20T20:12:45.449625 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:12:45.449702 #87556]  INFO -- : Ping consumer with hits: 7
+I, [2025-03-20T20:12:45.450001 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.2 ms
+I, [2025-03-20T20:12:45.450166 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 finished in 0.49 ms
+I, [2025-03-20T20:12:46.455548 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1005.11ms
+I, [2025-03-20T20:12:46.455934 #87556]  INFO -- : [9edcb299dd2f] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:12:46.854352 #87556]  INFO -- : Pong consumer with hits: 8
+I, [2025-03-20T20:12:46.854671 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.16 ms
+I, [2025-03-20T20:12:46.854812 #87556]  INFO -- : [9edcb299dd2f] Consume job for Pong::PongConsumer on pong/4 finished in 398.84 ms
+I, [2025-03-20T20:12:47.859864 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1004.86ms
+I, [2025-03-20T20:12:47.860619 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:12:47.864380 #87556]  INFO -- : Ping consumer with hits: 9
+I, [2025-03-20T20:12:47.864623 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.1 ms
+I, [2025-03-20T20:12:47.864805 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 finished in 2.59 ms
+I, [2025-03-20T20:12:48.869514 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1004.56ms
+I, [2025-03-20T20:12:48.869680 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:12:49.723921 #87556]  INFO -- : Pong consumer with hits: 10
+I, [2025-03-20T20:12:49.724270 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.15 ms
+I, [2025-03-20T20:12:49.724501 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 finished in 854.77 ms
+I, [2025-03-20T20:12:50.732638 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1007.98ms
+I, [2025-03-20T20:12:50.733800 #87556]  INFO -- : [46a9d714f360] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:12:50.733913 #87556]  INFO -- : Ping consumer with hits: 11
+I, [2025-03-20T20:12:50.734219 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.16 ms
+I, [2025-03-20T20:12:50.734528 #87556]  INFO -- : [46a9d714f360] Consume job for Pong::PingConsumer on ping/1 finished in 0.64 ms
+I, [2025-03-20T20:12:51.736433 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1000.95ms
+I, [2025-03-20T20:12:51.736832 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:12:51.866775 #87556]  INFO -- : Pong consumer with hits: 12
+I, [2025-03-20T20:12:51.867193 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.21 ms
+I, [2025-03-20T20:12:51.867371 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 finished in 130.45 ms
+I, [2025-03-20T20:12:52.872203 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1004.68ms
+I, [2025-03-20T20:12:52.872476 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:12:52.872669 #87556]  INFO -- : Ping consumer with hits: 13
+I, [2025-03-20T20:12:52.872986 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.17 ms
+I, [2025-03-20T20:12:52.873168 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 finished in 0.55 ms
+I, [2025-03-20T20:12:53.873215 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 999.71ms
+I, [2025-03-20T20:12:53.873640 #87556]  INFO -- : [ababb89c5024] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:12:54.743387 #87556]  INFO -- : Pong consumer with hits: 14
+I, [2025-03-20T20:12:54.743711 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.13 ms
+I, [2025-03-20T20:12:54.743996 #87556]  INFO -- : [ababb89c5024] Consume job for Pong::PongConsumer on pong/2 finished in 870.26 ms
+I, [2025-03-20T20:12:55.749616 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1005.31ms
+I, [2025-03-20T20:12:55.750267 #87556]  INFO -- : [46a9d714f360] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:12:55.750511 #87556]  INFO -- : Ping consumer with hits: 15
+I, [2025-03-20T20:12:55.751002 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.28 ms
+I, [2025-03-20T20:12:55.751399 #87556]  INFO -- : [46a9d714f360] Consume job for Pong::PingConsumer on ping/1 finished in 1.0 ms
+I, [2025-03-20T20:12:56.752975 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1001.23ms
+I, [2025-03-20T20:12:56.753950 #87556]  INFO -- : [ababb89c5024] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:12:57.307603 #87556]  INFO -- : Pong consumer with hits: 16
+I, [2025-03-20T20:12:57.307892 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.11 ms
+I, [2025-03-20T20:12:57.308231 #87556]  INFO -- : [ababb89c5024] Consume job for Pong::PongConsumer on pong/2 finished in 554.17 ms
+I, [2025-03-20T20:12:58.312075 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.14ms
+I, [2025-03-20T20:12:58.313012 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:12:58.319798 #87556]  INFO -- : Ping consumer with hits: 17
+I, [2025-03-20T20:12:58.320463 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.32 ms
+I, [2025-03-20T20:12:58.320913 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 finished in 1.16 ms
+I, [2025-03-20T20:12:59.324162 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1002.93ms
+I, [2025-03-20T20:12:59.325301 #87556]  INFO -- : [b6150f71c003] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:12:59.813545 #87556]  INFO -- : Pong consumer with hits: 18
+I, [2025-03-20T20:12:59.815851 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 1.19 ms
+I, [2025-03-20T20:12:59.816989 #87556]  INFO -- : [b6150f71c003] Consume job for Pong::PongConsumer on pong/3 finished in 491.44 ms
+I, [2025-03-20T20:13:00.821424 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.75ms
+I, [2025-03-20T20:13:00.821916 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:13:00.822219 #87556]  INFO -- : Ping consumer with hits: 19
+I, [2025-03-20T20:13:00.822510 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.16 ms
+I, [2025-03-20T20:13:00.822760 #87556]  INFO -- : [d1c8a4062cd9] Consume job for Pong::PingConsumer on ping/0 finished in 0.76 ms
+I, [2025-03-20T20:13:01.826882 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.93ms
+I, [2025-03-20T20:13:01.827246 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:13:02.590019 #87556]  INFO -- : Pong consumer with hits: 20
+I, [2025-03-20T20:13:02.590359 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.17 ms
+I, [2025-03-20T20:13:02.590533 #87556]  INFO -- : [07dbe6c80f62] Consume job for Pong::PongConsumer on pong/1 finished in 763.11 ms
+I, [2025-03-20T20:13:03.590593 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 999.91ms
+I, [2025-03-20T20:13:03.591480 #87556]  INFO -- : [aba07e41557c] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:13:03.611646 #87556]  INFO -- : Ping consumer with hits: 21
+I, [2025-03-20T20:13:03.611820 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.05 ms
+I, [2025-03-20T20:13:03.611932 #87556]  INFO -- : [aba07e41557c] Consume job for Pong::PingConsumer on ping/2 finished in 0.3 ms
+I, [2025-03-20T20:13:04.615144 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1003.1ms
+I, [2025-03-20T20:13:04.615725 #87556]  INFO -- : [4d1acc00c7c0] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:13:04.787451 #87556]  INFO -- : Pong consumer with hits: 22
+I, [2025-03-20T20:13:04.787642 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'ping' topic took 0.07 ms
+I, [2025-03-20T20:13:04.787819 #87556]  INFO -- : [4d1acc00c7c0] Consume job for Pong::PongConsumer on pong/0 finished in 172.0 ms
+I, [2025-03-20T20:13:05.415089 #87556]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:13:05.415587 #87556]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:13:05.788792 #87556]  INFO -- : [4cc307a281f9] Polled 1 messages in 1000.82ms
+I, [2025-03-20T20:13:05.789783 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:13:05.790678 #87556]  INFO -- : Ping consumer with hits: 23
+I, [2025-03-20T20:13:05.791776 #87556]  INFO -- : [waterdrop-6305996a619e] Async producing of a message to 'pong' topic took 0.41 ms
+I, [2025-03-20T20:13:05.791970 #87556]  INFO -- : [608f5cdd9ecf] Consume job for Pong::PingConsumer on ping/3 finished in 1.33 ms
+I, [2025-03-20T20:13:05.792299 #87556]  INFO -- : [9581e4b11e5b] Shutdown job for CountersConsumer on counters/0 started
+I, [2025-03-20T20:13:05.792808 #87556]  INFO -- : [9581e4b11e5b] Shutdown job for CountersConsumer on counters/0 finished in 0.14 ms
+I, [2025-03-20T20:13:05.792837 #87556]  INFO -- : [608f5cdd9ecf] Shutdown job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:13:05.792861 #87556]  INFO -- : [608f5cdd9ecf] Shutdown job for Pong::PingConsumer on ping/3 finished in 0.0 ms
+I, [2025-03-20T20:13:05.792883 #87556]  INFO -- : [46a9d714f360] Shutdown job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:13:05.792905 #87556]  INFO -- : [46a9d714f360] Shutdown job for Pong::PingConsumer on ping/1 finished in 0.0 ms
+I, [2025-03-20T20:13:05.792925 #87556]  INFO -- : [aba07e41557c] Shutdown job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:13:05.792945 #87556]  INFO -- : [aba07e41557c] Shutdown job for Pong::PingConsumer on ping/2 finished in 0.0 ms
+I, [2025-03-20T20:13:05.792985 #87556]  INFO -- : [07dbe6c80f62] Shutdown job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:13:05.793121 #87556]  INFO -- : [07dbe6c80f62] Shutdown job for Pong::PongConsumer on pong/1 finished in 0.02 ms
+I, [2025-03-20T20:13:05.793177 #87556]  INFO -- : [9edcb299dd2f] Shutdown job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:13:05.793254 #87556]  INFO -- : [9edcb299dd2f] Shutdown job for Pong::PongConsumer on pong/4 finished in 0.01 ms
+I, [2025-03-20T20:13:05.794055 #87556]  INFO -- : [ababb89c5024] Shutdown job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:13:05.794168 #87556]  INFO -- : [ababb89c5024] Shutdown job for Pong::PongConsumer on pong/2 finished in 0.01 ms
+I, [2025-03-20T20:13:05.794233 #87556]  INFO -- : [b6150f71c003] Shutdown job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:13:05.794259 #87556]  INFO -- : [b6150f71c003] Shutdown job for Pong::PongConsumer on pong/3 finished in 0.0 ms
+I, [2025-03-20T20:13:05.794329 #87556]  INFO -- : [4d1acc00c7c0] Shutdown job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:13:05.794465 #87556]  INFO -- : [4d1acc00c7c0] Shutdown job for Pong::PongConsumer on pong/0 finished in 0.02 ms
+I, [2025-03-20T20:13:05.792473 #87556]  INFO -- : [ec583a2371ce] Shutdown job for XmlMessagesConsumer on xml_data/0 started
+I, [2025-03-20T20:13:05.794610 #87556]  INFO -- : [ec583a2371ce] Shutdown job for XmlMessagesConsumer on xml_data/0 finished in 0.01 ms
+I, [2025-03-20T20:13:05.792648 #87556]  INFO -- : [ef7659db726b] Shutdown job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:13:05.794758 #87556]  INFO -- : [ef7659db726b] Shutdown job for Pong::PingConsumer on ping/4 finished in 0.01 ms
+I, [2025-03-20T20:13:05.792617 #87556]  INFO -- : [d1c8a4062cd9] Shutdown job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:13:05.794945 #87556]  INFO -- : [d1c8a4062cd9] Shutdown job for Pong::PingConsumer on ping/0 finished in 0.01 ms
+I, [2025-03-20T20:13:05.792332 #87556]  INFO -- : [b282186bd042] Shutdown job for XmlMessagesConsumer on xml_data/1 started
+I, [2025-03-20T20:13:05.795322 #87556]  INFO -- : [b282186bd042] Shutdown job for XmlMessagesConsumer on xml_data/1 finished in 0.01 ms
+I, [2025-03-20T20:13:06.536157 #87556]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:13:07.066728 #87556]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:13:07.066922 #87556]  INFO -- : [waterdrop-6305996a619e] Closing producer
+I, [2025-03-20T20:13:07.099883 #87556]  INFO -- : [waterdrop-6305996a619e] Closing producer took 32.98 ms
+I, [2025-03-20T20:14:18.139901 #97531]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:14:18.139949 #97531]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:14:18.156731 #97531]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:14:18.156773 #97531]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:14:18.156782 #97531]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:14:21.238681 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 954.64ms
+I, [2025-03-20T20:14:21.239027 #97531]  INFO -- : [daa0e79a1296] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:14:22.211490 #97531]  INFO -- : Pong consumer with hits: 24
+I, [2025-03-20T20:14:22.213494 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'ping' topic took 1.74 ms
+I, [2025-03-20T20:14:22.213767 #97531]  INFO -- : [daa0e79a1296] Consume job for Pong::PongConsumer on pong/2 finished in 974.61 ms
+I, [2025-03-20T20:14:23.218592 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 1004.53ms
+I, [2025-03-20T20:14:23.219904 #97531]  INFO -- : [ebb2e7cd17fd] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:14:23.220162 #97531]  INFO -- : Ping consumer with hits: 25
+I, [2025-03-20T20:14:23.220769 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'pong' topic took 0.4 ms
+I, [2025-03-20T20:14:23.221019 #97531]  INFO -- : [ebb2e7cd17fd] Consume job for Pong::PingConsumer on ping/4 finished in 1.04 ms
+I, [2025-03-20T20:14:24.226106 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 1004.92ms
+I, [2025-03-20T20:14:24.226769 #97531]  INFO -- : [9c88ff9894fa] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:14:25.029546 #97531]  INFO -- : Pong consumer with hits: 26
+I, [2025-03-20T20:14:25.030017 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'ping' topic took 0.23 ms
+I, [2025-03-20T20:14:25.030291 #97531]  INFO -- : [9c88ff9894fa] Consume job for Pong::PongConsumer on pong/1 finished in 803.42 ms
+I, [2025-03-20T20:14:26.035134 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 1004.56ms
+I, [2025-03-20T20:14:26.036150 #97531]  INFO -- : [597fc45eb3c6] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:14:26.036778 #97531]  INFO -- : Ping consumer with hits: 27
+I, [2025-03-20T20:14:26.037254 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'pong' topic took 0.28 ms
+I, [2025-03-20T20:14:26.037553 #97531]  INFO -- : [597fc45eb3c6] Consume job for Pong::PingConsumer on ping/2 finished in 0.86 ms
+I, [2025-03-20T20:14:27.042216 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 1004.27ms
+I, [2025-03-20T20:14:27.042612 #97531]  INFO -- : [5b92b3903c9f] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:14:27.871325 #97531]  INFO -- : Pong consumer with hits: 28
+I, [2025-03-20T20:14:27.871658 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'ping' topic took 0.15 ms
+I, [2025-03-20T20:14:27.871876 #97531]  INFO -- : [5b92b3903c9f] Consume job for Pong::PongConsumer on pong/3 finished in 829.16 ms
+I, [2025-03-20T20:14:28.877089 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 1005.07ms
+I, [2025-03-20T20:14:28.877463 #97531]  INFO -- : [ebb2e7cd17fd] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:14:28.877579 #97531]  INFO -- : Ping consumer with hits: 29
+I, [2025-03-20T20:14:28.878153 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'pong' topic took 0.23 ms
+I, [2025-03-20T20:14:28.878398 #97531]  INFO -- : [ebb2e7cd17fd] Consume job for Pong::PingConsumer on ping/4 finished in 0.83 ms
+I, [2025-03-20T20:14:29.883253 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 1004.3ms
+I, [2025-03-20T20:14:29.884614 #97531]  INFO -- : [ddfc83c80b03] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:14:30.216590 #97531]  INFO -- : Pong consumer with hits: 30
+I, [2025-03-20T20:14:30.216898 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'ping' topic took 0.13 ms
+I, [2025-03-20T20:14:30.217196 #97531]  INFO -- : [ddfc83c80b03] Consume job for Pong::PongConsumer on pong/0 finished in 332.47 ms
+I, [2025-03-20T20:14:31.016216 #97531]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:14:31.016345 #97531]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:14:31.222650 #97531]  INFO -- : [90bbfd97ed38] Polled 1 messages in 1005.13ms
+I, [2025-03-20T20:14:31.223138 #97531]  INFO -- : [639f7298ee92] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:14:31.223241 #97531]  INFO -- : Ping consumer with hits: 31
+I, [2025-03-20T20:14:31.223507 #97531]  INFO -- : [waterdrop-4daaedaff76f] Async producing of a message to 'pong' topic took 0.14 ms
+I, [2025-03-20T20:14:31.223708 #97531]  INFO -- : [639f7298ee92] Consume job for Pong::PingConsumer on ping/3 finished in 0.5 ms
+I, [2025-03-20T20:14:31.223978 #97531]  INFO -- : [daa0e79a1296] Shutdown job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:14:31.224340 #97531]  INFO -- : [daa0e79a1296] Shutdown job for Pong::PongConsumer on pong/2 finished in 0.04 ms
+I, [2025-03-20T20:14:31.224446 #97531]  INFO -- : [597fc45eb3c6] Shutdown job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:14:31.224552 #97531]  INFO -- : [597fc45eb3c6] Shutdown job for Pong::PingConsumer on ping/2 finished in 0.02 ms
+I, [2025-03-20T20:14:31.224646 #97531]  INFO -- : [639f7298ee92] Shutdown job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:14:31.224728 #97531]  INFO -- : [639f7298ee92] Shutdown job for Pong::PingConsumer on ping/3 finished in 0.01 ms
+I, [2025-03-20T20:14:31.224144 #97531]  INFO -- : [5b92b3903c9f] Shutdown job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:14:31.224813 #97531]  INFO -- : [5b92b3903c9f] Shutdown job for Pong::PongConsumer on pong/3 finished in 0.01 ms
+I, [2025-03-20T20:14:31.224245 #97531]  INFO -- : [ebb2e7cd17fd] Shutdown job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:14:31.224965 #97531]  INFO -- : [ebb2e7cd17fd] Shutdown job for Pong::PingConsumer on ping/4 finished in 0.02 ms
+I, [2025-03-20T20:14:31.224205 #97531]  INFO -- : [ddfc83c80b03] Shutdown job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:14:31.225114 #97531]  INFO -- : [ddfc83c80b03] Shutdown job for Pong::PongConsumer on pong/0 finished in 0.01 ms
+I, [2025-03-20T20:14:31.224021 #97531]  INFO -- : [9c88ff9894fa] Shutdown job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:14:31.225214 #97531]  INFO -- : [9c88ff9894fa] Shutdown job for Pong::PongConsumer on pong/1 finished in 0.01 ms
+I, [2025-03-20T20:14:32.477033 #97531]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:14:32.477240 #97531]  INFO -- : [waterdrop-4daaedaff76f] Closing producer
+I, [2025-03-20T20:14:32.529537 #97531]  INFO -- : [waterdrop-4daaedaff76f] Closing producer took 52.25 ms
+I, [2025-03-20T20:15:23.435367 #4881]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:15:23.435422 #4881]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:15:23.452537 #4881]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:15:23.452585 #4881]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:15:23.452593 #4881]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:15:26.522421 #4881]  INFO -- : [afcd09d1c6bd] Polled 1 messages in 946.46ms
+I, [2025-03-20T20:15:26.524096 #4881]  INFO -- : [c7a4918bc716] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:15:27.471742 #4881]  INFO -- : Pong consumer with hits: 32
+I, [2025-03-20T20:15:27.478765 #4881]  INFO -- : [waterdrop-0f2d50199bbe] Async producing of a message to 'ping' topic took 6.41 ms
+I, [2025-03-20T20:15:27.479200 #4881]  INFO -- : [c7a4918bc716] Consume job for Pong::PongConsumer on pong/3 finished in 954.93 ms
+I, [2025-03-20T20:15:28.484431 #4881]  INFO -- : [afcd09d1c6bd] Polled 1 messages in 1004.94ms
+I, [2025-03-20T20:15:28.487837 #4881]  INFO -- : [32a702b58922] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:15:28.488022 #4881]  INFO -- : Ping consumer with hits: 33
+I, [2025-03-20T20:15:28.489064 #4881]  INFO -- : [waterdrop-0f2d50199bbe] Async producing of a message to 'pong' topic took 0.89 ms
+I, [2025-03-20T20:15:28.489363 #4881]  INFO -- : [32a702b58922] Consume job for Pong::PingConsumer on ping/3 finished in 1.37 ms
+I, [2025-03-20T20:15:29.049797 #4881]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:15:29.050074 #4881]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:15:29.492081 #4881]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:15:29.495310 #4881]  INFO -- : [afcd09d1c6bd] Polled 1 messages in 1005.06ms
+I, [2025-03-20T20:15:29.495733 #4881]  INFO -- : [97d66e790304] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:15:30.480732 #4881]  INFO -- : Pong consumer with hits: 34
+I, [2025-03-20T20:15:30.481049 #4881]  INFO -- : [waterdrop-0f2d50199bbe] Async producing of a message to 'ping' topic took 0.13 ms
+I, [2025-03-20T20:15:30.481241 #4881]  INFO -- : [97d66e790304] Consume job for Pong::PongConsumer on pong/2 finished in 985.45 ms
+I, [2025-03-20T20:15:30.481619 #4881]  INFO -- : [c7a4918bc716] Shutdown job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:15:30.481877 #4881]  INFO -- : [c7a4918bc716] Shutdown job for Pong::PongConsumer on pong/3 finished in 0.03 ms
+I, [2025-03-20T20:15:30.481803 #4881]  INFO -- : [32a702b58922] Shutdown job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:15:30.481963 #4881]  INFO -- : [32a702b58922] Shutdown job for Pong::PingConsumer on ping/3 finished in 0.01 ms
+I, [2025-03-20T20:15:30.481709 #4881]  INFO -- : [97d66e790304] Shutdown job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:15:30.482064 #4881]  INFO -- : [97d66e790304] Shutdown job for Pong::PongConsumer on pong/2 finished in 0.0 ms
+I, [2025-03-20T20:15:31.751259 #4881]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:15:31.751394 #4881]  INFO -- : [waterdrop-0f2d50199bbe] Closing producer
+I, [2025-03-20T20:15:31.837558 #4881]  INFO -- : [waterdrop-0f2d50199bbe] Closing producer took 86.11 ms
+I, [2025-03-20T20:15:43.691759 #6846]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:15:43.691802 #6846]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:15:43.707855 #6846]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:15:43.707892 #6846]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:15:43.707899 #6846]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:15:46.780945 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 947.16ms
+I, [2025-03-20T20:15:46.781534 #6846]  INFO -- : [26e914708141] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:15:46.781804 #6846]  INFO -- : Ping consumer with hits: 35
+I, [2025-03-20T20:15:46.783434 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 1.43 ms
+I, [2025-03-20T20:15:46.783757 #6846]  INFO -- : [26e914708141] Consume job for Pong::PingConsumer on ping/2 finished in 2.06 ms
+I, [2025-03-20T20:15:47.787737 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1003.84ms
+I, [2025-03-20T20:15:47.787950 #6846]  INFO -- : [6663781ec564] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:15:48.153085 #6846]  INFO -- : Pong consumer with hits: 36
+I, [2025-03-20T20:15:48.153886 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.54 ms
+I, [2025-03-20T20:15:48.154185 #6846]  INFO -- : [6663781ec564] Consume job for Pong::PongConsumer on pong/0 finished in 366.16 ms
+I, [2025-03-20T20:15:49.159050 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.67ms
+I, [2025-03-20T20:15:49.159610 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:15:49.159711 #6846]  INFO -- : Ping consumer with hits: 37
+I, [2025-03-20T20:15:49.160227 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 0.4 ms
+I, [2025-03-20T20:15:49.160445 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 finished in 0.76 ms
+I, [2025-03-20T20:15:50.165950 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1005.28ms
+I, [2025-03-20T20:15:50.166984 #6846]  INFO -- : [14726e023ea7] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:15:50.189330 #6846]  INFO -- : Pong consumer with hits: 38
+I, [2025-03-20T20:15:50.189608 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.18 ms
+I, [2025-03-20T20:15:50.189709 #6846]  INFO -- : [14726e023ea7] Consume job for Pong::PongConsumer on pong/1 finished in 22.64 ms
+I, [2025-03-20T20:15:51.194158 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.3ms
+I, [2025-03-20T20:15:51.194571 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:15:51.194817 #6846]  INFO -- : Ping consumer with hits: 39
+I, [2025-03-20T20:15:51.195308 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 0.34 ms
+I, [2025-03-20T20:15:51.195533 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 finished in 0.77 ms
+I, [2025-03-20T20:15:52.199245 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1003.48ms
+I, [2025-03-20T20:15:52.199883 #6846]  INFO -- : [2058b1425581] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:15:53.118493 #6846]  INFO -- : Pong consumer with hits: 40
+I, [2025-03-20T20:15:53.118991 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.31 ms
+I, [2025-03-20T20:15:53.119252 #6846]  INFO -- : [2058b1425581] Consume job for Pong::PongConsumer on pong/4 finished in 918.95 ms
+I, [2025-03-20T20:15:54.124157 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.6ms
+I, [2025-03-20T20:15:54.124419 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:15:54.124481 #6846]  INFO -- : Ping consumer with hits: 41
+I, [2025-03-20T20:15:54.125603 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 1.01 ms
+I, [2025-03-20T20:15:54.125914 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 finished in 1.42 ms
+I, [2025-03-20T20:15:55.132781 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1006.5ms
+I, [2025-03-20T20:15:55.133308 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:15:55.434568 #6846]  INFO -- : Pong consumer with hits: 42
+I, [2025-03-20T20:15:55.436297 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.99 ms
+I, [2025-03-20T20:15:55.436815 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 finished in 303.37 ms
+I, [2025-03-20T20:15:56.437089 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1000.01ms
+I, [2025-03-20T20:15:56.437262 #6846]  INFO -- : [26e914708141] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:15:56.437333 #6846]  INFO -- : Ping consumer with hits: 43
+I, [2025-03-20T20:15:56.437551 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 0.17 ms
+I, [2025-03-20T20:15:56.437636 #6846]  INFO -- : [26e914708141] Consume job for Pong::PingConsumer on ping/2 finished in 0.31 ms
+I, [2025-03-20T20:15:57.442320 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.51ms
+I, [2025-03-20T20:15:57.443008 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:15:58.380215 #6846]  INFO -- : Pong consumer with hits: 44
+I, [2025-03-20T20:15:58.380998 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.53 ms
+I, [2025-03-20T20:15:58.381778 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 finished in 938.33 ms
+I, [2025-03-20T20:15:59.383191 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1000.84ms
+I, [2025-03-20T20:15:59.384489 #6846]  INFO -- : [5a25b59be8cd] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:15:59.384740 #6846]  INFO -- : Ping consumer with hits: 45
+I, [2025-03-20T20:15:59.385802 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 0.72 ms
+I, [2025-03-20T20:15:59.386205 #6846]  INFO -- : [5a25b59be8cd] Consume job for Pong::PingConsumer on ping/1 finished in 1.55 ms
+I, [2025-03-20T20:16:00.394759 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1008.27ms
+I, [2025-03-20T20:16:00.398650 #6846]  INFO -- : [0448440afb41] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:16:00.974687 #6846]  INFO -- : Pong consumer with hits: 46
+I, [2025-03-20T20:16:00.975277 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.41 ms
+I, [2025-03-20T20:16:00.975435 #6846]  INFO -- : [0448440afb41] Consume job for Pong::PongConsumer on pong/2 finished in 576.72 ms
+I, [2025-03-20T20:16:01.979913 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.32ms
+I, [2025-03-20T20:16:01.980382 #6846]  INFO -- : [5a25b59be8cd] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:16:01.980483 #6846]  INFO -- : Ping consumer with hits: 47
+I, [2025-03-20T20:16:01.981285 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 0.33 ms
+I, [2025-03-20T20:16:01.981510 #6846]  INFO -- : [5a25b59be8cd] Consume job for Pong::PingConsumer on ping/1 finished in 1.04 ms
+I, [2025-03-20T20:16:02.986910 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.94ms
+I, [2025-03-20T20:16:02.987180 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:16:03.176023 #6846]  INFO -- : Pong consumer with hits: 48
+I, [2025-03-20T20:16:03.176278 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.16 ms
+I, [2025-03-20T20:16:03.176378 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 finished in 187.86 ms
+I, [2025-03-20T20:16:04.180909 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.42ms
+I, [2025-03-20T20:16:04.181593 #6846]  INFO -- : [26e914708141] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:16:04.181705 #6846]  INFO -- : Ping consumer with hits: 49
+I, [2025-03-20T20:16:04.182602 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 0.7 ms
+I, [2025-03-20T20:16:04.182832 #6846]  INFO -- : [26e914708141] Consume job for Pong::PingConsumer on ping/2 finished in 1.14 ms
+I, [2025-03-20T20:16:05.187436 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1004.11ms
+I, [2025-03-20T20:16:05.188009 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:16:05.590824 #6846]  INFO -- : Pong consumer with hits: 50
+I, [2025-03-20T20:16:05.591428 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'ping' topic took 0.39 ms
+I, [2025-03-20T20:16:05.591659 #6846]  INFO -- : [05d9f56c6df0] Consume job for Pong::PongConsumer on pong/3 finished in 403.52 ms
+I, [2025-03-20T20:16:06.189442 #6846]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:16:06.189793 #6846]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:16:06.593257 #6846]  INFO -- : [05030c303bf9] Polled 1 messages in 1001.4ms
+I, [2025-03-20T20:16:06.593740 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:16:06.593880 #6846]  INFO -- : Ping consumer with hits: 51
+I, [2025-03-20T20:16:06.594358 #6846]  INFO -- : [waterdrop-241c0ab06054] Async producing of a message to 'pong' topic took 0.35 ms
+I, [2025-03-20T20:16:06.594554 #6846]  INFO -- : [fb6707924423] Consume job for Pong::PingConsumer on ping/4 finished in 0.76 ms
+I, [2025-03-20T20:16:06.594902 #6846]  INFO -- : [26e914708141] Shutdown job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:16:06.595143 #6846]  INFO -- : [26e914708141] Shutdown job for Pong::PingConsumer on ping/2 finished in 0.03 ms
+I, [2025-03-20T20:16:06.595209 #6846]  INFO -- : [2058b1425581] Shutdown job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:16:06.595291 #6846]  INFO -- : [2058b1425581] Shutdown job for Pong::PongConsumer on pong/4 finished in 0.01 ms
+I, [2025-03-20T20:16:06.595389 #6846]  INFO -- : [05d9f56c6df0] Shutdown job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:16:06.595462 #6846]  INFO -- : [05d9f56c6df0] Shutdown job for Pong::PongConsumer on pong/3 finished in 0.01 ms
+I, [2025-03-20T20:16:06.595560 #6846]  INFO -- : [0448440afb41] Shutdown job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:16:06.595625 #6846]  INFO -- : [0448440afb41] Shutdown job for Pong::PongConsumer on pong/2 finished in 0.01 ms
+I, [2025-03-20T20:16:06.595080 #6846]  INFO -- : [14726e023ea7] Shutdown job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:16:06.595731 #6846]  INFO -- : [14726e023ea7] Shutdown job for Pong::PongConsumer on pong/1 finished in 0.01 ms
+I, [2025-03-20T20:16:06.595007 #6846]  INFO -- : [5a25b59be8cd] Shutdown job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:16:06.595844 #6846]  INFO -- : [5a25b59be8cd] Shutdown job for Pong::PingConsumer on ping/1 finished in 0.01 ms
+I, [2025-03-20T20:16:06.594954 #6846]  INFO -- : [fb6707924423] Shutdown job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:16:06.595954 #6846]  INFO -- : [fb6707924423] Shutdown job for Pong::PingConsumer on ping/4 finished in 0.01 ms
+I, [2025-03-20T20:16:06.595047 #6846]  INFO -- : [6663781ec564] Shutdown job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:16:06.596069 #6846]  INFO -- : [6663781ec564] Shutdown job for Pong::PongConsumer on pong/0 finished in 0.01 ms
+I, [2025-03-20T20:16:07.861643 #6846]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:16:07.861749 #6846]  INFO -- : [waterdrop-241c0ab06054] Closing producer
+I, [2025-03-20T20:16:07.943473 #6846]  INFO -- : [waterdrop-241c0ab06054] Closing producer took 81.71 ms
+I, [2025-03-20T20:16:35.899599 #11822]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:16:35.899635 #11822]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:16:35.916138 #11822]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:16:35.916176 #11822]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:16:35.916183 #11822]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:16:38.989940 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 931.58ms
+I, [2025-03-20T20:16:38.993891 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:16:39.481245 #11822]  INFO -- : Pong consumer with hits: 52
+I, [2025-03-20T20:16:39.486122 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 3.98 ms
+I, [2025-03-20T20:16:39.486788 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 492.51 ms
+I, [2025-03-20T20:16:40.489753 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.44ms
+I, [2025-03-20T20:16:40.490667 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:16:40.490751 #11822]  INFO -- : Ping consumer with hits: 53
+I, [2025-03-20T20:16:40.491155 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.31 ms
+I, [2025-03-20T20:16:40.491343 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 finished in 0.62 ms
+I, [2025-03-20T20:16:41.492510 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1001.06ms
+I, [2025-03-20T20:16:41.492673 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:16:42.311524 #11822]  INFO -- : Pong consumer with hits: 54
+I, [2025-03-20T20:16:42.312533 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.6 ms
+I, [2025-03-20T20:16:42.312843 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 820.11 ms
+I, [2025-03-20T20:16:43.318919 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1005.85ms
+I, [2025-03-20T20:16:43.320690 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:16:43.320827 #11822]  INFO -- : Ping consumer with hits: 55
+I, [2025-03-20T20:16:43.322017 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.96 ms
+I, [2025-03-20T20:16:43.322255 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 finished in 1.49 ms
+I, [2025-03-20T20:16:44.326853 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.45ms
+I, [2025-03-20T20:16:44.327556 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:16:44.916273 #11822]  INFO -- : Pong consumer with hits: 56
+I, [2025-03-20T20:16:44.917218 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.49 ms
+I, [2025-03-20T20:16:44.917543 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 589.61 ms
+I, [2025-03-20T20:16:45.922887 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.19ms
+I, [2025-03-20T20:16:45.923185 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:16:45.923300 #11822]  INFO -- : Ping consumer with hits: 57
+I, [2025-03-20T20:16:45.923656 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.25 ms
+I, [2025-03-20T20:16:45.923814 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 finished in 0.56 ms
+I, [2025-03-20T20:16:46.928022 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.74ms
+I, [2025-03-20T20:16:46.930440 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:16:47.124072 #11822]  INFO -- : Pong consumer with hits: 58
+I, [2025-03-20T20:16:47.137351 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 12.71 ms
+I, [2025-03-20T20:16:47.137616 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 finished in 207.0 ms
+I, [2025-03-20T20:16:48.144448 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1006.5ms
+I, [2025-03-20T20:16:48.145007 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:16:48.145176 #11822]  INFO -- : Ping consumer with hits: 59
+I, [2025-03-20T20:16:48.145578 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.31 ms
+I, [2025-03-20T20:16:48.145723 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 finished in 0.67 ms
+I, [2025-03-20T20:16:49.152021 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1005.71ms
+I, [2025-03-20T20:16:49.153118 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:16:49.764191 #11822]  INFO -- : Pong consumer with hits: 60
+I, [2025-03-20T20:16:49.764946 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.5 ms
+I, [2025-03-20T20:16:49.765214 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 finished in 612.01 ms
+I, [2025-03-20T20:16:50.770675 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.4ms
+I, [2025-03-20T20:16:50.771382 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:16:50.771577 #11822]  INFO -- : Ping consumer with hits: 61
+I, [2025-03-20T20:16:50.772019 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.35 ms
+I, [2025-03-20T20:16:50.772178 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 finished in 0.64 ms
+I, [2025-03-20T20:16:51.786219 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1012.64ms
+I, [2025-03-20T20:16:51.789672 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:16:52.364798 #11822]  INFO -- : Pong consumer with hits: 62
+I, [2025-03-20T20:16:52.365867 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.64 ms
+I, [2025-03-20T20:16:52.366272 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 finished in 576.45 ms
+I, [2025-03-20T20:16:53.390146 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1023.55ms
+I, [2025-03-20T20:16:53.390913 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:16:53.391026 #11822]  INFO -- : Ping consumer with hits: 63
+I, [2025-03-20T20:16:53.391750 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.53 ms
+I, [2025-03-20T20:16:53.392006 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 finished in 1.03 ms
+I, [2025-03-20T20:16:54.397378 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1005.15ms
+I, [2025-03-20T20:16:54.398785 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:16:54.585948 #11822]  INFO -- : Pong consumer with hits: 64
+I, [2025-03-20T20:16:54.586846 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.63 ms
+I, [2025-03-20T20:16:54.587140 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 finished in 188.25 ms
+I, [2025-03-20T20:16:55.588328 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1000.98ms
+I, [2025-03-20T20:16:55.589806 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:16:55.589997 #11822]  INFO -- : Ping consumer with hits: 65
+I, [2025-03-20T20:16:55.590741 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.63 ms
+I, [2025-03-20T20:16:55.591126 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 finished in 1.25 ms
+I, [2025-03-20T20:16:56.596639 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.71ms
+I, [2025-03-20T20:16:56.597196 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:16:57.076696 #11822]  INFO -- : Pong consumer with hits: 66
+I, [2025-03-20T20:16:57.077546 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.57 ms
+I, [2025-03-20T20:16:57.077755 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 finished in 474.75 ms
+I, [2025-03-20T20:16:58.081870 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.94ms
+I, [2025-03-20T20:16:58.083380 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:16:58.083559 #11822]  INFO -- : Ping consumer with hits: 67
+I, [2025-03-20T20:16:58.084067 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.37 ms
+I, [2025-03-20T20:16:58.084339 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 finished in 0.84 ms
+I, [2025-03-20T20:16:59.089642 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.98ms
+I, [2025-03-20T20:16:59.094809 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:16:59.608256 #11822]  INFO -- : Pong consumer with hits: 68
+I, [2025-03-20T20:16:59.608512 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.16 ms
+I, [2025-03-20T20:16:59.608721 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 513.77 ms
+I, [2025-03-20T20:17:00.612229 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.38ms
+I, [2025-03-20T20:17:00.612501 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:17:00.612589 #11822]  INFO -- : Ping consumer with hits: 69
+I, [2025-03-20T20:17:00.612943 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.26 ms
+I, [2025-03-20T20:17:00.613079 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 finished in 0.53 ms
+I, [2025-03-20T20:17:01.616902 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.68ms
+I, [2025-03-20T20:17:01.617360 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:17:02.143298 #11822]  INFO -- : Pong consumer with hits: 70
+I, [2025-03-20T20:17:02.144521 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.69 ms
+I, [2025-03-20T20:17:02.144926 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 finished in 523.71 ms
+I, [2025-03-20T20:17:03.148001 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.75ms
+I, [2025-03-20T20:17:03.149082 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:03.149225 #11822]  INFO -- : Ping consumer with hits: 71
+I, [2025-03-20T20:17:03.150041 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.63 ms
+I, [2025-03-20T20:17:03.150361 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 1.2 ms
+I, [2025-03-20T20:17:04.154030 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.34ms
+I, [2025-03-20T20:17:04.154476 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:17:04.724980 #11822]  INFO -- : Pong consumer with hits: 72
+I, [2025-03-20T20:17:04.725445 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.27 ms
+I, [2025-03-20T20:17:04.725640 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 finished in 571.06 ms
+I, [2025-03-20T20:17:05.725832 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 999.98ms
+I, [2025-03-20T20:17:05.726365 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:05.726481 #11822]  INFO -- : Ping consumer with hits: 73
+I, [2025-03-20T20:17:05.727111 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.46 ms
+I, [2025-03-20T20:17:05.727392 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 0.97 ms
+I, [2025-03-20T20:17:06.733427 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.8ms
+I, [2025-03-20T20:17:06.733750 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:17:07.254703 #11822]  INFO -- : Pong consumer with hits: 74
+I, [2025-03-20T20:17:07.255553 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.56 ms
+I, [2025-03-20T20:17:07.255755 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 517.57 ms
+I, [2025-03-20T20:17:08.260466 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.54ms
+I, [2025-03-20T20:17:08.260844 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:08.260924 #11822]  INFO -- : Ping consumer with hits: 75
+I, [2025-03-20T20:17:08.261371 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.36 ms
+I, [2025-03-20T20:17:08.261536 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 0.63 ms
+I, [2025-03-20T20:17:09.266424 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.74ms
+I, [2025-03-20T20:17:09.267262 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:17:09.950125 #11822]  INFO -- : Pong consumer with hits: 76
+I, [2025-03-20T20:17:09.951977 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 1.55 ms
+I, [2025-03-20T20:17:09.952286 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 finished in 684.94 ms
+I, [2025-03-20T20:17:10.956290 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.78ms
+I, [2025-03-20T20:17:10.956640 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:17:10.956721 #11822]  INFO -- : Ping consumer with hits: 77
+I, [2025-03-20T20:17:10.957336 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.35 ms
+I, [2025-03-20T20:17:10.957531 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 finished in 0.83 ms
+I, [2025-03-20T20:17:11.960567 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.64ms
+I, [2025-03-20T20:17:11.961219 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:17:12.819820 #11822]  INFO -- : Pong consumer with hits: 78
+I, [2025-03-20T20:17:12.821746 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.91 ms
+I, [2025-03-20T20:17:12.822181 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 finished in 856.61 ms
+I, [2025-03-20T20:17:13.826526 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.03ms
+I, [2025-03-20T20:17:13.826956 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:17:13.827069 #11822]  INFO -- : Ping consumer with hits: 79
+I, [2025-03-20T20:17:13.827597 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.4 ms
+I, [2025-03-20T20:17:13.827838 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 finished in 0.79 ms
+I, [2025-03-20T20:17:14.831389 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.08ms
+I, [2025-03-20T20:17:14.831791 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:17:15.005138 #11822]  INFO -- : Pong consumer with hits: 80
+I, [2025-03-20T20:17:15.005835 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.48 ms
+I, [2025-03-20T20:17:15.006135 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 174.23 ms
+I, [2025-03-20T20:17:16.008043 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1001.58ms
+I, [2025-03-20T20:17:16.008807 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:17:16.008985 #11822]  INFO -- : Ping consumer with hits: 81
+I, [2025-03-20T20:17:16.009839 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.72 ms
+I, [2025-03-20T20:17:16.010061 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 finished in 1.18 ms
+I, [2025-03-20T20:17:17.018186 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1007.76ms
+I, [2025-03-20T20:17:17.020152 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:17:17.027341 #11822]  INFO -- : Pong consumer with hits: 82
+I, [2025-03-20T20:17:17.028228 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.4 ms
+I, [2025-03-20T20:17:17.028472 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 finished in 8.04 ms
+I, [2025-03-20T20:17:18.031429 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.69ms
+I, [2025-03-20T20:17:18.031801 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:17:18.031878 #11822]  INFO -- : Ping consumer with hits: 83
+I, [2025-03-20T20:17:18.032291 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.25 ms
+I, [2025-03-20T20:17:18.032506 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 finished in 0.65 ms
+I, [2025-03-20T20:17:19.036666 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.01ms
+I, [2025-03-20T20:17:19.037259 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:17:19.634875 #11822]  INFO -- : Pong consumer with hits: 84
+I, [2025-03-20T20:17:19.635715 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.43 ms
+I, [2025-03-20T20:17:19.636051 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 finished in 598.71 ms
+I, [2025-03-20T20:17:20.638373 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.03ms
+I, [2025-03-20T20:17:20.638810 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:17:20.638948 #11822]  INFO -- : Ping consumer with hits: 85
+I, [2025-03-20T20:17:20.639690 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.53 ms
+I, [2025-03-20T20:17:20.640401 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 finished in 1.5 ms
+I, [2025-03-20T20:17:21.645145 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.54ms
+I, [2025-03-20T20:17:21.645637 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:17:22.119597 #11822]  INFO -- : Pong consumer with hits: 86
+I, [2025-03-20T20:17:22.120979 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.47 ms
+I, [2025-03-20T20:17:22.121330 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 finished in 475.54 ms
+I, [2025-03-20T20:17:23.143424 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1020.94ms
+I, [2025-03-20T20:17:23.144299 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:17:23.144703 #11822]  INFO -- : Ping consumer with hits: 87
+I, [2025-03-20T20:17:23.146650 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 1.7 ms
+I, [2025-03-20T20:17:23.147194 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 finished in 2.56 ms
+I, [2025-03-20T20:17:24.151717 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.94ms
+I, [2025-03-20T20:17:24.152818 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:17:24.835491 #11822]  INFO -- : Pong consumer with hits: 88
+I, [2025-03-20T20:17:24.836238 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.44 ms
+I, [2025-03-20T20:17:24.836510 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 683.58 ms
+I, [2025-03-20T20:17:25.841433 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.71ms
+I, [2025-03-20T20:17:25.841790 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:17:25.841973 #11822]  INFO -- : Ping consumer with hits: 89
+I, [2025-03-20T20:17:25.842466 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.34 ms
+I, [2025-03-20T20:17:25.842698 #11822]  INFO -- : [886a53bf7325] Consume job for Pong::PingConsumer on ping/4 finished in 0.77 ms
+I, [2025-03-20T20:17:26.846713 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.84ms
+I, [2025-03-20T20:17:26.847171 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:17:27.052988 #11822]  INFO -- : Pong consumer with hits: 90
+I, [2025-03-20T20:17:27.054040 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.69 ms
+I, [2025-03-20T20:17:27.054304 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 finished in 207.05 ms
+I, [2025-03-20T20:17:28.059219 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.68ms
+I, [2025-03-20T20:17:28.059537 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:28.059668 #11822]  INFO -- : Ping consumer with hits: 91
+I, [2025-03-20T20:17:28.060048 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.27 ms
+I, [2025-03-20T20:17:28.060211 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 0.62 ms
+I, [2025-03-20T20:17:29.061155 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1000.81ms
+I, [2025-03-20T20:17:29.061456 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:17:29.969573 #11822]  INFO -- : Pong consumer with hits: 92
+I, [2025-03-20T20:17:29.970496 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.57 ms
+I, [2025-03-20T20:17:29.970777 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 finished in 909.09 ms
+I, [2025-03-20T20:17:30.974754 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.56ms
+I, [2025-03-20T20:17:30.975848 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:30.976090 #11822]  INFO -- : Ping consumer with hits: 93
+I, [2025-03-20T20:17:30.977296 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.91 ms
+I, [2025-03-20T20:17:30.977795 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 1.81 ms
+I, [2025-03-20T20:17:31.980119 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1001.93ms
+I, [2025-03-20T20:17:31.981023 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:17:32.754011 #11822]  INFO -- : Pong consumer with hits: 94
+I, [2025-03-20T20:17:32.754371 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.24 ms
+I, [2025-03-20T20:17:32.754824 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 finished in 773.71 ms
+I, [2025-03-20T20:17:33.762076 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1007.1ms
+I, [2025-03-20T20:17:33.762549 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:17:33.762653 #11822]  INFO -- : Ping consumer with hits: 95
+I, [2025-03-20T20:17:33.763156 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.38 ms
+I, [2025-03-20T20:17:33.763346 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 finished in 0.75 ms
+I, [2025-03-20T20:17:34.763773 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1000.21ms
+I, [2025-03-20T20:17:34.764083 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:17:35.201448 #11822]  INFO -- : Pong consumer with hits: 96
+I, [2025-03-20T20:17:35.203183 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 1.07 ms
+I, [2025-03-20T20:17:35.205927 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 finished in 441.68 ms
+I, [2025-03-20T20:17:36.215672 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1009.47ms
+I, [2025-03-20T20:17:36.215802 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:36.215846 #11822]  INFO -- : Ping consumer with hits: 97
+I, [2025-03-20T20:17:36.216138 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.2 ms
+I, [2025-03-20T20:17:36.216230 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 0.39 ms
+I, [2025-03-20T20:17:37.216402 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1000.09ms
+I, [2025-03-20T20:17:37.219549 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:17:37.286992 #11822]  INFO -- : Pong consumer with hits: 98
+I, [2025-03-20T20:17:37.287533 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.33 ms
+I, [2025-03-20T20:17:37.287726 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 finished in 67.71 ms
+I, [2025-03-20T20:17:38.292017 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.05ms
+I, [2025-03-20T20:17:38.292503 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:17:38.292607 #11822]  INFO -- : Ping consumer with hits: 99
+I, [2025-03-20T20:17:38.293060 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.33 ms
+I, [2025-03-20T20:17:38.293237 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 finished in 0.68 ms
+I, [2025-03-20T20:17:39.296590 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.22ms
+I, [2025-03-20T20:17:39.296870 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:17:40.185907 #11822]  INFO -- : Pong consumer with hits: 100
+I, [2025-03-20T20:17:40.186413 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.31 ms
+I, [2025-03-20T20:17:40.186632 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 finished in 889.69 ms
+I, [2025-03-20T20:17:41.188496 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1001.48ms
+I, [2025-03-20T20:17:41.189350 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:17:41.196628 #11822]  INFO -- : Ping consumer with hits: 101
+I, [2025-03-20T20:17:41.197573 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.59 ms
+I, [2025-03-20T20:17:41.197959 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 finished in 1.42 ms
+I, [2025-03-20T20:17:42.202610 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.41ms
+I, [2025-03-20T20:17:42.203178 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:17:42.585225 #11822]  INFO -- : Pong consumer with hits: 102
+I, [2025-03-20T20:17:42.586100 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.53 ms
+I, [2025-03-20T20:17:42.589406 #11822]  INFO -- : [dfe6bc1f6d08] Consume job for Pong::PongConsumer on pong/2 finished in 385.64 ms
+I, [2025-03-20T20:17:43.594936 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.79ms
+I, [2025-03-20T20:17:43.595753 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:43.595841 #11822]  INFO -- : Ping consumer with hits: 103
+I, [2025-03-20T20:17:43.596407 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.42 ms
+I, [2025-03-20T20:17:43.596593 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 0.78 ms
+I, [2025-03-20T20:17:44.598728 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1001.92ms
+I, [2025-03-20T20:17:44.601064 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:17:45.557489 #11822]  INFO -- : Pong consumer with hits: 104
+I, [2025-03-20T20:17:45.558364 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.43 ms
+I, [2025-03-20T20:17:45.558587 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 957.14 ms
+I, [2025-03-20T20:17:46.561047 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1002.2ms
+I, [2025-03-20T20:17:46.561773 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:46.569954 #11822]  INFO -- : Ping consumer with hits: 105
+I, [2025-03-20T20:17:46.570764 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.37 ms
+I, [2025-03-20T20:17:46.570960 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 1.03 ms
+I, [2025-03-20T20:17:47.576252 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.83ms
+I, [2025-03-20T20:17:47.576533 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:17:48.198908 #11822]  INFO -- : Pong consumer with hits: 106
+I, [2025-03-20T20:17:48.199452 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.29 ms
+I, [2025-03-20T20:17:48.199859 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 623.26 ms
+I, [2025-03-20T20:17:49.203572 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.42ms
+I, [2025-03-20T20:17:49.204118 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:17:49.204252 #11822]  INFO -- : Ping consumer with hits: 107
+I, [2025-03-20T20:17:49.204809 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.32 ms
+I, [2025-03-20T20:17:49.205037 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 finished in 0.83 ms
+I, [2025-03-20T20:17:50.206302 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1001.1ms
+I, [2025-03-20T20:17:50.206510 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:17:50.430227 #11822]  INFO -- : Pong consumer with hits: 108
+I, [2025-03-20T20:17:50.430727 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.3 ms
+I, [2025-03-20T20:17:50.430914 #11822]  INFO -- : [bb0fefcb5f4e] Consume job for Pong::PongConsumer on pong/0 finished in 224.34 ms
+I, [2025-03-20T20:17:51.436260 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1005.07ms
+I, [2025-03-20T20:17:51.436747 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:17:51.436848 #11822]  INFO -- : Ping consumer with hits: 109
+I, [2025-03-20T20:17:51.438662 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.48 ms
+I, [2025-03-20T20:17:51.438854 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 finished in 2.04 ms
+I, [2025-03-20T20:17:52.445580 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1006.56ms
+I, [2025-03-20T20:17:52.445953 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:17:53.448085 #11822]  INFO -- : Pong consumer with hits: 110
+I, [2025-03-20T20:17:53.449562 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.91 ms
+I, [2025-03-20T20:17:53.450127 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 1003.89 ms
+I, [2025-03-20T20:17:54.454633 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1003.99ms
+I, [2025-03-20T20:17:54.456805 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:17:54.457157 #11822]  INFO -- : Ping consumer with hits: 111
+I, [2025-03-20T20:17:54.459071 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 1.52 ms
+I, [2025-03-20T20:17:54.459692 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 finished in 2.7 ms
+I, [2025-03-20T20:17:55.466148 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1005.07ms
+I, [2025-03-20T20:17:55.467507 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:17:55.720553 #11822]  INFO -- : Pong consumer with hits: 112
+I, [2025-03-20T20:17:55.721785 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.71 ms
+I, [2025-03-20T20:17:55.722397 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 254.75 ms
+I, [2025-03-20T20:17:56.728197 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.86ms
+I, [2025-03-20T20:17:56.728921 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:17:56.729095 #11822]  INFO -- : Ping consumer with hits: 113
+I, [2025-03-20T20:17:56.730000 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.69 ms
+I, [2025-03-20T20:17:56.730386 #11822]  INFO -- : [e4c91ae64452] Consume job for Pong::PingConsumer on ping/2 finished in 1.39 ms
+I, [2025-03-20T20:17:57.738152 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1007.53ms
+I, [2025-03-20T20:17:57.738569 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:17:58.338870 #11822]  INFO -- : Pong consumer with hits: 114
+I, [2025-03-20T20:17:58.339894 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.56 ms
+I, [2025-03-20T20:17:58.340979 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 finished in 602.18 ms
+I, [2025-03-20T20:17:59.356427 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1004.61ms
+I, [2025-03-20T20:17:59.356616 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:17:59.356697 #11822]  INFO -- : Ping consumer with hits: 115
+I, [2025-03-20T20:17:59.356908 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.16 ms
+I, [2025-03-20T20:17:59.356986 #11822]  INFO -- : [5135ba89336c] Consume job for Pong::PingConsumer on ping/1 finished in 0.31 ms
+I, [2025-03-20T20:18:00.358135 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1001.06ms
+I, [2025-03-20T20:18:00.358333 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:18:01.142850 #11822]  INFO -- : Pong consumer with hits: 116
+I, [2025-03-20T20:18:01.571845 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 128.7 ms
+I, [2025-03-20T20:18:01.643524 #11822]  INFO -- : [a16b38244800] Consume job for Pong::PongConsumer on pong/3 finished in 1257.52 ms
+I, [2025-03-20T20:18:02.753155 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1102.79ms
+I, [2025-03-20T20:18:02.753485 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:18:02.753572 #11822]  INFO -- : Ping consumer with hits: 117
+I, [2025-03-20T20:18:02.753795 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.16 ms
+I, [2025-03-20T20:18:02.753870 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 finished in 0.34 ms
+I, [2025-03-20T20:18:03.761499 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1007.56ms
+I, [2025-03-20T20:18:03.761659 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:18:04.441845 #11822]  INFO -- : Pong consumer with hits: 118
+I, [2025-03-20T20:18:04.442434 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.42 ms
+I, [2025-03-20T20:18:04.442522 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 680.82 ms
+I, [2025-03-20T20:18:05.449559 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1006.9ms
+I, [2025-03-20T20:18:05.449801 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:18:05.449872 #11822]  INFO -- : Ping consumer with hits: 119
+I, [2025-03-20T20:18:05.450070 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.14 ms
+I, [2025-03-20T20:18:05.450160 #11822]  INFO -- : [5d03ce7d0c13] Consume job for Pong::PingConsumer on ping/0 finished in 0.31 ms
+I, [2025-03-20T20:18:06.460394 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1010.13ms
+I, [2025-03-20T20:18:06.460620 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:18:06.509485 #11822]  INFO -- : Pong consumer with hits: 120
+I, [2025-03-20T20:18:06.509805 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.23 ms
+I, [2025-03-20T20:18:06.509886 #11822]  INFO -- : [dcb0eb9d3863] Consume job for Pong::PongConsumer on pong/1 finished in 49.22 ms
+I, [2025-03-20T20:18:07.516931 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 1006.96ms
+I, [2025-03-20T20:18:07.517070 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:18:07.517105 #11822]  INFO -- : Ping consumer with hits: 121
+I, [2025-03-20T20:18:07.517529 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.38 ms
+I, [2025-03-20T20:18:07.517603 #11822]  INFO -- : [c8b22a30dba9] Consume job for Pong::PingConsumer on ping/3 finished in 0.5 ms
+I, [2025-03-20T20:26:54.885529 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 527367.85ms
+I, [2025-03-20T20:26:54.886652 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 started
+W, [2025-03-20T20:26:54.906654 #11822]  WARN -- : rdkafka: [thrd:main]: Consumer group session timed out (in join-state steady) after 527906 ms without a successful response from the group coordinator (broker 1, last error was Success): revoking assignment and rejoining group
+I, [2025-03-20T20:26:55.495464 #11822]  INFO -- : Pong consumer with hits: 122
+I, [2025-03-20T20:26:55.495866 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.3 ms
+I, [2025-03-20T20:26:55.495951 #11822]  INFO -- : [53d755936800] Consume job for Pong::PongConsumer on pong/4 finished in 602.0 ms
+I, [2025-03-20T20:26:55.499332 #11822]  INFO -- : rdkafka: [thrd:localhost:9092/1]: localhost:9092/1: Timed out FetchRequest in flight (after 526855ms, timeout #0)
+W, [2025-03-20T20:26:55.499382 #11822]  WARN -- : rdkafka: [thrd:localhost:9092/1]: localhost:9092/1: Timed out 1 in-flight, 0 retry-queued, 0 out-queue, 0 partially-sent requests
+E, [2025-03-20T20:26:55.499448 #11822] ERROR -- : rdkafka: [thrd:localhost:9092/1]: localhost:9092/1: 1 request(s) timed out: disconnect (average rtt 413.093ms) (after 615899ms in state UP)
+E, [2025-03-20T20:26:55.501499 #11822] ERROR -- : librdkafka internal error occurred: Local: Timed out (timed_out)
+E, [2025-03-20T20:26:55.501874 #11822] ERROR -- : /Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-rdkafka-0.17.6/lib/rdkafka/consumer.rb:594:in `rd_kafka_poll'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-rdkafka-0.17.6/lib/rdkafka/consumer.rb:594:in `block in events_poll'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-rdkafka-0.17.6/lib/rdkafka/native_kafka.rb:77:in `with_inner'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-rdkafka-0.17.6/lib/rdkafka/consumer.rb:593:in `events_poll'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-2.4.17/lib/karafka/connection/client.rb:398:in `events_poll'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-2.4.17/lib/karafka/connection/client.rb:105:in `batch_poll'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-2.4.17/lib/karafka/connection/listener.rb:275:in `poll_and_remap_messages'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-2.4.17/lib/karafka/connection/listener.rb:180:in `block in fetch_loop'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-core-2.4.8/lib/karafka/core/monitoring/notifications.rb:120:in `instrument'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-core-2.4.8/lib/karafka/core/monitoring/monitor.rb:34:in `instrument'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-2.4.17/lib/karafka/connection/listener.rb:170:in `fetch_loop'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-2.4.17/lib/karafka/connection/listener.rb:75:in `call'
+/Users/prathamesh2_/.rbenv/versions/3.3.3/lib/ruby/gems/3.3.0/gems/karafka-2.4.17/lib/karafka/helpers/async.rb:49:in `block (2 levels) in async_call'
+W, [2025-03-20T20:26:56.512610 #11822]  WARN -- : rdkafka: [thrd:main]: Offset commit (unassigned partitions) failed for 10/13 partition(s) in join-state wait-unassign-to-complete: Broker: Unknown member: ping((null))[0]@11(Broker: Unknown member), ping((null))[1]@13(Broker: Unknown member), ping((null))[2]@11(Broker: Unknown member), ping((null))[3]@13(Broker: Unknown member), ping((null))[4]@13(Broker: Unknown member), pong((null))[0]@7(Broker: Unknown member), pong((null))[1]@20(Broker: Unknown member), pong((null))[2]@12(Broker: Unknown member), pong((null))[3]@12(Broker: Unknown member), pong((null))[4]@9(Broker: Unknown member)
+I, [2025-03-20T20:26:56.513741 #11822]  INFO -- : [5d03ce7d0c13] Revoked job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:26:56.513978 #11822]  INFO -- : [5d03ce7d0c13] Revoked job for Pong::PingConsumer on ping/0 finished in 0.03 ms
+I, [2025-03-20T20:26:56.514012 #11822]  INFO -- : [bb0fefcb5f4e] Revoked job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:26:56.514058 #11822]  INFO -- : [bb0fefcb5f4e] Revoked job for Pong::PongConsumer on pong/0 finished in 0.0 ms
+I, [2025-03-20T20:26:56.514087 #11822]  INFO -- : [dcb0eb9d3863] Revoked job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:26:56.514130 #11822]  INFO -- : [dcb0eb9d3863] Revoked job for Pong::PongConsumer on pong/1 finished in 0.0 ms
+I, [2025-03-20T20:26:56.514181 #11822]  INFO -- : [dfe6bc1f6d08] Revoked job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:26:56.514226 #11822]  INFO -- : [dfe6bc1f6d08] Revoked job for Pong::PongConsumer on pong/2 finished in 0.01 ms
+I, [2025-03-20T20:26:56.514262 #11822]  INFO -- : [a16b38244800] Revoked job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:26:56.514300 #11822]  INFO -- : [a16b38244800] Revoked job for Pong::PongConsumer on pong/3 finished in 0.0 ms
+I, [2025-03-20T20:26:56.514318 #11822]  INFO -- : [53d755936800] Revoked job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:26:56.514367 #11822]  INFO -- : [53d755936800] Revoked job for Pong::PongConsumer on pong/4 finished in 0.0 ms
+I, [2025-03-20T20:26:56.513913 #11822]  INFO -- : [886a53bf7325] Revoked job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:26:56.514420 #11822]  INFO -- : [886a53bf7325] Revoked job for Pong::PingConsumer on ping/4 finished in 0.0 ms
+I, [2025-03-20T20:26:56.513866 #11822]  INFO -- : [e4c91ae64452] Revoked job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:26:56.514472 #11822]  INFO -- : [e4c91ae64452] Revoked job for Pong::PingConsumer on ping/2 finished in 0.0 ms
+I, [2025-03-20T20:26:56.513823 #11822]  INFO -- : [5135ba89336c] Revoked job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:26:56.514542 #11822]  INFO -- : [5135ba89336c] Revoked job for Pong::PingConsumer on ping/1 finished in 0.01 ms
+I, [2025-03-20T20:26:56.513890 #11822]  INFO -- : [c8b22a30dba9] Revoked job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:26:56.514606 #11822]  INFO -- : [c8b22a30dba9] Revoked job for Pong::PingConsumer on ping/3 finished in 0.0 ms
+I, [2025-03-20T20:30:07.740772 #11822]  INFO -- : [0f1579e39897] Polled 1 messages in 505.84ms
+I, [2025-03-20T20:30:07.745129 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:30:07.745441 #11822]  INFO -- : Ping consumer with hits: 123
+I, [2025-03-20T20:30:07.747351 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 1.54 ms
+I, [2025-03-20T20:30:07.748080 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 2.5 ms
+I, [2025-03-20T20:30:08.749767 #11822]  INFO -- : [0f1579e39897] Polled 4 messages in 1001.35ms
+I, [2025-03-20T20:30:08.750548 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:30:08.750630 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:30:08.750690 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:08.750876 #11822]  INFO -- : Ping consumer with hits: 121
+I, [2025-03-20T20:30:08.751271 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.25 ms
+I, [2025-03-20T20:30:08.751418 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.55 ms
+I, [2025-03-20T20:30:09.149116 #11822]  INFO -- : Pong consumer with hits: 120
+I, [2025-03-20T20:30:09.149575 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.27 ms
+I, [2025-03-20T20:30:09.149910 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 399.15 ms
+I, [2025-03-20T20:30:09.609166 #11822]  INFO -- : Pong consumer with hits: 124
+I, [2025-03-20T20:30:09.652062 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 42.6 ms
+I, [2025-03-20T20:30:09.652935 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 901.82 ms
+I, [2025-03-20T20:30:10.656981 #11822]  INFO -- : [0f1579e39897] Polled 3 messages in 1003.86ms
+I, [2025-03-20T20:30:10.657638 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:30:10.657747 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:30:10.657980 #11822]  INFO -- : Ping consumer with hits: 125
+I, [2025-03-20T20:30:10.658569 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.4 ms
+I, [2025-03-20T20:30:10.658762 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.85 ms
+I, [2025-03-20T20:30:11.655091 #11822]  INFO -- : Pong consumer with hits: 122
+I, [2025-03-20T20:30:11.655595 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.3 ms
+I, [2025-03-20T20:30:11.655769 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 997.93 ms
+I, [2025-03-20T20:30:12.663714 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1007.68ms
+I, [2025-03-20T20:30:12.664716 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:12.664770 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:12.664875 #11822]  INFO -- : Ping consumer with hits: 123
+I, [2025-03-20T20:30:12.665194 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.22 ms
+I, [2025-03-20T20:30:12.665329 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.46 ms
+I, [2025-03-20T20:30:13.246672 #11822]  INFO -- : Pong consumer with hits: 126
+I, [2025-03-20T20:30:13.247135 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.29 ms
+I, [2025-03-20T20:30:13.247313 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 582.48 ms
+I, [2025-03-20T20:30:14.282223 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1000.91ms
+I, [2025-03-20T20:30:14.283119 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:14.283188 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:30:14.283364 #11822]  INFO -- : Ping consumer with hits: 127
+I, [2025-03-20T20:30:14.284156 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.6 ms
+I, [2025-03-20T20:30:14.284385 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 finished in 1.02 ms
+I, [2025-03-20T20:30:14.341749 #11822]  INFO -- : Pong consumer with hits: 124
+I, [2025-03-20T20:30:14.342886 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.63 ms
+I, [2025-03-20T20:30:14.343611 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 60.19 ms
+I, [2025-03-20T20:30:15.688329 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.31ms
+I, [2025-03-20T20:30:15.689326 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:30:15.689659 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:30:15.690871 #11822]  INFO -- : Ping consumer with hits: 125
+I, [2025-03-20T20:30:15.691697 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.27 ms
+I, [2025-03-20T20:30:15.691864 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 1.02 ms
+I, [2025-03-20T20:30:16.569370 #11822]  INFO -- : Pong consumer with hits: 128
+I, [2025-03-20T20:30:16.570814 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 1.1 ms
+I, [2025-03-20T20:30:16.571020 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 881.12 ms
+I, [2025-03-20T20:30:17.578039 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1006.85ms
+I, [2025-03-20T20:30:17.578608 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:30:17.578668 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:17.578795 #11822]  INFO -- : Ping consumer with hits: 129
+I, [2025-03-20T20:30:17.579248 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.37 ms
+I, [2025-03-20T20:30:17.579438 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.65 ms
+I, [2025-03-20T20:30:18.447118 #11822]  INFO -- : Pong consumer with hits: 126
+I, [2025-03-20T20:30:18.447707 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.39 ms
+I, [2025-03-20T20:30:18.447903 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 869.17 ms
+I, [2025-03-20T20:30:19.454028 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.62ms
+I, [2025-03-20T20:30:19.454705 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:30:19.454765 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:30:19.454916 #11822]  INFO -- : Ping consumer with hits: 127
+I, [2025-03-20T20:30:19.455309 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.29 ms
+I, [2025-03-20T20:30:19.455479 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 finished in 0.58 ms
+I, [2025-03-20T20:30:19.728544 #11822]  INFO -- : Pong consumer with hits: 130
+I, [2025-03-20T20:30:19.729042 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.31 ms
+I, [2025-03-20T20:30:19.729233 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 274.38 ms
+I, [2025-03-20T20:30:20.732319 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1002.92ms
+I, [2025-03-20T20:30:20.733505 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:20.746004 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:20.746191 #11822]  INFO -- : Ping consumer with hits: 131
+I, [2025-03-20T20:30:20.747344 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 1.04 ms
+I, [2025-03-20T20:30:20.747528 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 1.35 ms
+I, [2025-03-20T20:30:21.702603 #11822]  INFO -- : Pong consumer with hits: 128
+I, [2025-03-20T20:30:21.703213 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.36 ms
+I, [2025-03-20T20:30:21.703492 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 957.37 ms
+I, [2025-03-20T20:30:22.713206 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1009.45ms
+I, [2025-03-20T20:30:22.713669 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:22.713775 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:22.713938 #11822]  INFO -- : Ping consumer with hits: 129
+I, [2025-03-20T20:30:22.714405 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.35 ms
+I, [2025-03-20T20:30:22.714604 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.69 ms
+I, [2025-03-20T20:30:22.782075 #11822]  INFO -- : Pong consumer with hits: 132
+I, [2025-03-20T20:30:22.782503 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.25 ms
+I, [2025-03-20T20:30:22.782675 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 68.8 ms
+I, [2025-03-20T20:30:23.785463 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1002.6ms
+I, [2025-03-20T20:30:23.786002 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:30:23.786101 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:23.786281 #11822]  INFO -- : Ping consumer with hits: 133
+I, [2025-03-20T20:30:23.786896 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.46 ms
+I, [2025-03-20T20:30:23.787227 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.96 ms
+I, [2025-03-20T20:30:23.848045 #11822]  INFO -- : Pong consumer with hits: 130
+I, [2025-03-20T20:30:23.848473 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.25 ms
+I, [2025-03-20T20:30:23.848644 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 62.46 ms
+I, [2025-03-20T20:30:24.852641 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.81ms
+I, [2025-03-20T20:30:24.853063 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:30:24.853172 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:30:24.854652 #11822]  INFO -- : Ping consumer with hits: 131
+I, [2025-03-20T20:30:24.855112 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.33 ms
+I, [2025-03-20T20:30:24.855294 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 1.45 ms
+I, [2025-03-20T20:30:25.038477 #11822]  INFO -- : Pong consumer with hits: 134
+I, [2025-03-20T20:30:25.038937 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.27 ms
+I, [2025-03-20T20:30:25.039120 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 185.32 ms
+I, [2025-03-20T20:30:26.040244 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1000.98ms
+I, [2025-03-20T20:30:26.040517 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:30:26.040570 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:26.040684 #11822]  INFO -- : Ping consumer with hits: 135
+I, [2025-03-20T20:30:26.040999 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.23 ms
+I, [2025-03-20T20:30:26.041160 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.49 ms
+I, [2025-03-20T20:30:26.117130 #11822]  INFO -- : Pong consumer with hits: 132
+I, [2025-03-20T20:30:26.117593 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.28 ms
+I, [2025-03-20T20:30:26.117787 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 77.15 ms
+I, [2025-03-20T20:30:27.123490 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.56ms
+I, [2025-03-20T20:30:27.123854 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:30:27.123911 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:27.124051 #11822]  INFO -- : Ping consumer with hits: 133
+I, [2025-03-20T20:30:27.124472 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.32 ms
+I, [2025-03-20T20:30:27.124626 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.61 ms
+I, [2025-03-20T20:30:27.523325 #11822]  INFO -- : Pong consumer with hits: 136
+I, [2025-03-20T20:30:27.524523 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.39 ms
+I, [2025-03-20T20:30:27.524948 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 400.97 ms
+I, [2025-03-20T20:30:28.529889 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.7ms
+I, [2025-03-20T20:30:28.530362 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:28.530464 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:30:28.530645 #11822]  INFO -- : Ping consumer with hits: 137
+I, [2025-03-20T20:30:28.531120 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.34 ms
+I, [2025-03-20T20:30:28.531454 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 finished in 0.8 ms
+I, [2025-03-20T20:30:28.810510 #11822]  INFO -- : Pong consumer with hits: 134
+I, [2025-03-20T20:30:28.813304 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 1.82 ms
+I, [2025-03-20T20:30:28.814018 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 283.29 ms
+I, [2025-03-20T20:30:29.816591 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1002.16ms
+I, [2025-03-20T20:30:29.817093 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:29.817149 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:30:29.817266 #11822]  INFO -- : Ping consumer with hits: 135
+I, [2025-03-20T20:30:29.817578 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.23 ms
+I, [2025-03-20T20:30:29.817729 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 finished in 0.47 ms
+I, [2025-03-20T20:30:30.455019 #11822]  INFO -- : Pong consumer with hits: 138
+I, [2025-03-20T20:30:30.455757 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.43 ms
+I, [2025-03-20T20:30:30.456063 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 638.82 ms
+I, [2025-03-20T20:30:31.460085 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.8ms
+I, [2025-03-20T20:30:31.460566 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:31.460629 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:31.463647 #11822]  INFO -- : Ping consumer with hits: 139
+I, [2025-03-20T20:30:31.464317 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.5 ms
+I, [2025-03-20T20:30:31.464506 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.88 ms
+I, [2025-03-20T20:30:31.477096 #11822]  INFO -- : Pong consumer with hits: 136
+I, [2025-03-20T20:30:31.477680 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.39 ms
+I, [2025-03-20T20:30:31.477852 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 14.3 ms
+I, [2025-03-20T20:30:32.479203 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1001.17ms
+I, [2025-03-20T20:30:32.479722 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:32.479783 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:30:32.479919 #11822]  INFO -- : Ping consumer with hits: 137
+I, [2025-03-20T20:30:32.480433 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.35 ms
+I, [2025-03-20T20:30:32.480645 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.74 ms
+I, [2025-03-20T20:30:32.520071 #11822]  INFO -- : Pong consumer with hits: 140
+I, [2025-03-20T20:30:32.520682 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.4 ms
+I, [2025-03-20T20:30:32.521185 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 41.03 ms
+I, [2025-03-20T20:30:33.525907 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.52ms
+I, [2025-03-20T20:30:33.526356 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:30:33.526458 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:30:33.526638 #11822]  INFO -- : Ping consumer with hits: 141
+I, [2025-03-20T20:30:33.527171 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.38 ms
+I, [2025-03-20T20:30:33.527414 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 0.78 ms
+I, [2025-03-20T20:30:33.774006 #11822]  INFO -- : Pong consumer with hits: 138
+I, [2025-03-20T20:30:33.774475 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.28 ms
+I, [2025-03-20T20:30:33.774645 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 248.09 ms
+I, [2025-03-20T20:30:34.776421 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1001.6ms
+I, [2025-03-20T20:30:34.776768 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:30:34.776853 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:34.777517 #11822]  INFO -- : Ping consumer with hits: 139
+I, [2025-03-20T20:30:34.777933 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.29 ms
+I, [2025-03-20T20:30:34.778120 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.62 ms
+I, [2025-03-20T20:30:35.533583 #11822]  INFO -- : Pong consumer with hits: 142
+I, [2025-03-20T20:30:35.534131 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.25 ms
+I, [2025-03-20T20:30:35.534310 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 757.38 ms
+I, [2025-03-20T20:30:36.534791 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1000.13ms
+I, [2025-03-20T20:30:36.535242 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:30:36.535341 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:30:36.541336 #11822]  INFO -- : Ping consumer with hits: 143
+I, [2025-03-20T20:30:36.542079 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.5 ms
+I, [2025-03-20T20:30:36.542384 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 1.02 ms
+I, [2025-03-20T20:30:37.415447 #11822]  INFO -- : Pong consumer with hits: 140
+I, [2025-03-20T20:30:37.415967 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.31 ms
+I, [2025-03-20T20:30:37.416183 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 874.96 ms
+I, [2025-03-20T20:30:38.420460 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.11ms
+I, [2025-03-20T20:30:38.420737 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:38.420789 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:30:38.420886 #11822]  INFO -- : Ping consumer with hits: 141
+I, [2025-03-20T20:30:38.421213 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.24 ms
+I, [2025-03-20T20:30:38.421783 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.9 ms
+I, [2025-03-20T20:30:38.886462 #11822]  INFO -- : Pong consumer with hits: 144
+I, [2025-03-20T20:30:38.887114 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.42 ms
+I, [2025-03-20T20:30:38.887289 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 466.44 ms
+I, [2025-03-20T20:30:39.888150 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1000.65ms
+I, [2025-03-20T20:30:39.888710 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:39.888845 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:39.889058 #11822]  INFO -- : Ping consumer with hits: 145
+I, [2025-03-20T20:30:39.889622 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.4 ms
+I, [2025-03-20T20:30:39.889868 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.86 ms
+I, [2025-03-20T20:30:39.929512 #11822]  INFO -- : Pong consumer with hits: 142
+I, [2025-03-20T20:30:39.930196 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.38 ms
+I, [2025-03-20T20:30:39.930462 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 41.49 ms
+I, [2025-03-20T20:30:40.935848 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.05ms
+I, [2025-03-20T20:30:40.936970 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:40.937080 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:40.937335 #11822]  INFO -- : Ping consumer with hits: 143
+I, [2025-03-20T20:30:40.938245 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.66 ms
+I, [2025-03-20T20:30:40.938664 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 1.37 ms
+I, [2025-03-20T20:30:41.744527 #11822]  INFO -- : Pong consumer with hits: 146
+I, [2025-03-20T20:30:41.745817 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.76 ms
+I, [2025-03-20T20:30:41.746244 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 809.02 ms
+I, [2025-03-20T20:30:42.752489 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.99ms
+I, [2025-03-20T20:30:42.752865 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:30:42.752930 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:30:42.753064 #11822]  INFO -- : Ping consumer with hits: 147
+I, [2025-03-20T20:30:42.753498 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.31 ms
+I, [2025-03-20T20:30:42.753689 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.63 ms
+I, [2025-03-20T20:30:42.960640 #11822]  INFO -- : Pong consumer with hits: 144
+I, [2025-03-20T20:30:42.961062 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.24 ms
+I, [2025-03-20T20:30:42.961236 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 208.22 ms
+I, [2025-03-20T20:30:43.966527 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.15ms
+I, [2025-03-20T20:30:43.966789 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:43.966862 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:43.966961 #11822]  INFO -- : Ping consumer with hits: 145
+I, [2025-03-20T20:30:43.967281 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.24 ms
+I, [2025-03-20T20:30:43.967421 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.47 ms
+I, [2025-03-20T20:30:44.872510 #11822]  INFO -- : Pong consumer with hits: 148
+I, [2025-03-20T20:30:44.873030 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.32 ms
+I, [2025-03-20T20:30:44.873222 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 906.3 ms
+I, [2025-03-20T20:30:45.877061 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.54ms
+I, [2025-03-20T20:30:45.877768 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:30:45.877836 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:30:45.878064 #11822]  INFO -- : Ping consumer with hits: 149
+I, [2025-03-20T20:30:45.879167 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.86 ms
+I, [2025-03-20T20:30:45.879539 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 1.54 ms
+I, [2025-03-20T20:30:46.363113 #11822]  INFO -- : Pong consumer with hits: 146
+I, [2025-03-20T20:30:46.364361 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.75 ms
+I, [2025-03-20T20:30:46.364840 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 486.88 ms
+I, [2025-03-20T20:30:47.377207 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1011.81ms
+I, [2025-03-20T20:30:47.377971 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:47.378088 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:47.378348 #11822]  INFO -- : Ping consumer with hits: 147
+I, [2025-03-20T20:30:47.381249 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.71 ms
+I, [2025-03-20T20:30:47.381668 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 3.36 ms
+I, [2025-03-20T20:30:48.134416 #11822]  INFO -- : Pong consumer with hits: 150
+I, [2025-03-20T20:30:48.134887 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.26 ms
+I, [2025-03-20T20:30:48.135075 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 756.89 ms
+I, [2025-03-20T20:30:49.139966 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.7ms
+I, [2025-03-20T20:30:49.140314 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:30:49.140387 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:49.140563 #11822]  INFO -- : Ping consumer with hits: 151
+I, [2025-03-20T20:30:49.140996 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.33 ms
+I, [2025-03-20T20:30:49.141198 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.65 ms
+I, [2025-03-20T20:30:49.441990 #11822]  INFO -- : Pong consumer with hits: 148
+I, [2025-03-20T20:30:49.442435 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.26 ms
+I, [2025-03-20T20:30:49.442612 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 302.13 ms
+I, [2025-03-20T20:30:50.446429 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.66ms
+I, [2025-03-20T20:30:50.446862 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:50.446941 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:50.447081 #11822]  INFO -- : Ping consumer with hits: 149
+I, [2025-03-20T20:30:50.447803 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.57 ms
+I, [2025-03-20T20:30:50.447992 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.94 ms
+I, [2025-03-20T20:30:51.313952 #11822]  INFO -- : Pong consumer with hits: 152
+I, [2025-03-20T20:30:51.314384 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.25 ms
+I, [2025-03-20T20:30:51.314574 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 867.56 ms
+I, [2025-03-20T20:30:52.318444 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.69ms
+I, [2025-03-20T20:30:52.318705 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:30:52.318759 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:30:52.318855 #11822]  INFO -- : Ping consumer with hits: 153
+I, [2025-03-20T20:30:52.319175 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.22 ms
+I, [2025-03-20T20:30:52.319311 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.47 ms
+I, [2025-03-20T20:30:52.958782 #11822]  INFO -- : Pong consumer with hits: 150
+I, [2025-03-20T20:30:52.959497 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.46 ms
+I, [2025-03-20T20:30:52.959777 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 640.93 ms
+I, [2025-03-20T20:30:53.963249 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.26ms
+I, [2025-03-20T20:30:53.963509 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:30:53.963559 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:30:53.963663 #11822]  INFO -- : Ping consumer with hits: 151
+I, [2025-03-20T20:30:53.964002 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.23 ms
+I, [2025-03-20T20:30:53.964144 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.49 ms
+I, [2025-03-20T20:30:54.502438 #11822]  INFO -- : Pong consumer with hits: 154
+I, [2025-03-20T20:30:54.503062 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.38 ms
+I, [2025-03-20T20:30:54.503335 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 539.69 ms
+I, [2025-03-20T20:30:55.505512 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1001.84ms
+I, [2025-03-20T20:30:55.506427 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:55.506551 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:30:55.506850 #11822]  INFO -- : Ping consumer with hits: 155
+I, [2025-03-20T20:30:55.508574 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 1.46 ms
+I, [2025-03-20T20:30:55.509022 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 2.21 ms
+I, [2025-03-20T20:30:55.978263 #11822]  INFO -- : Pong consumer with hits: 152
+I, [2025-03-20T20:30:55.979776 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.91 ms
+I, [2025-03-20T20:30:55.980628 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 473.85 ms
+I, [2025-03-20T20:30:56.989081 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1007.98ms
+I, [2025-03-20T20:30:56.989977 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:30:56.990099 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:30:56.990374 #11822]  INFO -- : Ping consumer with hits: 153
+I, [2025-03-20T20:30:56.991408 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.75 ms
+I, [2025-03-20T20:30:56.991854 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 1.49 ms
+I, [2025-03-20T20:30:57.668227 #11822]  INFO -- : Pong consumer with hits: 156
+I, [2025-03-20T20:30:57.670756 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.79 ms
+I, [2025-03-20T20:30:57.671244 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 680.98 ms
+I, [2025-03-20T20:30:58.676993 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.39ms
+I, [2025-03-20T20:30:58.677477 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:30:58.677578 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:30:58.677773 #11822]  INFO -- : Ping consumer with hits: 157
+I, [2025-03-20T20:30:58.679023 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 1.11 ms
+I, [2025-03-20T20:30:58.679791 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 finished in 2.03 ms
+I, [2025-03-20T20:30:59.338665 #11822]  INFO -- : Pong consumer with hits: 154
+I, [2025-03-20T20:30:59.339075 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.25 ms
+I, [2025-03-20T20:30:59.339248 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 661.57 ms
+I, [2025-03-20T20:31:00.341046 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1001.65ms
+I, [2025-03-20T20:31:00.341311 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:00.341362 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:00.341463 #11822]  INFO -- : Ping consumer with hits: 155
+I, [2025-03-20T20:31:00.341761 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.22 ms
+I, [2025-03-20T20:31:00.342342 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.89 ms
+I, [2025-03-20T20:31:00.513884 #11822]  INFO -- : Pong consumer with hits: 158
+I, [2025-03-20T20:31:00.514393 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.33 ms
+I, [2025-03-20T20:31:00.514563 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 173.14 ms
+I, [2025-03-20T20:31:01.516280 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1001.45ms
+I, [2025-03-20T20:31:01.516779 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:01.516863 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:31:01.520265 #11822]  INFO -- : Ping consumer with hits: 159
+I, [2025-03-20T20:31:01.520759 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.29 ms
+I, [2025-03-20T20:31:01.520968 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.72 ms
+I, [2025-03-20T20:31:01.784208 #11822]  INFO -- : Pong consumer with hits: 156
+I, [2025-03-20T20:31:01.784823 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.37 ms
+I, [2025-03-20T20:31:01.785082 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 264.91 ms
+I, [2025-03-20T20:31:02.789025 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.65ms
+I, [2025-03-20T20:31:02.789837 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:02.789953 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:31:02.790211 #11822]  INFO -- : Ping consumer with hits: 157
+I, [2025-03-20T20:31:02.791061 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.64 ms
+I, [2025-03-20T20:31:02.791430 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 1.26 ms
+I, [2025-03-20T20:31:03.216558 #11822]  INFO -- : Pong consumer with hits: 160
+I, [2025-03-20T20:31:03.216991 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.25 ms
+I, [2025-03-20T20:31:03.217169 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 427.12 ms
+I, [2025-03-20T20:31:04.220643 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.31ms
+I, [2025-03-20T20:31:04.221086 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:04.221184 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:04.221362 #11822]  INFO -- : Ping consumer with hits: 161
+I, [2025-03-20T20:31:04.221819 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.33 ms
+I, [2025-03-20T20:31:04.222048 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.7 ms
+I, [2025-03-20T20:31:04.396885 #11822]  INFO -- : Pong consumer with hits: 158
+I, [2025-03-20T20:31:04.397361 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.29 ms
+I, [2025-03-20T20:31:04.397548 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 176.27 ms
+I, [2025-03-20T20:31:05.403469 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.23ms
+I, [2025-03-20T20:31:05.404194 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:05.404311 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:05.404577 #11822]  INFO -- : Ping consumer with hits: 159
+I, [2025-03-20T20:31:05.406214 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.68 ms
+I, [2025-03-20T20:31:05.406604 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 2.06 ms
+I, [2025-03-20T20:31:05.839295 #11822]  INFO -- : Pong consumer with hits: 162
+I, [2025-03-20T20:31:05.839712 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.24 ms
+I, [2025-03-20T20:31:05.839885 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 435.47 ms
+I, [2025-03-20T20:31:06.845732 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.63ms
+I, [2025-03-20T20:31:06.846541 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:06.846604 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:31:06.846827 #11822]  INFO -- : Ping consumer with hits: 163
+I, [2025-03-20T20:31:06.847609 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.6 ms
+I, [2025-03-20T20:31:06.847914 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 1.12 ms
+I, [2025-03-20T20:31:07.227635 #11822]  INFO -- : Pong consumer with hits: 160
+I, [2025-03-20T20:31:07.228372 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.4 ms
+I, [2025-03-20T20:31:07.229029 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 381.92 ms
+I, [2025-03-20T20:31:08.234044 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.69ms
+I, [2025-03-20T20:31:08.234784 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:08.234860 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:08.235063 #11822]  INFO -- : Ping consumer with hits: 161
+I, [2025-03-20T20:31:08.235993 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.72 ms
+I, [2025-03-20T20:31:08.236340 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 1.32 ms
+I, [2025-03-20T20:31:08.946757 #11822]  INFO -- : Pong consumer with hits: 164
+I, [2025-03-20T20:31:08.947378 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.39 ms
+I, [2025-03-20T20:31:08.947570 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 712.64 ms
+I, [2025-03-20T20:31:09.949388 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1001.64ms
+I, [2025-03-20T20:31:09.949800 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:09.949859 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:31:09.949981 #11822]  INFO -- : Ping consumer with hits: 165
+I, [2025-03-20T20:31:09.950533 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.42 ms
+I, [2025-03-20T20:31:09.950731 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.77 ms
+I, [2025-03-20T20:31:10.795224 #11822]  INFO -- : Pong consumer with hits: 162
+I, [2025-03-20T20:31:10.795754 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.33 ms
+I, [2025-03-20T20:31:10.795961 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 846.03 ms
+I, [2025-03-20T20:31:11.801492 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1005.14ms
+I, [2025-03-20T20:31:11.802143 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:31:11.802317 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:11.802527 #11822]  INFO -- : Ping consumer with hits: 163
+I, [2025-03-20T20:31:11.803277 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.57 ms
+I, [2025-03-20T20:31:11.803529 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 1.01 ms
+I, [2025-03-20T20:31:12.557264 #11822]  INFO -- : Pong consumer with hits: 166
+I, [2025-03-20T20:31:12.557690 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.25 ms
+I, [2025-03-20T20:31:12.557926 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 755.5 ms
+I, [2025-03-20T20:31:13.562748 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.27ms
+I, [2025-03-20T20:31:13.563671 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:13.563791 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:31:13.564110 #11822]  INFO -- : Ping consumer with hits: 167
+I, [2025-03-20T20:31:13.565043 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.69 ms
+I, [2025-03-20T20:31:13.565425 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 1.37 ms
+I, [2025-03-20T20:31:13.790832 #11822]  INFO -- : Pong consumer with hits: 164
+I, [2025-03-20T20:31:13.795246 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 3.55 ms
+I, [2025-03-20T20:31:13.796234 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 232.22 ms
+I, [2025-03-20T20:31:14.800411 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.53ms
+I, [2025-03-20T20:31:14.801278 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:14.801401 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:31:14.801694 #11822]  INFO -- : Ping consumer with hits: 165
+I, [2025-03-20T20:31:14.802934 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.94 ms
+I, [2025-03-20T20:31:14.803390 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 1.74 ms
+I, [2025-03-20T20:31:15.235922 #11822]  INFO -- : Pong consumer with hits: 168
+I, [2025-03-20T20:31:15.236704 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.39 ms
+I, [2025-03-20T20:31:15.237069 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 435.55 ms
+I, [2025-03-20T20:31:16.248413 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1011.03ms
+I, [2025-03-20T20:31:16.249184 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:31:16.249256 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:31:16.249442 #11822]  INFO -- : Ping consumer with hits: 169
+I, [2025-03-20T20:31:16.250184 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.57 ms
+I, [2025-03-20T20:31:16.250454 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 1.04 ms
+I, [2025-03-20T20:31:17.142742 #11822]  INFO -- : Pong consumer with hits: 166
+I, [2025-03-20T20:31:17.143358 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.35 ms
+I, [2025-03-20T20:31:17.143626 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 894.28 ms
+I, [2025-03-20T20:31:18.148255 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.41ms
+I, [2025-03-20T20:31:18.148620 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:18.148717 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:31:18.148903 #11822]  INFO -- : Ping consumer with hits: 167
+I, [2025-03-20T20:31:18.149384 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.32 ms
+I, [2025-03-20T20:31:18.149615 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.72 ms
+I, [2025-03-20T20:31:18.642783 #11822]  INFO -- : Pong consumer with hits: 170
+I, [2025-03-20T20:31:18.643219 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.26 ms
+I, [2025-03-20T20:31:18.643392 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 494.58 ms
+I, [2025-03-20T20:31:19.647155 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.6ms
+I, [2025-03-20T20:31:19.647610 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:19.647746 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:19.647989 #11822]  INFO -- : Ping consumer with hits: 171
+I, [2025-03-20T20:31:19.648508 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.36 ms
+I, [2025-03-20T20:31:19.648771 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.83 ms
+I, [2025-03-20T20:31:20.056494 #11822]  INFO -- : Pong consumer with hits: 168
+I, [2025-03-20T20:31:20.057145 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.38 ms
+I, [2025-03-20T20:31:20.057455 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 409.57 ms
+I, [2025-03-20T20:31:21.060893 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.17ms
+I, [2025-03-20T20:31:21.061197 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:21.061251 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:31:21.061359 #11822]  INFO -- : Ping consumer with hits: 169
+I, [2025-03-20T20:31:21.061750 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.31 ms
+I, [2025-03-20T20:31:21.061909 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.56 ms
+I, [2025-03-20T20:31:21.209308 #11822]  INFO -- : Pong consumer with hits: 172
+I, [2025-03-20T20:31:21.210135 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.52 ms
+I, [2025-03-20T20:31:21.210376 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 149.05 ms
+I, [2025-03-20T20:31:22.217354 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1006.7ms
+I, [2025-03-20T20:31:22.218085 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:31:22.218265 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:31:22.218656 #11822]  INFO -- : Ping consumer with hits: 173
+I, [2025-03-20T20:31:22.219218 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.43 ms
+I, [2025-03-20T20:31:22.219443 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 0.91 ms
+I, [2025-03-20T20:31:22.710972 #11822]  INFO -- : Pong consumer with hits: 170
+I, [2025-03-20T20:31:22.711912 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.5 ms
+I, [2025-03-20T20:31:22.712099 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 493.73 ms
+I, [2025-03-20T20:31:23.717259 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.81ms
+I, [2025-03-20T20:31:23.718151 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:23.718267 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:23.718509 #11822]  INFO -- : Ping consumer with hits: 171
+I, [2025-03-20T20:31:23.720770 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 1.99 ms
+I, [2025-03-20T20:31:23.721369 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 2.88 ms
+I, [2025-03-20T20:31:24.288041 #11822]  INFO -- : Pong consumer with hits: 174
+I, [2025-03-20T20:31:24.289967 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.35 ms
+I, [2025-03-20T20:31:24.290255 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 571.88 ms
+I, [2025-03-20T20:31:25.293691 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.22ms
+I, [2025-03-20T20:31:25.294110 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:25.294211 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:31:25.294430 #11822]  INFO -- : Ping consumer with hits: 175
+I, [2025-03-20T20:31:25.294742 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.23 ms
+I, [2025-03-20T20:31:25.294882 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.47 ms
+I, [2025-03-20T20:31:25.864776 #11822]  INFO -- : Pong consumer with hits: 172
+I, [2025-03-20T20:31:25.866033 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.72 ms
+I, [2025-03-20T20:31:25.866609 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 572.17 ms
+I, [2025-03-20T20:31:26.874156 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1007.2ms
+I, [2025-03-20T20:31:26.874641 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:26.874791 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:31:26.874978 #11822]  INFO -- : Ping consumer with hits: 173
+I, [2025-03-20T20:31:26.875455 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.34 ms
+I, [2025-03-20T20:31:26.875687 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.74 ms
+I, [2025-03-20T20:31:27.546211 #11822]  INFO -- : Pong consumer with hits: 176
+I, [2025-03-20T20:31:27.546793 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.35 ms
+I, [2025-03-20T20:31:27.547062 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 672.16 ms
+I, [2025-03-20T20:31:28.548446 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1001.14ms
+I, [2025-03-20T20:31:28.548855 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:28.548915 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:31:28.549058 #11822]  INFO -- : Ping consumer with hits: 177
+I, [2025-03-20T20:31:28.549553 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.38 ms
+I, [2025-03-20T20:31:28.549752 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 0.72 ms
+I, [2025-03-20T20:31:29.332727 #11822]  INFO -- : Pong consumer with hits: 174
+I, [2025-03-20T20:31:29.333176 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.26 ms
+I, [2025-03-20T20:31:29.333378 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 784.38 ms
+I, [2025-03-20T20:31:30.336761 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1003.23ms
+I, [2025-03-20T20:31:30.337033 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:30.337084 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:30.337196 #11822]  INFO -- : Ping consumer with hits: 175
+I, [2025-03-20T20:31:30.337517 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.24 ms
+I, [2025-03-20T20:31:30.337672 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.49 ms
+I, [2025-03-20T20:31:30.527070 #11822]  INFO -- : Pong consumer with hits: 178
+I, [2025-03-20T20:31:30.527548 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.27 ms
+I, [2025-03-20T20:31:30.527746 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 190.58 ms
+I, [2025-03-20T20:31:31.528577 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1000.65ms
+I, [2025-03-20T20:31:31.528945 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:31.529019 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:31:31.529180 #11822]  INFO -- : Ping consumer with hits: 179
+I, [2025-03-20T20:31:31.530137 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.31 ms
+I, [2025-03-20T20:31:31.530346 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 1.19 ms
+I, [2025-03-20T20:31:32.201224 #11822]  INFO -- : Pong consumer with hits: 176
+I, [2025-03-20T20:31:32.201732 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.3 ms
+I, [2025-03-20T20:31:32.201957 #11822]  INFO -- : [696b0a75f709] Consume job for Pong::PongConsumer on pong/1 finished in 672.85 ms
+I, [2025-03-20T20:31:33.210430 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1008.31ms
+I, [2025-03-20T20:31:33.210733 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:33.210783 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:31:33.210883 #11822]  INFO -- : Ping consumer with hits: 177
+I, [2025-03-20T20:31:33.211201 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.24 ms
+I, [2025-03-20T20:31:33.211340 #11822]  INFO -- : [b567f170b934] Consume job for Pong::PingConsumer on ping/4 finished in 0.46 ms
+I, [2025-03-20T20:31:34.148139 #11822]  INFO -- : Pong consumer with hits: 180
+I, [2025-03-20T20:31:34.149378 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.71 ms
+I, [2025-03-20T20:31:34.149898 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 938.97 ms
+I, [2025-03-20T20:31:35.149887 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 999.66ms
+I, [2025-03-20T20:31:35.150329 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:31:35.150427 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:31:35.150615 #11822]  INFO -- : Ping consumer with hits: 181
+I, [2025-03-20T20:31:35.151081 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.33 ms
+I, [2025-03-20T20:31:35.151311 #11822]  INFO -- : [ee0320af55b5] Consume job for Pong::PingConsumer on ping/0 finished in 0.71 ms
+I, [2025-03-20T20:31:35.585348 #11822]  INFO -- : Pong consumer with hits: 178
+I, [2025-03-20T20:31:35.585925 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.35 ms
+I, [2025-03-20T20:31:35.586189 #11822]  INFO -- : [02d1d562a9c8] Consume job for Pong::PongConsumer on pong/2 finished in 435.65 ms
+I, [2025-03-20T20:31:36.592975 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1006.59ms
+I, [2025-03-20T20:31:36.594566 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:36.594644 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:36.598019 #11822]  INFO -- : Ping consumer with hits: 179
+I, [2025-03-20T20:31:36.598472 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.34 ms
+I, [2025-03-20T20:31:36.598628 #11822]  INFO -- : [6be409bf5ad5] Consume job for Pong::PingConsumer on ping/3 finished in 0.64 ms
+I, [2025-03-20T20:31:37.202812 #11822]  INFO -- : Pong consumer with hits: 182
+I, [2025-03-20T20:31:37.203423 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.35 ms
+I, [2025-03-20T20:31:37.204516 #11822]  INFO -- : [6daa494d7248] Consume job for Pong::PongConsumer on pong/4 finished in 606.55 ms
+I, [2025-03-20T20:31:38.207338 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1002.66ms
+I, [2025-03-20T20:31:38.208378 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:31:38.208437 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:31:38.208539 #11822]  INFO -- : Ping consumer with hits: 183
+I, [2025-03-20T20:31:38.208872 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.24 ms
+I, [2025-03-20T20:31:38.209031 #11822]  INFO -- : [b85e248b2521] Consume job for Pong::PingConsumer on ping/2 finished in 0.5 ms
+I, [2025-03-20T20:31:39.002578 #11822]  INFO -- : Pong consumer with hits: 180
+I, [2025-03-20T20:31:39.002848 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.15 ms
+I, [2025-03-20T20:31:39.002941 #11822]  INFO -- : [6fc44bec26e5] Consume job for Pong::PongConsumer on pong/0 finished in 794.46 ms
+I, [2025-03-20T20:31:40.007398 #11822]  INFO -- : [0f1579e39897] Polled 2 messages in 1004.35ms
+I, [2025-03-20T20:31:40.007927 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:40.008443 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:31:40.008740 #11822]  INFO -- : Ping consumer with hits: 181
+I, [2025-03-20T20:31:40.009567 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'pong' topic took 0.73 ms
+I, [2025-03-20T20:31:40.009732 #11822]  INFO -- : [3353399baf5a] Consume job for Pong::PingConsumer on ping/1 finished in 1.0 ms
+I, [2025-03-20T20:31:40.010706 #11822]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:31:40.011038 #11822]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:31:40.017818 #11822]  INFO -- : Pong consumer with hits: 184
+I, [2025-03-20T20:31:40.018202 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Async producing of a message to 'ping' topic took 0.23 ms
+I, [2025-03-20T20:31:40.018472 #11822]  INFO -- : [fe4fb26941b4] Consume job for Pong::PongConsumer on pong/3 finished in 9.82 ms
+I, [2025-03-20T20:31:40.020414 #11822]  INFO -- : [696b0a75f709] Shutdown job for Pong::PongConsumer on pong/1 started
+I, [2025-03-20T20:31:40.020566 #11822]  INFO -- : [696b0a75f709] Shutdown job for Pong::PongConsumer on pong/1 finished in 0.05 ms
+I, [2025-03-20T20:31:40.020613 #11822]  INFO -- : [6be409bf5ad5] Shutdown job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:31:40.020643 #11822]  INFO -- : [6be409bf5ad5] Shutdown job for Pong::PingConsumer on ping/3 finished in 0.0 ms
+I, [2025-03-20T20:31:40.020725 #11822]  INFO -- : [ee0320af55b5] Shutdown job for Pong::PingConsumer on ping/0 started
+I, [2025-03-20T20:31:40.020796 #11822]  INFO -- : [ee0320af55b5] Shutdown job for Pong::PingConsumer on ping/0 finished in 0.01 ms
+I, [2025-03-20T20:31:40.020827 #11822]  INFO -- : [b567f170b934] Shutdown job for Pong::PingConsumer on ping/4 started
+I, [2025-03-20T20:31:40.020852 #11822]  INFO -- : [b567f170b934] Shutdown job for Pong::PingConsumer on ping/4 finished in 0.0 ms
+I, [2025-03-20T20:31:40.020886 #11822]  INFO -- : [b85e248b2521] Shutdown job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:31:40.020948 #11822]  INFO -- : [b85e248b2521] Shutdown job for Pong::PingConsumer on ping/2 finished in 0.01 ms
+I, [2025-03-20T20:31:40.020997 #11822]  INFO -- : [3353399baf5a] Shutdown job for Pong::PingConsumer on ping/1 started
+I, [2025-03-20T20:31:40.021022 #11822]  INFO -- : [3353399baf5a] Shutdown job for Pong::PingConsumer on ping/1 finished in 0.0 ms
+I, [2025-03-20T20:31:40.020498 #11822]  INFO -- : [6fc44bec26e5] Shutdown job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:31:40.021049 #11822]  INFO -- : [6fc44bec26e5] Shutdown job for Pong::PongConsumer on pong/0 finished in 0.0 ms
+I, [2025-03-20T20:31:40.020475 #11822]  INFO -- : [fe4fb26941b4] Shutdown job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:31:40.021104 #11822]  INFO -- : [fe4fb26941b4] Shutdown job for Pong::PongConsumer on pong/3 finished in 0.0 ms
+I, [2025-03-20T20:31:40.020454 #11822]  INFO -- : [6daa494d7248] Shutdown job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:31:40.021174 #11822]  INFO -- : [6daa494d7248] Shutdown job for Pong::PongConsumer on pong/4 finished in 0.0 ms
+I, [2025-03-20T20:31:40.020488 #11822]  INFO -- : [02d1d562a9c8] Shutdown job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:31:40.021211 #11822]  INFO -- : [02d1d562a9c8] Shutdown job for Pong::PongConsumer on pong/2 finished in 0.0 ms
+I, [2025-03-20T20:31:41.153193 #11822]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:31:41.153419 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Closing producer
+I, [2025-03-20T20:31:41.157500 #11822]  INFO -- : [waterdrop-b9ce7ebd332d] Closing producer took 4.09 ms
+I, [2025-03-20T20:38:01.872753 #73073]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:38:01.872801 #73073]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:38:01.891333 #73073]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:38:01.891374 #73073]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:38:01.891381 #73073]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:38:04.973207 #73073]  INFO -- : [d923e32a2526] Polled 1 messages in 932.16ms
+I, [2025-03-20T20:38:04.973894 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:38:04.974047 #73073]  INFO -- : Ping consumer with hits: 185
+I, [2025-03-20T20:38:04.975644 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'pong' topic took 1.43 ms
+I, [2025-03-20T20:38:04.975926 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 finished in 1.93 ms
+I, [2025-03-20T20:38:05.978451 #73073]  INFO -- : [d923e32a2526] Polled 2 messages in 1002.36ms
+I, [2025-03-20T20:38:05.978766 #73073]  INFO -- : [20931d1085f8] Consume job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:38:05.978820 #73073]  INFO -- : [b1ecf97088e6] Consume job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:38:05.996710 #73073]  INFO -- : Pong consumer with hits: 186
+I, [2025-03-20T20:38:05.996984 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'ping' topic took 0.18 ms
+I, [2025-03-20T20:38:05.997119 #73073]  INFO -- : [b1ecf97088e6] Consume job for Pong::PongConsumer on pong/3 finished in 18.18 ms
+I, [2025-03-20T20:38:06.040869 #73073]  INFO -- : Pong consumer with hits: 182
+I, [2025-03-20T20:38:06.041229 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'ping' topic took 0.17 ms
+I, [2025-03-20T20:38:06.041344 #73073]  INFO -- : [20931d1085f8] Consume job for Pong::PongConsumer on pong/0 finished in 62.48 ms
+I, [2025-03-20T20:38:07.046146 #73073]  INFO -- : [d923e32a2526] Polled 2 messages in 1004.69ms
+I, [2025-03-20T20:38:07.046487 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:38:07.046567 #73073]  INFO -- : Ping consumer with hits: 183
+I, [2025-03-20T20:38:07.046995 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'pong' topic took 0.33 ms
+I, [2025-03-20T20:38:07.047213 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 finished in 0.67 ms
+I, [2025-03-20T20:38:08.054987 #73073]  INFO -- : [d923e32a2526] Polled 1 messages in 1007.57ms
+I, [2025-03-20T20:38:08.055940 #73073]  INFO -- : [19cefa19513a] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:38:08.908203 #73073]  INFO -- : Pong consumer with hits: 184
+I, [2025-03-20T20:38:08.908670 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'ping' topic took 0.3 ms
+I, [2025-03-20T20:38:08.908863 #73073]  INFO -- : [19cefa19513a] Consume job for Pong::PongConsumer on pong/4 finished in 852.8 ms
+I, [2025-03-20T20:38:09.908517 #73073]  INFO -- : [d923e32a2526] Polled 1 messages in 999.52ms
+I, [2025-03-20T20:38:09.908864 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:38:09.908937 #73073]  INFO -- : Ping consumer with hits: 185
+I, [2025-03-20T20:38:09.909298 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'pong' topic took 0.26 ms
+I, [2025-03-20T20:38:09.909437 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 finished in 0.52 ms
+I, [2025-03-20T20:38:10.915255 #73073]  INFO -- : [d923e32a2526] Polled 1 messages in 1005.07ms
+I, [2025-03-20T20:38:10.915772 #73073]  INFO -- : [19cefa19513a] Consume job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:38:11.897491 #73073]  INFO -- : Pong consumer with hits: 186
+I, [2025-03-20T20:38:11.897729 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'ping' topic took 0.15 ms
+I, [2025-03-20T20:38:11.897819 #73073]  INFO -- : [19cefa19513a] Consume job for Pong::PongConsumer on pong/4 finished in 981.73 ms
+I, [2025-03-20T20:38:12.903202 #73073]  INFO -- : [d923e32a2526] Polled 1 messages in 1005.19ms
+I, [2025-03-20T20:38:12.903939 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:38:12.904106 #73073]  INFO -- : Ping consumer with hits: 187
+I, [2025-03-20T20:38:12.905167 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'pong' topic took 0.67 ms
+I, [2025-03-20T20:38:12.905582 #73073]  INFO -- : [40df554e7b58] Consume job for Pong::PingConsumer on ping/3 finished in 1.53 ms
+I, [2025-03-20T20:38:13.864477 #73073]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:38:13.864713 #73073]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:38:13.913626 #73073]  INFO -- : [d923e32a2526] Polled 1 messages in 1007.52ms
+I, [2025-03-20T20:38:13.913881 #73073]  INFO -- : [0da62788e20e] Consume job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:38:14.131010 #73073]  INFO -- : Pong consumer with hits: 188
+I, [2025-03-20T20:38:14.131658 #73073]  INFO -- : [waterdrop-fea8232cd936] Async producing of a message to 'ping' topic took 0.45 ms
+I, [2025-03-20T20:38:14.131881 #73073]  INFO -- : [0da62788e20e] Consume job for Pong::PongConsumer on pong/2 finished in 217.93 ms
+I, [2025-03-20T20:38:14.132165 #73073]  INFO -- : [40df554e7b58] Shutdown job for Pong::PingConsumer on ping/3 started
+I, [2025-03-20T20:38:14.132435 #73073]  INFO -- : [40df554e7b58] Shutdown job for Pong::PingConsumer on ping/3 finished in 0.03 ms
+I, [2025-03-20T20:38:14.132277 #73073]  INFO -- : [b1ecf97088e6] Shutdown job for Pong::PongConsumer on pong/3 started
+I, [2025-03-20T20:38:14.132536 #73073]  INFO -- : [b1ecf97088e6] Shutdown job for Pong::PongConsumer on pong/3 finished in 0.01 ms
+I, [2025-03-20T20:38:14.132362 #73073]  INFO -- : [0da62788e20e] Shutdown job for Pong::PongConsumer on pong/2 started
+I, [2025-03-20T20:38:14.132684 #73073]  INFO -- : [0da62788e20e] Shutdown job for Pong::PongConsumer on pong/2 finished in 0.01 ms
+I, [2025-03-20T20:38:14.132323 #73073]  INFO -- : [19cefa19513a] Shutdown job for Pong::PongConsumer on pong/4 started
+I, [2025-03-20T20:38:14.132764 #73073]  INFO -- : [19cefa19513a] Shutdown job for Pong::PongConsumer on pong/4 finished in 0.01 ms
+I, [2025-03-20T20:38:14.132220 #73073]  INFO -- : [20931d1085f8] Shutdown job for Pong::PongConsumer on pong/0 started
+I, [2025-03-20T20:38:14.132892 #73073]  INFO -- : [20931d1085f8] Shutdown job for Pong::PongConsumer on pong/0 finished in 0.01 ms
+I, [2025-03-20T20:38:14.493512 #73073]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:38:15.029296 #73073]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:38:15.417568 #73073]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:38:15.417740 #73073]  INFO -- : [waterdrop-fea8232cd936] Closing producer
+I, [2025-03-20T20:38:15.501686 #73073]  INFO -- : [waterdrop-fea8232cd936] Closing producer took 83.93 ms
+I, [2025-03-20T20:38:43.011512 #77077]  INFO -- : 
+@@@                                             @@@@@  @@@
+@@@                                            @@@     @@@
+@@@  @@@    @@@@@@@@@   @@@ @@@   @@@@@@@@@  @@@@@@@@  @@@  @@@@   @@@@@@@@@
+@@@@@@     @@@    @@@   @@@@@    @@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@@@@@    @@@    @@@   @@@     @@@@    @@@    @@@     @@@@@@@    @@@    @@@
+@@@  @@@@  @@@@@@@@@@   @@@      @@@@@@@@@@    @@@     @@@  @@@@   @@@@@@@@@@
+
+
+I, [2025-03-20T20:38:43.011550 #77077]  INFO -- : [0;31mUpgrade to Karafka Pro for more features and support: https://karafka.io[0m
+I, [2025-03-20T20:38:43.031883 #77077]  INFO -- : Running in ruby 3.3.3 (2024-06-12 revision f1c7b6f435) [arm64-darwin23]
+I, [2025-03-20T20:38:43.031930 #77077]  INFO -- : Running Karafka 2.4.17 server
+I, [2025-03-20T20:38:43.031939 #77077]  INFO -- : See LICENSE and the LGPL-3.0 for licensing details
+I, [2025-03-20T20:38:45.894992 #77077]  INFO -- : Received SIGINT system signal
+I, [2025-03-20T20:38:45.895093 #77077]  INFO -- : Stopping Karafka server
+I, [2025-03-20T20:38:46.112841 #77077]  INFO -- : [00dd9b3efa2d] Polled 1 messages in 948.88ms
+I, [2025-03-20T20:38:46.113583 #77077]  INFO -- : [7531b3337599] Consume job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:38:46.113838 #77077]  INFO -- : Ping consumer with hits: 189
+I, [2025-03-20T20:38:46.115389 #77077]  INFO -- : [waterdrop-65eea8e116eb] Async producing of a message to 'pong' topic took 1.39 ms
+I, [2025-03-20T20:38:46.115612 #77077]  INFO -- : [7531b3337599] Consume job for Pong::PingConsumer on ping/2 finished in 1.84 ms
+I, [2025-03-20T20:38:46.115795 #77077]  INFO -- : [7531b3337599] Shutdown job for Pong::PingConsumer on ping/2 started
+I, [2025-03-20T20:38:46.115848 #77077]  INFO -- : [7531b3337599] Shutdown job for Pong::PingConsumer on ping/2 finished in 0.02 ms
+I, [2025-03-20T20:38:47.444582 #77077]  INFO -- : Stopped Karafka server
+I, [2025-03-20T20:38:47.444910 #77077]  INFO -- : [waterdrop-65eea8e116eb] Closing producer
+I, [2025-03-20T20:38:47.480299 #77077]  INFO -- : [waterdrop-65eea8e116eb] Closing producer took 32.31 ms
