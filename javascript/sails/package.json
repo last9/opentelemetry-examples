@@ -1,0 +1,22 @@
+{
+    "name": "my-sails-app",
+    "version": "1.0.0",
+    "description": "A simple Sails.js application",
+    "main": "app.js",
+    "scripts": {
+      "start": "node app.js",
+      "dev": "nodemon app.js"
+    },
+    "dependencies": {
+      "@opentelemetry/auto-instrumentations-node": "^0.40.0",
+      "@opentelemetry/exporter-trace-otlp-http": "^0.46.0",
+      "@opentelemetry/resources": "^1.18.1",
+      "@opentelemetry/sdk-node": "^0.46.0",
+      "@opentelemetry/semantic-conventions": "^1.18.1",
+      "body-parser": "^1.20.2",
+      "sails": "^1.5.8"
+    },
+    "devDependencies": {
+      "nodemon": "^3.0.1"
+    }
+  }
