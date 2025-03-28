@@ -2,13 +2,11 @@ module fasthttp_example
 
 go 1.22
 
-toolchain go1.22.7
-
 require (
 	github.com/fasthttp/router v1.5.2
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/extra/redisotel/v9 v9.5.3
-	github.com/redis/go-redis/v9 v9.6.1
+	github.com/redis/go-redis/v9 v9.6.3
 	github.com/valyala/fasthttp v1.55.0
 	go.nhat.io/otelsql v0.14.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.55.0
