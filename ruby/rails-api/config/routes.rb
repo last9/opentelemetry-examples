@@ -4,4 +4,10 @@ Rails.application.routes.draw do
       resources :users, only: [:index, :show, :create, :update, :destroy]
     end
   end
+
+  resource :checkout, only: [:new, :create], controller: 'checkout' do
+    get 'payment', on: :collection
+    post 'confirm', on: :collection
+    get 'complete', on: :collection
+  end
 end
