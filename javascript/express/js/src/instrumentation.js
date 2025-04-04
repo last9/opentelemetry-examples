@@ -1,36 +1,35 @@
 // instrumentation.js - Simplified version
-const { NodeSDK } = require('@opentelemetry/sdk-node');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const opentelemetry = require('@opentelemetry/sdk-node');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { ConsoleSpanExporter, BatchSpanProcessor, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 
-// Initialize tracer provider with service info"Authorization=Basic bGFzdDk6bGFzdDk="
-const provider = new NodeTracerProvider({
+// Configuration
+const LAST9_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+const LAST9_AUTH = process.env.OTEL_EXPORTER_OTLP_HEADERS;
+const SERVICE_NAME = 'express-api-service';
+
+// Simple logging utility
+const logger = {
+  info: (message) => console.log(`[OpenTelemetry] ${message}`),
+  error: (message, error) => console.error(`[OpenTelemetry Error] ${message}`, error || '')
+};
+
+logger.info(`Initializing OpenTelemetry for service: ${SERVICE_NAME}`);
+
+// Create and configure SDK
+const sdk = new opentelemetry.NodeSDK({
   resource: new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME || 'sample-api-app',
-    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV || 'development',
+    [SemanticResourceAttributes.SERVICE_NAME]: SERVICE_NAME,
+    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: 'development',
   }),
-});
-
-// Configure exporters
-provider.addSpanProcessor(new BatchSpanProcessor(
-  new OTLPTraceExporter({
-    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  traceExporter: new OTLPTraceExporter({
+    url: LAST9_ENDPOINT,
     headers: {
-      Authorization: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+      Authorization: LAST9_AUTH,
     },
-  })
-));
-
-
-// Register the provider
-provider.register();
-
-// Create and start SDK
-const sdk = new NodeSDK({
+  }),
   instrumentations: [
     getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': { enabled: false },
@@ -40,14 +39,29 @@ const sdk = new NodeSDK({
   ],
 });
 
-sdk.start();
-console.log('OpenTelemetry instrumentation initialized');
+// Initialize the SDK and register with the OpenTelemetry API
+try {
+  sdk.start();
+  logger.info('Tracing initialized successfully');
+} catch (error) {
+  logger.error('Failed to initialize tracing', error);
+}
 
-// Graceful shutdown
+// Gracefully shut down the SDK on process exit
 process.on('SIGTERM', () => {
-  sdk.shutdown().finally(() => process.exit(0));
+  logger.info('Application shutting down, finalizing traces');
+  sdk.shutdown()
+    .then(() => logger.info('Trace provider shut down successfully'))
+    .catch((error) => logger.error('Error shutting down trace provider', error))
+    .finally(() => process.exit(0));
 });
 
 process.on('SIGINT', () => {
-  sdk.shutdown().finally(() => process.exit(0));
+  logger.info('Application shutting down (SIGINT), finalizing traces');
+  sdk.shutdown()
+    .then(() => logger.info('Trace provider shut down successfully'))
+    .catch((error) => logger.error('Error shutting down trace provider', error))
+    .finally(() => process.exit(0));
 });
+
+logger.info('OpenTelemetry instrumentation setup complete');
