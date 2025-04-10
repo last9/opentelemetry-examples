@@ -1,0 +1,24 @@
+{
+  "name": "fastify-api-server",
+  "version": "1.0.0",
+  "description": "Fastify API server with OpenTelemetry",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "@fastify/otel": "^0.5.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.57.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "@opentelemetry/semantic-conventions": "^1.30.0",
+    "axios": "^1.8.4",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
