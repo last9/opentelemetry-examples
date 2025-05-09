@@ -1,0 +1,34 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  resource:
+    attributes:
+      - action: insert
+        key: service.name
+        value: sophos-central
+      - action: insert
+        key: source
+        value: sophos
+
+exporters:
+  logging:
+    loglevel: debug
+  otlphttp:
+    endpoint: "https://${LAST9_ENDPOINT}"
+    headers:
+      "Content-Type": "application/json"
+      "Authorization": "Basic ${LAST9_AUTH}"
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [logging, otlphttp]
