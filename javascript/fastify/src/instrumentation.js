@@ -1,16 +1,15 @@
-// instrumentation.js - Simplified version
 const opentelemetry = require('@opentelemetry/sdk-node');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { Resource, resourceFromAttributes } = require('@opentelemetry/resources');
-const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
+const { resourceFromAttributes } = require('@opentelemetry/resources');
+const { ATTR_SERVICE_NAME, ATTR_DEPLOYMENT_ENVIRONMENT } = require('@opentelemetry/semantic-conventions');
 const FastifyOtelInstrumentation = require('@fastify/otel');
 // Initialize the Fastify OpenTelemetry instrumentation. This will register the instrumentation automatically on the Fastify server.
 const fastifyOtelInstrumentation = new FastifyOtelInstrumentation({ registerOnInitialization: true });
 
 // Enable logging for OpenTelemetry if needed for debugging
 // const { diag, DiagConsoleLogger, DiagLogLevel } = require("@opentelemetry/api");
-//diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 
 // Simple logging utility
 const logger = {
