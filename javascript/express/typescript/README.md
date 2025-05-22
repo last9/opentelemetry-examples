@@ -1,5 +1,34 @@
 # Auto instrumenting Express application with OpenTelemetry
 
+**OpenTelemetry package versions used in this example:**
+
+- @opentelemetry/api: 1.9.0
+- @opentelemetry/auto-instrumentations-node: 0.59.0
+- @opentelemetry/exporter-trace-otlp-grpc: 0.201.1
+- @opentelemetry/exporter-trace-otlp-http: 0.201.1
+- @opentelemetry/instrumentation: 0.201.1
+- @opentelemetry/resources: 2.0.1
+- @opentelemetry/sdk-node: 0.201.1
+- @opentelemetry/sdk-trace-base: 2.0.1
+- @opentelemetry/sdk-trace-node: 2.0.1
+- @opentelemetry/semantic-conventions: 1.34.0
+
+**To install these exact OpenTelemetry dependencies:**
+
+```bash
+npm install \
+  @opentelemetry/api@1.9.0 \
+  @opentelemetry/auto-instrumentations-node@0.59.0 \
+  @opentelemetry/exporter-trace-otlp-grpc@0.201.1 \
+  @opentelemetry/exporter-trace-otlp-http@0.201.1 \
+  @opentelemetry/instrumentation@0.201.1 \
+  @opentelemetry/resources@2.0.1 \
+  @opentelemetry/sdk-node@0.201.1 \
+  @opentelemetry/sdk-trace-base@2.0.1 \
+  @opentelemetry/sdk-trace-node@2.0.1 \
+  @opentelemetry/semantic-conventions@1.34.0
+```
+
 This example demonstrates how to auto-instrument an Express application with
 OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your
 machine.

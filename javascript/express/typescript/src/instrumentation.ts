@@ -6,25 +6,28 @@ import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base"; // Use Batch
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"; // Import OTLPTraceExporter
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { SEMRESATTRS_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
-import { Resource } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
+// import { diag, DiagConsoleLogger, DiagLogLevel } from "@opentelemetry/api";
+
+// For troubleshooting, set the log level to DiagLogLevel.DEBUG
+// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 
 const providerConfig: TracerConfig = {
-  resource: new Resource({
-    [SEMRESATTRS_SERVICE_NAME]: "express-api-service",
+  resource: resourceFromAttributes({
+    ["service.name"]: process.env.OTEL_SERVICE_NAME,
+    ["deployment.environment"]: process.env.NODE_ENV,
   }),
+  spanProcessors: [
+    new BatchSpanProcessor(
+      new OTLPTraceExporter({
+        url: process.env.OTLP_ENDPOINT,
+      })
+    ),
+  ],
 };
 
 // Initialize and register the tracer provider
 const provider = new NodeTracerProvider(providerConfig);
-const otlp = new OTLPTraceExporter({
-  url: process.env.OTLP_ENDPOINT,
-  headers: {
-    Authorization: process.env.OTLP_AUTH_HEADER,
-  },
-}); // Configure the OTLP exporter
-
-provider.addSpanProcessor(new BatchSpanProcessor(otlp));
 provider.register();
 
 // Automatically instrument HTTP and Express (additional instrumentations can be added similarly)
