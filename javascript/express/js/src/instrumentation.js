@@ -16,9 +16,7 @@ const providerConfig = {
   }),
   spanProcessors: [
     new BatchSpanProcessor(
-      new OTLPTraceExporter({
-        url: process.env.OTLP_ENDPOINT,
-      })
+      new OTLPTraceExporter()
     ),
   ],
 };
