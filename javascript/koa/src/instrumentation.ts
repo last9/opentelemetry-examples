@@ -1,54 +1,35 @@
-import * as api from "@opentelemetry/api";
-import {
-  NodeTracerProvider,
-  TracerConfig,
-} from "@opentelemetry/sdk-trace-node";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import {
-  SEMRESATTRS_SERVICE_NAME,
-  SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
-} from "@opentelemetry/semantic-conventions";
-import { Resource } from "@opentelemetry/resources";
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { Resource } from '@opentelemetry/resources';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 
-// For troubleshooting, set the log level to DiagLogLevel.DEBUG
-// import { diag, DiagConsoleLogger, DiagLogLevel } from "@opentelemetry/api";
-// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
-
-export const setupTracing = (serviceName: string) => {
-  const providerConfig: TracerConfig = {
-    resource: new Resource({
-      [SEMRESATTRS_SERVICE_NAME]: serviceName,
-      [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
-    }),
-  };
-
-  // Initialize and register the tracer provider
-  const provider = new NodeTracerProvider(providerConfig);
-  const otlp = new OTLPTraceExporter({
+const sdk = new NodeSDK({
+  resource: new Resource({
+    [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME || 'koa-app',
+    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
+  }),
+  traceExporter: new OTLPTraceExporter({
     url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
     headers: {
       Authorization: process.env.OTEL_AUTHORIZATION_HEADER,
     },
-  });
+  }),
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      '@opentelemetry/instrumentation-fs': { enabled: false },
+    }),
+  ],
+});
 
-  provider.addSpanProcessor(new BatchSpanProcessor(otlp));
+sdk.start()
+  .then(() => console.log('Tracing initialized'))
+  .catch((err) => console.log('Error initializing tracing', err));
 
-  // Automatically instrument HTTP and Koa
-  registerInstrumentations({
-    instrumentations: [
-      getNodeAutoInstrumentations({
-        "@opentelemetry/instrumentation-fs": {
-          enabled: false,
-        },
-      }),
-    ],
-    tracerProvider: provider,
-  });
+process.on('SIGTERM', () => {
+  sdk.shutdown().finally(() => process.exit(0));
+});
 
-  provider.register();
-
-  return api.trace.getTracer(serviceName);
-};
+process.on('SIGINT', () => {
+  sdk.shutdown().finally(() => process.exit(0));
+});

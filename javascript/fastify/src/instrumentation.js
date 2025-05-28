@@ -1,8 +1,8 @@
-const opentelemetry = require('@opentelemetry/sdk-node');
+const { NodeSDK } = require('@opentelemetry/sdk-node');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { resourceFromAttributes } = require('@opentelemetry/resources');
-const { ATTR_SERVICE_NAME, ATTR_DEPLOYMENT_ENVIRONMENT } = require('@opentelemetry/semantic-conventions');
+const { Resource } = require('@opentelemetry/resources');
+const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 const FastifyOtelInstrumentation = require('@fastify/otel');
 // Initialize the Fastify OpenTelemetry instrumentation. This will register the instrumentation automatically on the Fastify server.
 const fastifyOtelInstrumentation = new FastifyOtelInstrumentation({ registerOnInitialization: true });
@@ -20,10 +20,10 @@ const logger = {
 logger.info(`Initializing OpenTelemetry for service: ${process.env.OTEL_SERVICE_NAME}`);
 
 // Create and configure SDK
-const sdk = new opentelemetry.NodeSDK({
-  resource: resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME,
-    [ATTR_DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
+const sdk = new NodeSDK({
+  resource: new Resource({
+    [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME,
+    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
   }),
   traceExporter: new OTLPTraceExporter(),
   instrumentations: [
@@ -34,12 +34,9 @@ const sdk = new opentelemetry.NodeSDK({
 });
 
 // Initialize the SDK and register with the OpenTelemetry API
-try {
-  sdk.start();
-  logger.info('Tracing initialized successfully');
-} catch (error) {
-  logger.error('Failed to initialize tracing', error);
-}
+sdk.start()
+  .then(() => logger.info('Tracing initialized successfully'))
+  .catch((error) => logger.error('Failed to initialize tracing', error));
 
 // Gracefully shut down the SDK on process exit
 process.on('SIGTERM', () => {
