@@ -15,6 +15,8 @@ This example demonstrates how to integrate Winston logging with OpenTelemetry fo
 - @opentelemetry/sdk-trace-node: 2.0.1
 - @opentelemetry/semantic-conventions: 1.34.0
 - @opentelemetry/sdk-logs: 0.201.1
+- @opentelemetry/api-logs: 0.201.1
+- @opentelemetry/winston-transport: 0.11.0
 
 **To install these exact OpenTelemetry dependencies:**
 
@@ -30,7 +32,9 @@ npm install \
   @opentelemetry/sdk-trace-base@2.0.1 \
   @opentelemetry/sdk-trace-node@2.0.1 \
   @opentelemetry/semantic-conventions@1.34.0 \
-  @opentelemetry/sdk-logs@0.201.1
+  @opentelemetry/sdk-logs@0.201.1 \
+  @opentelemetry/winston-transport@0.11.0 \
+  @opentelemetry/api-logs@0.201.1
 ```
 
 ## Features
