@@ -26,7 +26,7 @@ const providerConfig: TracerConfig = {
 const provider = new NodeTracerProvider(providerConfig);
 provider.register();
 
-// Automatically instrument NestJS (additional instrumentations can be added similarly)
+// Automatically instrument HTTP and Express (additional instrumentations can be added similarly)
 registerInstrumentations({
   instrumentations: [
     getNodeAutoInstrumentations({
