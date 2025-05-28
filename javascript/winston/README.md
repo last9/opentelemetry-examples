@@ -2,6 +2,37 @@
 
 This example demonstrates how to integrate Winston logging with OpenTelemetry for centralized log management. It uses Winston as the logging framework and exports logs to Last9.
 
+**OpenTelemetry package versions used in this example:**
+
+- @opentelemetry/api: 1.9.0
+- @opentelemetry/auto-instrumentations-node: 0.59.0
+- @opentelemetry/exporter-trace-otlp-grpc: 0.201.1
+- @opentelemetry/exporter-trace-otlp-http: 0.201.1
+- @opentelemetry/instrumentation: 0.201.1
+- @opentelemetry/resources: 2.0.1
+- @opentelemetry/sdk-node: 0.201.1
+- @opentelemetry/sdk-trace-base: 2.0.1
+- @opentelemetry/sdk-trace-node: 2.0.1
+- @opentelemetry/semantic-conventions: 1.34.0
+- @opentelemetry/sdk-logs: 0.201.1
+
+**To install these exact OpenTelemetry dependencies:**
+
+```bash
+npm install \
+  @opentelemetry/api@1.9.0 \
+  @opentelemetry/auto-instrumentations-node@0.59.0 \
+  @opentelemetry/exporter-trace-otlp-grpc@0.201.1 \
+  @opentelemetry/exporter-trace-otlp-http@0.201.1 \
+  @opentelemetry/instrumentation@0.201.1 \
+  @opentelemetry/resources@2.0.1 \
+  @opentelemetry/sdk-node@0.201.1 \
+  @opentelemetry/sdk-trace-base@2.0.1 \
+  @opentelemetry/sdk-trace-node@2.0.1 \
+  @opentelemetry/semantic-conventions@1.34.0 \
+  @opentelemetry/sdk-logs@0.201.1
+```
+
 ## Features
 
 - Winston logging with multiple transports (Console, File, OpenTelemetry)

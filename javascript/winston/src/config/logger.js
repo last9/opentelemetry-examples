@@ -2,7 +2,6 @@ const winston = require('winston');
 const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
 const { OpenTelemetryTransportV3 } = require('@opentelemetry/winston-transport');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
-const { ATTR_SERVICE_NAME, ATTR_DEPLOYMENT_ENVIRONMENT } = require('@opentelemetry/semantic-conventions');
 const logsAPI = require('@opentelemetry/api-logs');
 const {
     LoggerProvider,
@@ -10,22 +9,17 @@ const {
 } = require('@opentelemetry/sdk-logs');
 
 // const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
-
 // For troubleshooting, set the log level to DiagLogLevel.DEBUG
 // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 
 // Initialize logger provider
 const loggerProvider = new LoggerProvider({
   resource: resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME,
-    [ATTR_DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
+    ['service.name']: process.env.OTEL_SERVICE_NAME,
+    ['deployment.environment']: process.env.NODE_ENV,
   }),
+  processors: new SimpleLogRecordProcessor(new OTLPLogExporter())
 });
-
-// Setup Log Exporter
-loggerProvider.addLogRecordProcessor(
-    new SimpleLogRecordProcessor(new OTLPLogExporter())
-);
 
 // Setup Global Logger Provider
 logsAPI.logs.setGlobalLoggerProvider(loggerProvider);
