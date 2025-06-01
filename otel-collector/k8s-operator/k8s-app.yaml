@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-log-writer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-log-writer
+  template:
+    metadata:
+      labels:
+        app: python-log-writer
+    spec:
+      containers:
+      - name: python-log-writer
+        image: python-log-writer:latest
+        imagePullPolicy: IfNotPresent
+      volumes:
+      - name: code-volume
+        emptyDir: {} 
