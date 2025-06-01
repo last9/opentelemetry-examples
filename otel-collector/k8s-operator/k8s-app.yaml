@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-log-writer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-log-writer
+  template:
+    metadata:
+      labels:
+        app: python-log-writer
+    spec:
+      containers:
+        - name: python-log-writer
+          image: python-log-writer:latest
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: log-volume
+              mountPath: /log
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:latest
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/etc/otelcol-config.yaml"]
+          volumeMounts:
+            - name: log-volume
+              mountPath: /log
+            - name: otelcol-config
+              mountPath: /etc/otelcol-config.yaml
+              subPath: otelcol-config.yaml
+      volumes:
+        - name: log-volume
+          emptyDir: {}
+        - name: otelcol-config
+          configMap:
+            name: otelcol-config 
