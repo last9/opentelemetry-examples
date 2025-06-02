@@ -10,6 +10,7 @@ import (
 
 	"github.com/beego/beego/v2/client/httplib"
 	"github.com/beego/beego/v2/server/web"
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 
 	// Instrumentation
@@ -55,10 +56,10 @@ func initRedis() *redis.Client {
 	})
 
 	// Setup traces for redis instrumentation
-	// if err := redisotel.InstrumentTracing(rdb); err != nil {
-	// 	log.Fatalf("failed to instrument traces for Redis client: %v", err)
-	// 	return nil
-	// }
+	if err := redisotel.InstrumentTracing(rdb); err != nil {
+		log.Fatalf("failed to instrument traces for Redis client: %v", err)
+		return nil
+	}
 	return rdb
 }
 

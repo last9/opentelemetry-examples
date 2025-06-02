@@ -7,7 +7,7 @@ toolchain go1.24.3
 require (
 	github.com/beego/beego/v2 v2.3.8
 	github.com/lib/pq v1.10.9
-	github.com/redis/go-redis/v9 v9.6.3
+	github.com/redis/go-redis/v9 v9.9.0
 	go.nhat.io/otelsql v0.14.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0
 	go.opentelemetry.io/otel v1.36.0
@@ -55,6 +55,8 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.9.0 // indirect
+	github.com/redis/go-redis/extra/redisotel/v9 v9.9.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/shiena/ansicolor v0.0.0-20200904210342-c7312218db18 // indirect
