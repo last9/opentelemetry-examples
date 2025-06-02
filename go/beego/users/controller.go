@@ -13,12 +13,20 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 
 	"github.com/redis/go-redis/v9"
+
+	orm "github.com/beego/beego/v2/client/orm"
+	otelorm "github.com/beego/beego/v2/client/orm/filter/opentelemetry"
 )
 
 var dsnName = "postgres://postgres:postgres@localhost/otel_demo?sslmode=disable"
 
 type UsersController struct {
 	redisClient *redis.Client
+}
+
+func init() {
+	// Register the Beego ORM OpenTelemetry filter
+	orm.AddGlobalFilterChain(otelorm.NewFilterChainBuilder().FilterChain)
 }
 
 func initDB() (*sql.DB, error) {
