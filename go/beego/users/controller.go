@@ -68,7 +68,7 @@ func (c *UsersController) GetUsers(ctx context.Context) ([]User, error) {
 		}
 	}
 
-	users, err := fetchUsersFromDatabase()
+	users, err := fetchUsersFromDatabase(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (c *UsersController) GetUser(ctx context.Context, id string) (*User, error)
 		}
 	}
 
-	user, err := fetchUserFromDatabase(id)
+	user, err := fetchUserFromDatabase(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (c *UsersController) GetUser(ctx context.Context, id string) (*User, error)
 }
 
 func (c *UsersController) CreateUser(ctx context.Context, user *User) error {
-	err := createUserInDatabase(user)
+	err := createUserInDatabase(ctx, user)
 	if err != nil {
 		return err
 	}
@@ -130,14 +130,14 @@ func (c *UsersController) UpdateUser(ctx context.Context, id int, name string) *
 			return nil
 		}
 		defer db.Close()
-		stmt, err := db.Prepare("UPDATE users SET name = $1 WHERE id = $2")
+		stmt, err := db.PrepareContext(ctx, "UPDATE users SET name = $1 WHERE id = $2")
 		if err != nil {
 			log.Printf("failed to prepare statement: %v", err)
 			return nil
 		}
 		defer stmt.Close()
 
-		_, err = stmt.Exec(user.Name, user.ID)
+		_, err = stmt.ExecContext(ctx, user.Name, user.ID)
 		if err != nil {
 			log.Printf("failed to update user: %v", err)
 			return nil
@@ -159,14 +159,14 @@ func (uc *UsersController) DeleteUser(ctx context.Context, id int) error {
 	}
 	defer db.Close()
 
-	stmt, err := db.Prepare("DELETE FROM users WHERE id = $1")
+	stmt, err := db.PrepareContext(ctx, "DELETE FROM users WHERE id = $1")
 	if err != nil {
 		log.Printf("failed to prepare statement: %v", err)
 		return fmt.Errorf("failed to prepare statement: %v", err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(id)
+	_, err = stmt.ExecContext(ctx, id)
 	if err != nil {
 		log.Printf("failed to delete user: %v", err)
 		return fmt.Errorf("failed to delete user: %v", err)
@@ -179,14 +179,14 @@ func (uc *UsersController) DeleteUser(ctx context.Context, id int) error {
 	return nil
 }
 
-func fetchUsersFromDatabase() ([]User, error) {
+func fetchUsersFromDatabase(ctx context.Context) ([]User, error) {
 	db, err := initDB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT id, name, email FROM users")
+	rows, err := db.QueryContext(ctx, "SELECT id, name, email FROM users")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch users: %v", err)
 	}
@@ -205,7 +205,7 @@ func fetchUsersFromDatabase() ([]User, error) {
 	return users, nil
 }
 
-func fetchUserFromDatabase(id string) (*User, error) {
+func fetchUserFromDatabase(ctx context.Context, id string) (*User, error) {
 	db, err := initDB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %v", err)
@@ -213,7 +213,7 @@ func fetchUserFromDatabase(id string) (*User, error) {
 	defer db.Close()
 
 	var user User
-	err = db.QueryRow("SELECT id, name, email FROM users WHERE id = $1", id).Scan(&user.ID, &user.Name, &user.Email)
+	err = db.QueryRowContext(ctx, "SELECT id, name, email FROM users WHERE id = $1", id).Scan(&user.ID, &user.Name, &user.Email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("user not found")
@@ -224,7 +224,7 @@ func fetchUserFromDatabase(id string) (*User, error) {
 	return &user, nil
 }
 
-func createUserInDatabase(user *User) error {
+func createUserInDatabase(ctx context.Context, user *User) error {
 	db, err := initDB()
 	if err != nil {
 		log.Printf("failed to initialize database: %v", err)
@@ -232,14 +232,14 @@ func createUserInDatabase(user *User) error {
 	}
 	defer db.Close()
 
-	stmt, err := db.Prepare("INSERT INTO users (id, name, email) VALUES ($1, $2, $3)")
+	stmt, err := db.PrepareContext(ctx, "INSERT INTO users (id, name, email) VALUES ($1, $2, $3)")
 	if err != nil {
 		log.Printf("failed to prepare statement: %v", err)
 		return fmt.Errorf("failed to prepare statement: %v", err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(user.ID, user.Name, user.Email)
+	_, err = stmt.ExecContext(ctx, user.ID, user.Name, user.Email)
 	if err != nil {
 		log.Printf("failed to insert user: %v", err)
 		return fmt.Errorf("failed to insert user: %v", err)
