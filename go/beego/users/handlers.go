@@ -111,10 +111,3 @@ func (u *UsersHandler) DeleteUserBeego(ctx *beego.Controller) {
 	ctx.Ctx.Output.SetStatus(204)
 	ctx.ServeJSON()
 }
-
-// The original Iris handlers are commented out below for reference
-// func (u *UsersHandler) GetUsers(ctx iris.Context) { ... }
-// func (u *UsersHandler) GetUser(ctx iris.Context) { ... }
-// func (u *UsersHandler) CreateUser(ctx iris.Context) { ... }
-// func (u *UsersHandler) UpdateUser(ctx iris.Context) { ... }
-// func (u *UsersHandler) DeleteUser(ctx iris.Context) { ... }

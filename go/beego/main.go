@@ -7,18 +7,13 @@ import (
 	"log"
 	"net/http"
 
-	// "net/http"
+	"beego_example/users"
 
-	// "iris_example/last9"
-	"iris_example/users"
-
-	// "github.com/kataras/iris/v12"
-	beego "github.com/beego/beego/v2/server/web"
+	"github.com/beego/beego/v2/client/httplib"
+	"github.com/beego/beego/v2/server/web"
 	"github.com/redis/go-redis/v9"
 
 	// OpenTelemetry imports (Harbor style)
-	"github.com/beego/beego/v2/client/httplib"
-	otelhttplib "github.com/beego/beego/v2/client/httplib/filter/opentelemetry"
 	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -44,16 +39,16 @@ func main() {
 	usersHandler = users.NewUsersHandler(c, nil)
 
 	// Beego controller registration
-	beego.Router("/users", &UsersControllerWrapper{}, "get:GetUsers")
-	beego.Router("/users/:id", &UsersControllerWrapper{}, "get:GetUser")
-	beego.Router("/users", &UsersControllerWrapper{}, "post:CreateUser")
-	beego.Router("/users/:id", &UsersControllerWrapper{}, "put:UpdateUser")
-	beego.Router("/users/:id", &UsersControllerWrapper{}, "delete:DeleteUser")
-	beego.Router("/joke", &JokeController{}, "get:GetJoke")
+	web.Router("/users", &UsersControllerWrapper{}, "get:GetUsers")
+	web.Router("/users/:id", &UsersControllerWrapper{}, "get:GetUser")
+	web.Router("/users", &UsersControllerWrapper{}, "post:CreateUser")
+	web.Router("/users/:id", &UsersControllerWrapper{}, "put:UpdateUser")
+	web.Router("/users/:id", &UsersControllerWrapper{}, "delete:DeleteUser")
+	web.Router("/joke", &JokeController{}, "get:GetJoke")
 
 	log.Println("Server is running on http://localhost:8080")
 	// Wrap Beego's handler with otelhttp for tracing incoming requests
-	handler := otelhttp.NewHandler(beego.BeeApp.Handlers, "beego-server")
+	handler := otelhttp.NewHandler(web.BeeApp.Handlers, "beego-server")
 	http.ListenAndServe(":8080", handler)
 }
 
@@ -94,7 +89,7 @@ func initRedis() *redis.Client {
 // Beego controller wrappers
 
 type UsersControllerWrapper struct {
-	beego.Controller
+	web.Controller
 }
 
 func (c *UsersControllerWrapper) GetUsers() {
@@ -114,7 +109,7 @@ func (c *UsersControllerWrapper) DeleteUser() {
 }
 
 type JokeController struct {
-	beego.Controller
+	web.Controller
 }
 
 func (c *JokeController) GetJoke() {
@@ -122,10 +117,9 @@ func (c *JokeController) GetJoke() {
 }
 
 // Adapted joke handler for Beego
-func getRandomJokeBeego(ctx *beego.Controller) {
-	// Use Beego's httplib for outgoing HTTP request with Otel filter
-	filter := otelhttplib.NewOpenTelemetryFilter(true, nil)
-	req := httplib.Get("https://official-joke-api.appspot.com/random_joke").SetFilters(filter.FilterChain)
+func getRandomJokeBeego(ctx *web.Controller) {
+	// Use Beego's httplib for outgoing HTTP request
+	req := httplib.Get("https://official-joke-api.appspot.com/random_joke")
 	resp, err := req.Response()
 	if err != nil {
 		ctx.Ctx.Output.SetStatus(500)

@@ -1,4 +1,4 @@
-module iris_example
+module beego_example
 
 go 1.23.0
 
@@ -6,7 +6,6 @@ toolchain go1.24.3
 
 require (
 	github.com/beego/beego/v2 v2.3.8
-	github.com/kataras/iris/v12 v12.2.11
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.6.3
 	go.nhat.io/otelsql v0.14.0

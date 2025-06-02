@@ -17,7 +17,7 @@ type Instrumentation struct {
 	Tracer         trace.Tracer
 }
 
-func initTracerProvider() *sdktrace.TracerProvider {
+func initTracerProvider(serviceName string) *sdktrace.TracerProvider {
 	exporter, err := otlptracehttp.New(context.Background())
 
 	if err != nil {
@@ -26,7 +26,7 @@ func initTracerProvider() *sdktrace.TracerProvider {
 
 	attr := resource.WithAttributes(
 		semconv.DeploymentEnvironmentKey.String("production"),
-		semconv.ServiceNameKey.String("iris-server"),
+		semconv.ServiceNameKey.String(serviceName),
 	)
 
 	resources, err := resource.New(context.Background(),
@@ -53,11 +53,11 @@ func initTracerProvider() *sdktrace.TracerProvider {
 	return tp
 }
 
-func NewInstrumentation() *Instrumentation {
-	tp := initTracerProvider()
+func NewInstrumentation(serviceName string) *Instrumentation {
+	tp := initTracerProvider(serviceName)
 
 	return &Instrumentation{
 		TracerProvider: tp,
-		Tracer:         tp.Tracer("iris-server"),
+		Tracer:         tp.Tracer(serviceName),
 	}
 }
