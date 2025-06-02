@@ -17,6 +17,8 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	// OpenTelemetry imports (Harbor style)
+	"github.com/beego/beego/v2/client/httplib"
+	otelhttplib "github.com/beego/beego/v2/client/httplib/filter/opentelemetry"
 	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -121,18 +123,10 @@ func (c *JokeController) GetJoke() {
 
 // Adapted joke handler for Beego
 func getRandomJokeBeego(ctx *beego.Controller) {
-	// Instrument outgoing HTTP requests with otelhttp
-	client := http.Client{
-		Transport: otelhttp.NewTransport(http.DefaultTransport),
-	}
-	req, err := http.NewRequestWithContext(ctx.Ctx.Request.Context(), "GET", "https://official-joke-api.appspot.com/random_joke", nil)
-	if err != nil {
-		ctx.Ctx.Output.SetStatus(500)
-		ctx.Data["json"] = map[string]string{"error": "Failed to create request"}
-		ctx.ServeJSON()
-		return
-	}
-	resp, err := client.Do(req)
+	// Use Beego's httplib for outgoing HTTP request with Otel filter
+	filter := otelhttplib.NewOpenTelemetryFilter(true, nil)
+	req := httplib.Get("https://official-joke-api.appspot.com/random_joke").SetFilters(filter.FilterChain)
+	resp, err := req.Response()
 	if err != nil {
 		ctx.Ctx.Output.SetStatus(500)
 		ctx.Data["json"] = map[string]string{"error": "Failed to fetch joke"}
