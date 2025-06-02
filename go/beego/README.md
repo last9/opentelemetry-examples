@@ -86,11 +86,6 @@ go build -o beegoapp && ./beegoapp
 
 5. View traces in your configured backend (e.g., Last9 dashboard).
 
-## Notes
-- All legacy code and Iris references have been removed.
-- The handler wrapper approach is used for robust, always-correct tracing and status code propagation.
-- The codebase is idiomatic, clean, and production-ready.
-
 ## Migrating an Existing Beego v2 App to OpenTelemetry with Last9
 
 To instrument your existing Beego v2 application with OpenTelemetry and export traces to Last9, follow these steps:
@@ -130,7 +125,7 @@ func main() {
 Set the following environment variables for Last9:
 ```bash
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <BASIC_AUTH_TOKEN>"
-export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io"
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io" # Your Last9 Otel endpoint
 ```
 
 ### 3. Wrap All Handlers for Tracing
