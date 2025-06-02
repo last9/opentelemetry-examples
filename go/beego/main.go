@@ -17,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	// OpenTelemetry imports (Harbor style)
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -49,7 +50,9 @@ func main() {
 	beego.Router("/joke", &JokeController{}, "get:GetJoke")
 
 	log.Println("Server is running on http://localhost:8080")
-	beego.Run()
+	// Wrap Beego's handler with otelhttp for tracing incoming requests
+	handler := otelhttp.NewHandler(beego.BeeApp.Handlers, "beego-server")
+	http.ListenAndServe(":8080", handler)
 }
 
 func setupTracer() (func(), error) {
