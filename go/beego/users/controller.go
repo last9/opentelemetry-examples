@@ -12,6 +12,8 @@ import (
 	"go.nhat.io/otelsql"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 
+	"github.com/beego/beego/v2/client/orm"
+	otelfilter "github.com/beego/beego/v2/client/orm/filter/opentelemetry"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -19,6 +21,11 @@ var dsnName = "postgres://postgres:postgres@localhost/otel_demo?sslmode=disable"
 
 type UsersController struct {
 	redisClient *redis.Client
+}
+
+func init() {
+	// Register the Otel filter for ORM operations
+	orm.AddFilter("otel", otelfilter.Filter)
 }
 
 func initDB() (*sql.DB, error) {
