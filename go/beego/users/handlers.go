@@ -4,7 +4,7 @@ import (
 	"strconv"
 	// "go.opentelemetry.io/otel/attribute"
 	// oteltrace "go.opentelemetry.io/otel/trace"
-	"github.com/astaxie/beego"
+	beego "github.com/beego/beego/v2/server/web"
 )
 
 type UsersHandler struct {

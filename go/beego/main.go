@@ -13,7 +13,7 @@ import (
 	"iris_example/users"
 
 	// "github.com/kataras/iris/v12"
-	"github.com/astaxie/beego"
+	beego "github.com/beego/beego/v2/server/web"
 	"github.com/redis/go-redis/v9"
 
 	// OpenTelemetry imports (Harbor style)
