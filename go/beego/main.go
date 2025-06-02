@@ -121,9 +121,18 @@ func (c *JokeController) GetJoke() {
 
 // Adapted joke handler for Beego
 func getRandomJokeBeego(ctx *beego.Controller) {
-	// Use standard library net/http for outgoing HTTP request
-	// TODO: Instrument with otelhttp if tracing is required
-	resp, err := http.Get("https://official-joke-api.appspot.com/random_joke")
+	// Instrument outgoing HTTP requests with otelhttp
+	client := http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
+	req, err := http.NewRequestWithContext(ctx.Ctx.Request.Context(), "GET", "https://official-joke-api.appspot.com/random_joke", nil)
+	if err != nil {
+		ctx.Ctx.Output.SetStatus(500)
+		ctx.Data["json"] = map[string]string{"error": "Failed to create request"}
+		ctx.ServeJSON()
+		return
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		ctx.Ctx.Output.SetStatus(500)
 		ctx.Data["json"] = map[string]string{"error": "Failed to fetch joke"}
