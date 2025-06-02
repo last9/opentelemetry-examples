@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 
 	_ "github.com/lib/pq"
@@ -126,20 +125,17 @@ func (c *UsersController) UpdateUser(ctx context.Context, id int, name string) *
 		user.Name = name
 		db, err := initDB()
 		if err != nil {
-			log.Printf("failed to initialize database: %v", err)
 			return nil
 		}
 		defer db.Close()
 		stmt, err := db.PrepareContext(ctx, "UPDATE users SET name = $1 WHERE id = $2")
 		if err != nil {
-			log.Printf("failed to prepare statement: %v", err)
 			return nil
 		}
 		defer stmt.Close()
 
 		_, err = stmt.ExecContext(ctx, user.Name, user.ID)
 		if err != nil {
-			log.Printf("failed to update user: %v", err)
 			return nil
 		}
 
@@ -154,21 +150,18 @@ func (c *UsersController) UpdateUser(ctx context.Context, id int, name string) *
 func (uc *UsersController) DeleteUser(ctx context.Context, id int) error {
 	db, err := initDB()
 	if err != nil {
-		log.Printf("failed to initialize database: %v", err)
 		return fmt.Errorf("failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
 	stmt, err := db.PrepareContext(ctx, "DELETE FROM users WHERE id = $1")
 	if err != nil {
-		log.Printf("failed to prepare statement: %v", err)
 		return fmt.Errorf("failed to prepare statement: %v", err)
 	}
 	defer stmt.Close()
 
 	_, err = stmt.ExecContext(ctx, id)
 	if err != nil {
-		log.Printf("failed to delete user: %v", err)
 		return fmt.Errorf("failed to delete user: %v", err)
 	}
 
@@ -227,21 +220,18 @@ func fetchUserFromDatabase(ctx context.Context, id string) (*User, error) {
 func createUserInDatabase(ctx context.Context, user *User) error {
 	db, err := initDB()
 	if err != nil {
-		log.Printf("failed to initialize database: %v", err)
 		return err
 	}
 	defer db.Close()
 
 	stmt, err := db.PrepareContext(ctx, "INSERT INTO users (id, name, email) VALUES ($1, $2, $3)")
 	if err != nil {
-		log.Printf("failed to prepare statement: %v", err)
 		return fmt.Errorf("failed to prepare statement: %v", err)
 	}
 	defer stmt.Close()
 
 	_, err = stmt.ExecContext(ctx, user.ID, user.Name, user.Email)
 	if err != nil {
-		log.Printf("failed to insert user: %v", err)
 		return fmt.Errorf("failed to insert user: %v", err)
 	}
 	return nil

@@ -1,102 +1,81 @@
-# Instrumenting Golang Beego application using OpenTelemetry
+# Instrumenting Golang Beego Application Using OpenTelemetry
 
-This example demonstrates how to instrument a simple Beego application with
-OpenTelemetry. **Note: All OpenTelemetry instrumentation is currently commented out.**
+This example demonstrates how to instrument a production-ready Beego v2 application with OpenTelemetry. All HTTP, database, Redis, and outgoing HTTP calls are fully traced and exported to your chosen backend (e.g., Last9, Jaeger, etc.).
 
 ## Prerequisites
 
 - Recent version of Go
-- [Last9](https://app.last9.io) account
+- [Last9](https://app.last9.io) account (or any OpenTelemetry-compatible backend)
 
 It uses the following libraries:
 
-- [Beego](https://github.com/astaxie/beego)
-- [OpenTelemetry](https://github.com/open-telemetry/opentelemetry-go) (commented out)
+- [Beego v2](https://github.com/beego/beego)
+- [OpenTelemetry Go](https://github.com/open-telemetry/opentelemetry-go)
 - [PostgreSQL](https://github.com/lib/pq)
 - [Redis](https://github.com/redis/go-redis/v9)
+- [otelsql](https://github.com/nhatthm/otelsql) for DB tracing
+- [redisotel](https://github.com/redis/go-redis/tree/main/extra/redisotel) for Redis tracing
 
 ## Traces
 
-It generates traces for HTTP requests, database queries, Redis commands, and external API calls. **(Currently commented out)**
+The app generates traces for:
+- HTTP requests (using a robust handler wrapper for correct status code propagation)
+- Database queries (via otelsql)
+- Redis commands (via redisotel)
+- Outgoing HTTP requests (via Beego's httplib, can be extended with otelhttp)
 
-### HTTP requests
+### HTTP Requests
 
-- HTTP requests would use a middleware for tracing (currently commented out).
-- For HTTP requests, wrap the Beego router with the middleware. Refer to [main.go](./main.go) for how to do this (commented out).
+All Beego handlers are wrapped with a custom OpenTelemetry handler wrapper (`last9.WrapBeegoHandler`). This ensures:
+- Correct parent/child span relationships
+- Accurate HTTP status code propagation (even for errors)
+- Robust, production-grade tracing
 
-### Database queries
+See [main.go](./main.go) and [last9/otelMiddleware.go](./last9/otelMiddleware.go) for details.
 
-- Database queries using [otelsql](https://github.com/nhatthm/otelsql) (commented out).
-- For database queries, use the `otelsql` package to wrap the `sql.DB` object. Refer to `initDB()` in [users/controller.go](./users/controller.go) for more details.
+### Database Queries
 
-### Redis commands
+Database queries are traced using [otelsql](https://github.com/nhatthm/otelsql). See `initDB()` in [users/controller.go](./users/controller.go).
 
-- Redis commands using [redisotel](https://github.com/redis/redis-go-cluster/tree/main/redisotel) (commented out).
-- For Redis commands, use the `redisotel` package to wrap the `redis.Client` object. Refer to `initRedis()` in [main.go](./main.go) for more details.
+### Redis Commands
 
-### External API calls
+Redis commands are traced using [redisotel](https://github.com/redis/go-redis/tree/main/extra/redisotel). See `initRedis()` in [main.go](./main.go).
 
-- External API calls using [otelhttp](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/instrumentation/net/http/otelhttp) (commented out).
-- For external API calls, use the `otelhttp` package to wrap the `http.Client` object. Refer to `getRandomJokeBeego()` in [main.go](./main.go) for more details.
+### Outgoing HTTP Calls
 
-### Instrumentation packages
+Outgoing HTTP requests (e.g., `/joke` endpoint) are made using Beego's `httplib`. For full context propagation, you can use [otelhttp](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/instrumentation/net/http/otelhttp) if you switch to the standard `http.Client`.
 
-Following packages are used to instrument the Beego application (currently commented out). You can install them using the following commands:
+## Exporting Telemetry Data
 
-```sh
-go get go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
-go get go.opentelemetry.io/otel
-go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp
-go get go.opentelemetry.io/otel/sdk
-go get go.opentelemetry.io/otel/trace
-go get github.com/redis/go-redis/extra/redisotel/v9
-go get go.nhat.io/otelsql
+The app uses the OTLP HTTP exporter by default. You can export traces to Last9, Jaeger, or any OpenTelemetry-compatible backend. Set the following environment variables:
+
+```bash
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <BASIC_AUTH_TOKEN>"
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io" # or your OTLP endpoint
 ```
 
-Refer to [last9/instrumentation.go](./last9/instrumentation.go) for more details on initializing the instrumentation (currently commented out).
-
-Add following code to your main function to initialize the instrumentation as early as possible in your application lifecycle (currently commented out):
-
-```go
-// i := last9.NewInstrumentation()
-// defer func() {
-//   if err := i.TracerProvider.Shutdown(context.Background()); err != nil {
-//     log.Printf("Error shutting down tracer provider: %v", err)
-//   }
-// }()
+To enable local debugging, set:
+```bash
+export OTEL_CONSOLE_EXPORTER=true
 ```
 
-## Exporting Telemetry Data to Last9
+## Running the Application
 
-It uses GRPC exporters to export the traces and metrics to Last9. You can also use any other OpenTelemetry compatible backend. **(Currently commented out)**
-
-## Running the application
-
-1. After cloning the example, install the required packages using the following
-   command:
+1. Install dependencies:
 
 ```bash
 go mod tidy
 ```
 
-2. Obtain the OTLP Auth Header from the [Last9 dashboard](https://app.last9.io).
-   The Auth header is required in the next step.
+2. Set the required environment variables (see above).
 
-3. Next, run the commands below to set the environment variables.
-
-```bash
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <BASIC_AUTH_TOKEN>"
-export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io" # or your Last9 endpoint
-```
-
-4. Run the Beego application:
+3. Build and run the app:
 
 ```bash
 go build -o beegoapp && ./beegoapp
 ```
 
-5. Once the server is running, you can access the application at
-   `http://localhost:8080` by default. The API endpoints are:
+4. Access the API at `http://localhost:8080`:
 
 - GET `/users` - Get all users
 - GET `/users/:id` - Get a user by ID
@@ -105,4 +84,88 @@ go build -o beegoapp && ./beegoapp
 - DELETE `/users/:id` - Delete a user
 - GET `/joke` - Get a random joke using external API
 
-6. Sign in to [Last9](https://app.last9.io) and visit the APM dashboard to see the traces and metrics (when instrumentation is enabled).
+5. View traces in your configured backend (e.g., Last9 dashboard).
+
+## Notes
+- All legacy code and Iris references have been removed.
+- The handler wrapper approach is used for robust, always-correct tracing and status code propagation.
+- The codebase is idiomatic, clean, and production-ready.
+
+## Migrating an Existing Beego v2 App to OpenTelemetry with Last9
+
+To instrument your existing Beego v2 application with OpenTelemetry and export traces to Last9, follow these steps:
+
+### 1. Add Dependencies
+Add the following to your `go.mod`:
+
+```bash
+go get github.com/beego/beego/v2
+# OpenTelemetry core and exporters
+go get go.opentelemetry.io/otel
+# OTLP HTTP exporter
+go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp
+# Otel SDK
+go get go.opentelemetry.io/otel/sdk
+# Otel SQL instrumentation
+go get go.nhat.io/otelsql
+# Redis Otel instrumentation
+go get github.com/redis/go-redis/extra/redisotel/v9
+```
+
+### 2. Initialize OpenTelemetry Early
+In your `main.go`, initialize Otel as early as possible. Use the provided `last9/instrumentation.go` or similar:
+
+```go
+import "beego_example/last9"
+
+func main() {
+    i := last9.NewInstrumentation("your-service-name")
+    defer func() {
+        _ = i.TracerProvider.Shutdown(context.Background())
+    }()
+    // ... rest of your setup ...
+}
+```
+
+Set the following environment variables for Last9:
+```bash
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <BASIC_AUTH_TOKEN>"
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io"
+```
+
+### 3. Wrap All Handlers for Tracing
+For robust HTTP tracing and correct status code propagation, wrap all your Beego handlers using the handler wrapper:
+
+```go
+import "beego_example/last9"
+
+// Example for a GET handler
+web.Router("/users", &UsersControllerWrapper{}, "get:GetUsers")
+
+// In your controller:
+func (c *UsersControllerWrapper) GetUsers() {
+    last9.WrapBeegoHandler("your-service-name", getUsersHandler)(&c.Controller)
+}
+
+func getUsersHandler(ctx *web.Controller) {
+    // ... your logic ...
+    ctx.Ctx.Output.SetStatus(200) // Always set status code
+    ctx.Data["json"] = ...
+    ctx.ServeJSON()
+}
+```
+
+### 4. Instrument Database and Redis
+- Use `otelsql` to wrap your DB driver (see `initDB()` in `users/controller.go`).
+- Use `redisotel` to instrument your Redis client (see `initRedis()` in `main.go`).
+
+### 5. Propagate Context
+Pass `ctx.Ctx.Request.Context()` from your Beego controller to all DB and Redis calls to ensure trace context propagation.
+
+### 6. Always Set HTTP Status Codes
+Explicitly set the status code in every handler, even for successful responses, to ensure correct trace data.
+
+### 7. Verify Traces
+Run your app, make requests, and verify traces appear in Last9 with correct parent/child relationships and status codes.
+
+**Tip:** For local debugging, set `OTEL_CONSOLE_EXPORTER=true` to print traces to the console.

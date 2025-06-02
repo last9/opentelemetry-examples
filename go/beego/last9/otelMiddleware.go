@@ -4,22 +4,20 @@ import (
 	"net/http"
 	"strings"
 
-	"log"
-
-	beego "github.com/beego/beego/v2/server/web"
-	beecontext "github.com/beego/beego/v2/server/web/context"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+
+	beego "github.com/beego/beego/v2/server/web"
+	beecontext "github.com/beego/beego/v2/server/web/context"
 )
 
 // BeegoOtelMiddleware returns a Beego filter for OpenTelemetry tracing
 func BeegoOtelMiddleware(service string) beego.FilterFunc {
 	return func(ctx *beecontext.Context) {
-		log.Printf("[otel] BeegoOtelMiddleware: %s %s", ctx.Request.Method, ctx.Request.URL.Path)
 		propagator := otel.GetTextMapPropagator()
 		carrier := propagation.HeaderCarrier(ctx.Request.Header)
 		ctxReq := propagator.Extract(ctx.Request.Context(), carrier)
@@ -40,7 +38,6 @@ func BeegoOtelMiddleware(service string) beego.FilterFunc {
 			attrs = append(attrs, semconv.ServerAddressKey.String(host))
 		}
 		spanCtx, span := tracer.Start(ctxReq, spanName, trace.WithAttributes(attrs...), trace.WithSpanKind(trace.SpanKindServer))
-		log.Printf("[otel] Started HTTP span: %s", spanName)
 		// Inject the span context into the request headers
 		propagator.Inject(spanCtx, carrier)
 		ctx.Request = ctx.Request.WithContext(spanCtx)
@@ -49,7 +46,6 @@ func BeegoOtelMiddleware(service string) beego.FilterFunc {
 		// Defer ending the span after the handler has run
 		defer func() {
 			status := ctx.ResponseWriter.Status
-			log.Printf("[otel] Ending HTTP span: %s, status: %d", ctx.Request.URL.Path, status)
 			span.SetAttributes(
 				semconv.HTTPResponseStatusCodeKey.Int(status),
 				attribute.String("otel.debug", "http-root"),
@@ -63,7 +59,6 @@ func BeegoOtelMiddleware(service string) beego.FilterFunc {
 // BeegoOtelStartMiddleware injects context and starts the span (BeforeRouter)
 func BeegoOtelStartMiddleware(service string) beego.FilterFunc {
 	return func(ctx *beecontext.Context) {
-		log.Printf("[otel] BeegoOtelStartMiddleware: %s %s", ctx.Request.Method, ctx.Request.URL.Path)
 		propagator := otel.GetTextMapPropagator()
 		carrier := propagation.HeaderCarrier(ctx.Request.Header)
 		ctxReq := propagator.Extract(ctx.Request.Context(), carrier)
@@ -84,7 +79,6 @@ func BeegoOtelStartMiddleware(service string) beego.FilterFunc {
 			attrs = append(attrs, semconv.ServerAddressKey.String(host))
 		}
 		spanCtx, span := tracer.Start(ctxReq, spanName, trace.WithAttributes(attrs...), trace.WithSpanKind(trace.SpanKindServer))
-		log.Printf("[otel] Started HTTP span: %s", spanName)
 		// Inject the span context into the request headers
 		propagator.Inject(spanCtx, carrier)
 		ctx.Request = ctx.Request.WithContext(spanCtx)
@@ -97,16 +91,13 @@ func BeegoOtelEndMiddleware() beego.FilterFunc {
 	return func(ctx *beecontext.Context) {
 		spanAny := ctx.Input.GetData("otel-span")
 		if spanAny == nil {
-			log.Println("[otel] No span found in context for BeegoOtelEndMiddleware")
 			return
 		}
 		span, ok := spanAny.(trace.Span)
 		if !ok {
-			log.Println("[otel] otel-span in context is not a trace.Span")
 			return
 		}
 		status := ctx.ResponseWriter.Status
-		log.Printf("[otel] Ending HTTP span: %s, status: %d", ctx.Request.URL.Path, status)
 		span.SetAttributes(
 			semconv.HTTPResponseStatusCodeKey.Int(status),
 			attribute.String("otel.debug", "http-root"),

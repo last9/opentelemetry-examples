@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"beego_example/users"
 
@@ -24,7 +23,7 @@ func main() {
 	i := last9.NewInstrumentation("beego-app")
 	defer func() {
 		if err := i.TracerProvider.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
+			// Remove debug log, optionally handle error if needed
 		}
 	}()
 
@@ -43,7 +42,7 @@ func main() {
 	web.Router("/users/:id", &UsersControllerWrapper{}, "delete:DeleteUser")
 	web.Router("/joke", &JokeController{}, "get:GetJoke")
 
-	log.Println("Server is running on http://localhost:8080")
+	// Remove debug log for server start
 	web.Run()
 }
 
@@ -54,7 +53,8 @@ func initRedis() *redis.Client {
 
 	// Setup traces for redis instrumentation
 	if err := redisotel.InstrumentTracing(rdb); err != nil {
-		log.Fatalf("failed to instrument traces for Redis client: %v", err)
+		// Remove fatal log, just panic or return nil
+		panic("failed to instrument traces for Redis client: " + err.Error())
 		return nil
 	}
 	return rdb
@@ -114,6 +114,7 @@ func getRandomJokeBeego(ctx *web.Controller) {
 		return
 	}
 
+	ctx.Ctx.Output.SetStatus(200)
 	ctx.Data["json"] = map[string]string{
 		"joke": fmt.Sprintf("Joke: %s\n\n%s", joke.Setup, joke.Punchline),
 	}
