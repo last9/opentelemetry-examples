@@ -45,6 +45,36 @@ Redis commands are traced using [redisotel](https://github.com/redis/go-redis/tr
 
 Outgoing HTTP requests (e.g., `/joke` endpoint) are made using Beego's `httplib`. For full context propagation, you can use [otelhttp](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/instrumentation/net/http/otelhttp) if you switch to the standard `http.Client`.
 
+## Outgoing HTTP Call Instrumentation
+
+This project demonstrates two approaches for instrumenting outgoing HTTP calls in Beego with OpenTelemetry:
+
+- **/joke**: Uses Beego's `httplib` with a manually created span and context propagation for tracing the external call.
+- **/joke2**: Uses Go's standard `net/http` client with `otelhttp.NewTransport` for automatic HTTP client span creation. The handler is wrapped with the Otel handler wrapper to ensure correct context propagation.
+
+### Example Endpoints
+
+- **GET /joke**
+  - Returns a random joke (external API call traced via manual span)
+  - Example:
+    ```sh
+    curl http://localhost:8080/joke
+    # { "joke": "Joke: ...\n\n..." }
+    ```
+- **GET /joke2**
+  - Returns a random joke (external API call traced via otelhttp)
+  - Example:
+    ```sh
+    curl http://localhost:8080/joke2
+    # { "joke": "Joke: ...\n\n..." }
+    ```
+
+### Tracing Details
+
+- Both endpoints produce a parent HTTP server span and a child span for the outgoing HTTP request.
+- **Correct context propagation is essential**: Always ensure outgoing HTTP calls are made within the Otel handler wrapper so the context includes the parent span.
+- This pattern ensures robust, production-grade distributed tracing for all HTTP, DB, and Redis operations in your Beego app.
+
 ## Exporting Telemetry Data
 
 The app uses the OTLP HTTP exporter by default. You can export traces to Last9, Jaeger, or any OpenTelemetry-compatible backend. Set the following environment variables:
@@ -83,6 +113,7 @@ go build -o beegoapp && ./beegoapp
 - PUT `/users/:id` - Update a user
 - DELETE `/users/:id` - Delete a user
 - GET `/joke` - Get a random joke using external API
+- GET `/joke2` - Get a random joke using standard net/http with otelhttp
 
 5. View traces in your configured backend (e.g., Last9 dashboard).
 
