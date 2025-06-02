@@ -28,9 +28,6 @@ func main() {
 		}
 	}()
 
-	// Add Beego Otel middleware as a filter
-	web.InsertFilter("/*", web.BeforeRouter, last9.BeegoOtelMiddleware("beego-app"))
-
 	// Initialize Redis client
 	redisClient := initRedis()
 
@@ -90,7 +87,7 @@ type JokeController struct {
 }
 
 func (c *JokeController) GetJoke() {
-	getRandomJokeBeego(&c.Controller)
+	last9.WrapBeegoHandler("beego-app", getRandomJokeBeego)(&c.Controller)
 }
 
 // Adapted joke handler for Beego
