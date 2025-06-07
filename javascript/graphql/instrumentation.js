@@ -4,10 +4,9 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { diag, DiagConsoleLogger, DiagLogLevel, context as otContext, trace } from '@opentelemetry/api';
-import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
 
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG); // Change to DEBUG for troubleshooting
+// import { diag, DiagConsoleLogger, DiagLogLevel, context as otContext, trace } from '@opentelemetry/api';
+// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG); // Change to DEBUG for troubleshooting
 
 const providerConfig = {
   resource: resourceFromAttributes({
@@ -29,17 +28,9 @@ registerInstrumentations({
     getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': { enabled: false },
     }),
-    new GraphQLInstrumentation({
-      renameRootSpan: (operation) => {
-        const type = operation.operation;                    // "query" or "mutation"
-        const name = operation.operationName || 'anonymous'; // operationName from request
-        return `GraphQL ${type.toUpperCase()} ${name}`;
-      },
-    })
   ],
 });
 
-// Simple logging utility
 const logger = {
   info: (message) => console.log(`[OpenTelemetry] ${message}`),
   error: (message, error) => console.error(`[OpenTelemetry Error] ${message}`, error || '')

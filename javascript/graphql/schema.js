@@ -20,12 +20,22 @@ const books = [
   { title: 'City of Glass', author: 'Paul Auster' },
 ];
 
+function maybeThrowRandomError() {
+  if (Math.random() < 0.3) {
+    throw new Error('Random demo error!');
+  }
+}
+
 export const resolvers = {
   Query: {
-    books: () => books,
+    books: () => {
+      maybeThrowRandomError();
+      return books;
+    },
   },
   Mutation: {
     addBook: (_, { title, author }) => {
+      maybeThrowRandomError();
       const book = { title, author };
       books.push(book);
       return book;
