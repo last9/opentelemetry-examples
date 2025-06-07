@@ -8,19 +8,17 @@ import { context, trace } from '@opentelemetry/api';
 const app = express();
 app.use(bodyParser.json());
 
-// No Express middleware for OpenTelemetry span enrichment here
-
 const server = new ApolloServer({
   typeDefs,
   resolvers,
-  context: ({ req }) => {
-    const opName = req.body?.operationName;
+  // Extract error status code and message into the span.
+  formatError: (err) => {
     const span = trace.getSpan(context.active());
-    if (span && opName) {
-      span.setAttribute('graphql.operation.name', opName);
-      span.updateName(`POST /graphql (${opName})`); // Optionally update the span name
+    if (span) {
+      span.setStatus({ code: 2, message: err.message }); // 2 = ERROR
+      span.recordException(err);
     }
-    return {};
+    return err;
   }
 });
 
