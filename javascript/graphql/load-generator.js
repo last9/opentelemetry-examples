@@ -8,6 +8,7 @@ import fetch from 'node-fetch';
 const GRAPHQL_URL = process.env.GRAPHQL_URL || 'http://localhost:4000/graphql';
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5', 10);
 const REQUESTS_PER_WORKER = parseInt(process.env.REQUESTS_PER_WORKER || '20', 10);
+const INFINITE = process.env.INFINITE === 'true';
 
 const booksQuery = {
   query: `query { books { title author } }`,
@@ -51,12 +52,19 @@ async function worker(workerId) {
 }
 
 async function main() {
-  const workers = [];
-  for (let i = 0; i < CONCURRENCY; i++) {
-    workers.push(worker(i + 1));
+  do {
+    const workers = [];
+    for (let i = 0; i < CONCURRENCY; i++) {
+      workers.push(worker(i + 1));
+    }
+    await Promise.all(workers);
+    if (!INFINITE) {
+      console.log('Load generation complete.');
+    }
+  } while (INFINITE);
+  if (INFINITE) {
+    console.log('Infinite load generation stopped (process exit or signal).');
   }
-  await Promise.all(workers);
-  console.log('Load generation complete.');
 }
 
 main(); 

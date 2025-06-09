@@ -3,9 +3,9 @@
 This example demonstrates how to instrument an Apollo GraphQL server (Node.js) with OpenTelemetry, ensuring that HTTP spans are named after the actual GraphQL operation (query/mutation name) rather than the generic endpoint.
 
 ## Features
+
 - Apollo Server with Express
 - OpenTelemetry tracing for HTTP, Express, and GraphQL
-- Custom HTTP span names based on GraphQL operation name
 - Docker support for easy deployment
 - Load generator script for stress testing the API
 
@@ -17,6 +17,38 @@ npm start
 ```
 
 The server will be available at http://localhost:4000/graphql
+
+**OpenTelemetry package versions used in this example:**
+
+- @opentelemetry/api: 1.9.0
+- @opentelemetry/auto-instrumentations-node: 0.59.0
+- @opentelemetry/exporter-trace-otlp-grpc: 0.201.1
+- @opentelemetry/exporter-trace-otlp-http: 0.201.1
+- @opentelemetry/instrumentation: 0.201.1
+- @opentelemetry/resources: 2.0.1
+- @opentelemetry/sdk-node: 0.201.1
+- @opentelemetry/sdk-trace-base: 2.0.1
+- @opentelemetry/sdk-trace-node: 2.0.1
+- @opentelemetry/semantic-conventions: 1.34.0
+- @opentelemetry/instrumentation-express: 0.45.0
+- @opentelemetry/instrumentation-graphql: 0.45.0
+- @opentelemetry/instrumentation-http: 0.45.0
+
+**To install these exact OpenTelemetry dependencies:**
+
+```bash
+npm install \
+  @opentelemetry/api@1.9.0 \
+  @opentelemetry/auto-instrumentations-node@0.59.0 \
+  @opentelemetry/exporter-trace-otlp-grpc@0.201.1 \
+  @opentelemetry/exporter-trace-otlp-http@0.201.1 \
+  @opentelemetry/instrumentation@0.201.1 \
+  @opentelemetry/resources@2.0.1 \
+  @opentelemetry/sdk-node@0.201.1 \
+  @opentelemetry/sdk-trace-base@2.0.1 \
+  @opentelemetry/sdk-trace-node@2.0.1 \
+  @opentelemetry/semantic-conventions@1.34.0
+```
 
 ## Running with Docker
 
