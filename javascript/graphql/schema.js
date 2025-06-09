@@ -1,5 +1,8 @@
 import { gql } from 'apollo-server-express';
-import { PubSub } from 'apollo-server-express';
+import pkg from 'apollo-server-express';
+import { context as otContext, trace } from '@opentelemetry/api';
+import { PubSub } from 'graphql-subscriptions';
+const { PubSub: ApolloPubSub } = pkg;
 
 export const typeDefs = gql`
   type Book {
@@ -36,7 +39,12 @@ const BOOK_ADDED = 'BOOK_ADDED';
 
 export const resolvers = {
   Query: {
-    books: () => {
+    books: (parent, args, ctx) => {
+      const span = trace.getSpan(otContext.active());
+      if (span) {
+        span.setAttribute('graphql.operation.type', ctx.operationType);
+        span.setAttribute('graphql.operation.name', ctx.operationName);
+      }
       maybeThrowRandomError('before books logic');
       const result = books;
       maybeThrowRandomError('after books logic');
@@ -44,7 +52,12 @@ export const resolvers = {
     },
   },
   Mutation: {
-    addBook: async (_, { title, author }) => {
+    addBook: async (parent, { title, author }, ctx) => {
+      const span = trace.getSpan(otContext.active());
+      if (span) {
+        span.setAttribute('graphql.operation.type', ctx.operationType);
+        span.setAttribute('graphql.operation.name', ctx.operationName);
+      }
       maybeThrowRandomError('before addBook logic');
       const book = { title, author };
       books.push(book);
@@ -55,7 +68,12 @@ export const resolvers = {
   },
   Subscription: {
     bookAdded: {
-      subscribe: async function* () {
+      subscribe: async function* (parent, args, ctx) {
+        const span = trace.getSpan(otContext.active());
+        if (span) {
+          span.setAttribute('graphql.operation.type', ctx.operationType);
+          span.setAttribute('graphql.operation.name', ctx.operationName);
+        }
         maybeThrowRandomError('before subscribe');
         const asyncIterator = pubsub.asyncIterator(BOOK_ADDED);
         maybeThrowRandomError('after subscribe');
