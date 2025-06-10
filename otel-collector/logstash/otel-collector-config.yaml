@@ -1,0 +1,21 @@
+receivers:
+  tcplog/logstash:
+    listen_address: "0.0.0.0:2255"
+    resource:
+      service.name: "<your-service-name>"
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/last9:
+    endpoint: "<your-last9-otlp-endpoint>"
+    headers:
+      Authorization: "<your-last9-otlp-authorization-header>"
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    logs:
+      receivers: [tcplog/logstash]
+      processors: []
+      exporters: [otlp/last9] 

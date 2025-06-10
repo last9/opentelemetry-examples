@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.2
+    platform: linux/arm64
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "2255:2255" # Expose tcplog receiver port 
