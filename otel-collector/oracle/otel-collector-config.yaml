@@ -1,0 +1,55 @@
+receivers:
+  oracledb:
+    endpoint: "oracledb:1521"
+    service: "XEPDB1"
+    username: "last9"
+    password: "last9"
+    collection_interval: 60s
+    metrics:
+      # Full list of metrics: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/oracledbreceiver/documentation.md
+      oracledb.consistent_gets:
+        enabled: true
+      oracledb.db_block_gets:
+        enabled: true
+      oracledb.ddl_statements_parallelized:
+        enabled: true
+      oracledb.dml_statements_parallelized:
+        enabled: true
+      oracledb.parallel_operations_downgraded_1_to_25_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_25_to_50_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_50_to_75_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_75_to_99_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_to_serial:
+        enabled: true
+      oracledb.parallel_operations_not_downgraded:
+        enabled: true
+      oracledb.physical_read_io_requests:
+        enabled: true
+      oracledb.physical_reads_direct:
+        enabled: true
+      oracledb.physical_write_io_requests:
+        enabled: true
+      oracledb.physical_writes:
+        enabled: true
+      oracledb.physical_writes_direct:
+        enabled: true
+      oracledb.queries_parallelized:
+        enabled: true
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/last9:
+    endpoint: "<your-last9-otlp-endpoint>"
+    headers:
+      Authorization: "<your-last9-otlp-authorization-header>"
+
+service:
+  pipelines:
+    metrics:
+      receivers: [oracledb]
+      exporters: [otlp/last9] 
