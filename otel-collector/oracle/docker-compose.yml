@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  oracledb:
+    build: .
+    container_name: oracledb
+    ports:
+      - "1521:1521"
+      - "5500:5500"
+    environment:
+      ORACLE_PASSWORD: oracle
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'SELECT 1 FROM DUAL;' | sqlplus -S last9/last9@localhost:1521/XEPDB1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0
+    container_name: otel-collector
+    depends_on:
+      - oracledb
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    command: ["--config=/etc/otel/config.yaml"]
+    ports:
+      - "8889:8889" # Prometheus scrape endpoint 

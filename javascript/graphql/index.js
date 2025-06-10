@@ -11,6 +11,20 @@ app.use(bodyParser.json());
 const server = new ApolloServer({
   typeDefs,
   resolvers,
+  context: ({ req }) => {
+    const { operationName, query } = req.body || {};
+    let operationType;
+    if (query) {
+      const trimmed = query.trim();
+      if (trimmed.startsWith('mutation')) operationType = 'mutation';
+      else if (trimmed.startsWith('subscription')) operationType = 'subscription';
+      else operationType = 'query';
+    }
+    return {
+      operationName,
+      operationType,
+    };
+  },
   // Extract error status code and message into the span.
   formatError: (err) => {
     const span = trace.getSpan(context.active());
