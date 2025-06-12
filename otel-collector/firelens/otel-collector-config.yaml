@@ -1,0 +1,19 @@
+receivers:
+  fluentforward:
+    endpoint: 0.0.0.0:24224
+    # For Unix socket, use:
+    # endpoint: unix:///var/run/fluent.sock
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/last9:
+    endpoint: "<your-last9-otel-endpoint>"
+    headers:
+      Authorization: "<your-last9-otel-authorization-header>"
+
+service:
+  pipelines:
+    logs:
+      receivers: [fluentforward]
+      exporters: [otlp/last9] 
