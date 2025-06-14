@@ -16,6 +16,10 @@ machine.
 - @opentelemetry/sdk-trace-base: 2.0.1
 - @opentelemetry/sdk-trace-node: 2.0.1
 - @opentelemetry/semantic-conventions: 1.34.0
+- @opentelemetry/instrumentation-runtime-node: 0.41.0
+- @opentelemetry/sdk-metrics: 0.201.1
+- @opentelemetry/exporter-metrics-otlp-http: 0.201.1
+- @opentelemetry/exporter-metrics-otlp-grpc: 0.201.1 (optional)
 
 **To install these exact OpenTelemetry dependencies:**
 
@@ -30,7 +34,12 @@ npm install \
   @opentelemetry/sdk-node@0.201.1 \
   @opentelemetry/sdk-trace-base@2.0.1 \
   @opentelemetry/sdk-trace-node@2.0.1 \
-  @opentelemetry/semantic-conventions@1.34.0
+  @opentelemetry/semantic-conventions@1.34.0 \
+  @opentelemetry/instrumentation-runtime-node@0.41.0 \
+  @opentelemetry/sdk-metrics@0.201.1 \
+  @opentelemetry/exporter-metrics-otlp-http@0.201.1
+# Optional, for OTLP metrics over gRPC:
+# npm install @opentelemetry/exporter-metrics-otlp-grpc@0.201.1
 ```
 
 1. To clone this example run the following command:
