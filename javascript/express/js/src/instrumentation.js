@@ -27,13 +27,13 @@ const sdk = new NodeSDK({
   instrumentations: [
     getNodeAutoInstrumentations({}),
     new RuntimeNodeInstrumentation({
-      monitoringPrecision: 5000,
+      // monitoringPrecision: 5000,
     }),
   ],
   metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter(),
+    // exporter: new OTLPMetricExporter(),
     // For local debugging
-    // exporter: new ConsoleMetricExporter()
+    exporter: new ConsoleMetricExporter(),
   }),
 })
 

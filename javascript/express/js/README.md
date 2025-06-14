@@ -17,7 +17,7 @@ machine.
 - @opentelemetry/sdk-trace-node: 2.0.1
 - @opentelemetry/semantic-conventions: 1.34.0
 - @opentelemetry/instrumentation-runtime-node: 0.16.0 (latest, matches package-lock.json)
-- @opentelemetry/sdk-metrics: 0.201.1
+- @opentelemetry/sdk-metrics: 2.0.1
 - @opentelemetry/exporter-metrics-otlp-http: 0.201.1
 - @opentelemetry/exporter-metrics-otlp-grpc: 0.201.1 (optional)
 
@@ -36,7 +36,7 @@ npm install \
   @opentelemetry/sdk-trace-node@2.0.1 \
   @opentelemetry/semantic-conventions@1.34.0 \
   @opentelemetry/instrumentation-runtime-node@0.16.0 \
-  @opentelemetry/sdk-metrics@0.201.1 \
+  @opentelemetry/sdk-metrics@2.0.1 \
   @opentelemetry/exporter-metrics-otlp-http@0.201.1
 # Optional, for OTLP metrics over gRPC:
 # npm install @opentelemetry/exporter-metrics-otlp-grpc@0.201.1
