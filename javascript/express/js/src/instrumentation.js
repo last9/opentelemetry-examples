@@ -8,8 +8,8 @@ const { NodeSDK } = require('@opentelemetry/sdk-node');
 
 // For troubleshooting, set the log level to DiagLogLevel.DEBUG
 // Uncomment the following lines to enable OpenTelemetry debug logging:
-const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+// const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
+// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 
 const logger = {
   info: (message) => console.log(`[OpenTelemetry] ${message}`),
