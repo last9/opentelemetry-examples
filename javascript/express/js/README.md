@@ -1,45 +1,45 @@
 # Auto instrumenting Express application with OpenTelemetry
 
 This example demonstrates how to auto-instrument an Express application with
-OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your
+OpenTelemetry. Make sure you have **Node.js v16.20.2** or higher installed on your
 machine.
 
-**OpenTelemetry package versions used in this example:**
+**OpenTelemetry package versions used in this example (Node.js 16.20.2 compatible):**
 
 - @opentelemetry/api: 1.9.0
-- @opentelemetry/auto-instrumentations-node: 0.59.0
-- @opentelemetry/exporter-trace-otlp-grpc: 0.201.1
-- @opentelemetry/exporter-trace-otlp-http: 0.201.1
-- @opentelemetry/instrumentation: 0.201.1
-- @opentelemetry/resources: 2.0.1
-- @opentelemetry/sdk-node: 0.201.1
-- @opentelemetry/sdk-trace-base: 2.0.1
-- @opentelemetry/sdk-trace-node: 2.0.1
-- @opentelemetry/semantic-conventions: 1.34.0
-- @opentelemetry/instrumentation-runtime-node: 0.16.0 (latest, matches package-lock.json)
-- @opentelemetry/sdk-metrics: 2.0.1
-- @opentelemetry/exporter-metrics-otlp-http: 0.201.1
-- @opentelemetry/exporter-metrics-otlp-grpc: 0.201.1 (optional)
+- @opentelemetry/auto-instrumentations-node: 0.56.0
+- @opentelemetry/exporter-trace-otlp-grpc: 0.56.0
+- @opentelemetry/exporter-trace-otlp-http: 0.56.0
+- @opentelemetry/instrumentation: 0.56.0
+- @opentelemetry/resources: 1.30.1
+- @opentelemetry/sdk-node: 0.57.2
+- @opentelemetry/sdk-trace-base: 1.29.0
+- @opentelemetry/sdk-trace-node: 1.29.0
+- @opentelemetry/semantic-conventions: 1.29.0
+- @opentelemetry/instrumentation-runtime-node: 0.8.0
+- @opentelemetry/sdk-metrics: 1.30.1
+- @opentelemetry/exporter-metrics-otlp-http: 0.56.0
+- @opentelemetry/exporter-metrics-otlp-grpc: 0.56.0 (optional)
 
 **To install these exact OpenTelemetry dependencies:**
 
 ```bash
 npm install \
   @opentelemetry/api@1.9.0 \
-  @opentelemetry/auto-instrumentations-node@0.59.0 \
-  @opentelemetry/exporter-trace-otlp-grpc@0.201.1 \
-  @opentelemetry/exporter-trace-otlp-http@0.201.1 \
-  @opentelemetry/instrumentation@0.201.1 \
-  @opentelemetry/resources@2.0.1 \
-  @opentelemetry/sdk-node@0.201.1 \
-  @opentelemetry/sdk-trace-base@2.0.1 \
-  @opentelemetry/sdk-trace-node@2.0.1 \
-  @opentelemetry/semantic-conventions@1.34.0 \
-  @opentelemetry/instrumentation-runtime-node@0.16.0 \
-  @opentelemetry/sdk-metrics@2.0.1 \
-  @opentelemetry/exporter-metrics-otlp-http@0.201.1
+  @opentelemetry/auto-instrumentations-node@0.56.0 \
+  @opentelemetry/exporter-trace-otlp-grpc@0.56.0 \
+  @opentelemetry/exporter-trace-otlp-http@0.56.0 \
+  @opentelemetry/instrumentation@0.56.0 \
+  @opentelemetry/resources@1.30.1 \
+  @opentelemetry/sdk-node@0.57.2 \
+  @opentelemetry/sdk-trace-base@1.29.0 \
+  @opentelemetry/sdk-trace-node@1.29.0 \
+  @opentelemetry/semantic-conventions@1.29.0 \
+  @opentelemetry/instrumentation-runtime-node@0.8.0 \
+  @opentelemetry/sdk-metrics@1.30.1 \
+  @opentelemetry/exporter-metrics-otlp-http@0.56.0
 # Optional, for OTLP metrics over gRPC:
-# npm install @opentelemetry/exporter-metrics-otlp-grpc@0.201.1
+# npm install @opentelemetry/exporter-metrics-otlp-grpc@0.56.0
 ```
 
 1. To clone this example run the following command:
