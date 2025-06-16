@@ -1,6 +1,6 @@
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
-const { resourceFromAttributes } = require('@opentelemetry/resources');
+const { Resource } = require('@opentelemetry/resources');
 const { RuntimeNodeInstrumentation } = require('@opentelemetry/instrumentation-runtime-node');
 const { PeriodicExportingMetricReader, ConsoleMetricExporter } = require('@opentelemetry/sdk-metrics');
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
@@ -19,7 +19,7 @@ const logger = {
 logger.info(`Initializing OpenTelemetry for service: ${process.env.OTEL_SERVICE_NAME}`);
 
 const sdk = new NodeSDK({
-  resource: resourceFromAttributes({
+  resource: new Resource({
     'service.name': process.env.OTEL_SERVICE_NAME,
     'deployment.environment': process.env.NODE_ENV,
   }),
@@ -27,13 +27,13 @@ const sdk = new NodeSDK({
   instrumentations: [
     getNodeAutoInstrumentations({}),
     new RuntimeNodeInstrumentation({
-      // monitoringPrecision: 5000,
+      monitoringPrecision: 5000,
     }),
   ],
   metricReader: new PeriodicExportingMetricReader({
-    // exporter: new OTLPMetricExporter(),
+    exporter: new OTLPMetricExporter(),
     // For local debugging
-    exporter: new ConsoleMetricExporter(),
+    //exporter: new ConsoleMetricExporter(),
   }),
 })
 
