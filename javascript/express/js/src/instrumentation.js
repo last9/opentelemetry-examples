@@ -1,10 +1,14 @@
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
-const { Resource } = require('@opentelemetry/resources');
+const { Resource, envDetector, processDetector, hostDetector } = require('@opentelemetry/resources');
 const { RuntimeNodeInstrumentation } = require('@opentelemetry/instrumentation-runtime-node');
 const { PeriodicExportingMetricReader, ConsoleMetricExporter } = require('@opentelemetry/sdk-metrics');
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
 const { NodeSDK } = require('@opentelemetry/sdk-node');
+// const { containerDetector } = require('@opentelemetry/resource-detector-container');
+// const { awsEc2Detector, awsEcsDetector, awsLambdaDetector } = require('@opentelemetry/resource-detector-aws');
+// const { gcpDetector } = require('@opentelemetry/resource-detector-gcp');
+// const { azureVmDetector } = require('@opentelemetry/resource-detector-azure');
 
 // For troubleshooting, set the log level to DiagLogLevel.DEBUG
 // Uncomment the following lines to enable OpenTelemetry debug logging:
@@ -30,10 +34,21 @@ const sdk = new NodeSDK({
       monitoringPrecision: 5000,
     }),
   ],
+    resourceDetectors: [
+      // containerDetector,
+      // awsEc2Detector,
+      // awsEcsDetector,
+      // awsLambdaDetector,
+      // gcpDetector,
+      // azureVmDetector,
+      envDetector,
+      processDetector,
+      hostDetector
+    ],
   metricReader: new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter(),
     // For local debugging
-    //exporter: new ConsoleMetricExporter(),
+    // exporter: new ConsoleMetricExporter(),
   }),
 })
 

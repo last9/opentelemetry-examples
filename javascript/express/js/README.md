@@ -1,12 +1,10 @@
 # Auto instrumenting Express application with OpenTelemetry
 
 This example demonstrates how to auto-instrument an Express application with
-OpenTelemetry. Make sure you have **Node.js v16.20.2** or higher installed on your
-machine.
+OpenTelemetry. This example is tested with **Node.js v14** and **Node.js v16**.
 
-**OpenTelemetry package versions used in this example (Node.js 16.20.2 compatible):**
+**OpenTelemetry package versions used in this example:**
 
-- @opentelemetry/api: 1.9.0
 - @opentelemetry/auto-instrumentations-node: 0.56.0
 - @opentelemetry/exporter-trace-otlp-grpc: 0.56.0
 - @opentelemetry/exporter-trace-otlp-http: 0.56.0
@@ -21,25 +19,30 @@ machine.
 - @opentelemetry/exporter-metrics-otlp-http: 0.56.0
 - @opentelemetry/exporter-metrics-otlp-grpc: 0.56.0 (optional)
 
+**Resource detector packages (optional):**
+- @opentelemetry/resource-detector-container@0.6.1
+- @opentelemetry/resource-detector-aws@1.12.0 
+- @opentelemetry/resource-detector-gcp@0.33.1
+- @opentelemetry/resource-detector-azure@0.6.1
+
 **To install these exact OpenTelemetry dependencies:**
 
 ```bash
 npm install \
-  @opentelemetry/api@1.9.0 \
-  @opentelemetry/auto-instrumentations-node@0.56.0 \
-  @opentelemetry/exporter-trace-otlp-grpc@0.56.0 \
-  @opentelemetry/exporter-trace-otlp-http@0.56.0 \
-  @opentelemetry/instrumentation@0.56.0 \
-  @opentelemetry/resources@1.30.1 \
-  @opentelemetry/sdk-node@0.57.2 \
-  @opentelemetry/sdk-trace-base@1.29.0 \
-  @opentelemetry/sdk-trace-node@1.29.0 \
-  @opentelemetry/semantic-conventions@1.29.0 \
-  @opentelemetry/instrumentation-runtime-node@0.8.0 \
-  @opentelemetry/sdk-metrics@1.30.1 \
-  @opentelemetry/exporter-metrics-otlp-http@0.56.0
-# Optional, for OTLP metrics over gRPC:
-# npm install @opentelemetry/exporter-metrics-otlp-grpc@0.56.0
+   @opentelemetry/auto-instrumentations-node@0.56.0 \
+   @opentelemetry/exporter-trace-otlp-grpc@0.56.0 \
+   @opentelemetry/exporter-trace-otlp-http@0.56.0 \
+   @opentelemetry/instrumentation@0.56.0 \
+   @opentelemetry/resources@1.30.1 \
+   @opentelemetry/sdk-node@0.57.2 \
+   @opentelemetry/sdk-trace-base@1.29.0 \
+   @opentelemetry/sdk-trace-node@1.29.0 \
+   @opentelemetry/semantic-conventions@1.29.0 \
+   @opentelemetry/instrumentation-runtime-node@0.8.0 \
+   @opentelemetry/sdk-metrics@1.30.1 \
+   @opentelemetry/exporter-metrics-otlp-http@0.56.0
+   # Optional, for OTLP metrics over gRPC:
+   # npm install @opentelemetry/exporter-metrics-otlp-grpc@0.56.0
 ```
 
 1. To clone this example run the following command:
@@ -94,3 +97,30 @@ endpoints are:
    dashboard to see the traces in action.
 
 ![Traces](./traces.png)
+
+## Optional: Using OpenTelemetry Resource Detectors
+
+OpenTelemetry resource detectors can automatically detect environment metadata (such as AWS, GCP, Azure, or container info) and enrich your telemetry data. These are **optional** and can be enabled as needed.
+
+### Example usage in `src/instrumentation.js`:
+
+```js
+// const { ContainerResourceDetector } = require('@opentelemetry/resource-detector-container');
+// const { AwsEc2ResourceDetector, AwsEcsResourceDetector, AwsLambdaResourceDetector } = require('@opentelemetry/resource-detector-aws');
+// const { GcpResourceDetector } = require('@opentelemetry/resource-detector-gcp');
+// const { AzureVmResourceDetector } = require('@opentelemetry/resource-detector-azure');
+
+// const sdk = new NodeSDK({
+//   resourceDetectors: [
+//     new ContainerResourceDetector(),
+//     new AwsEc2ResourceDetector(),
+//     new AwsEcsResourceDetector(),
+//     new AwsLambdaResourceDetector(),
+//     new GcpResourceDetector(),
+//     new AzureVmResourceDetector(),
+//   ],
+//   ...
+// });
+```
+
+See the [OpenTelemetry JS Contrib Resource Detectors documentation](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/detectors/node) for more details.
