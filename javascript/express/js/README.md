@@ -1,8 +1,7 @@
 # Auto instrumenting Express application with OpenTelemetry
 
 This example demonstrates how to auto-instrument an Express application with
-OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your
-machine.
+OpenTelemetry. This example is tested with **Node.js v18**, **Node.js v20**, **Node.jsv22**.
 
 **OpenTelemetry package versions used in this example:**
 
@@ -16,10 +15,16 @@ machine.
 - @opentelemetry/sdk-trace-base: 2.0.1
 - @opentelemetry/sdk-trace-node: 2.0.1
 - @opentelemetry/semantic-conventions: 1.34.0
-- @opentelemetry/instrumentation-runtime-node: 0.16.0 (latest, matches package-lock.json)
+- @opentelemetry/instrumentation-runtime-node: 0.16.0
 - @opentelemetry/sdk-metrics: 2.0.1
 - @opentelemetry/exporter-metrics-otlp-http: 0.201.1
 - @opentelemetry/exporter-metrics-otlp-grpc: 0.201.1 (optional)
+
+**Resource detector packages (optional):**
+- @opentelemetry/resource-detector-container: 0.7.2
+- @opentelemetry/resource-detector-aws: 2.2.0
+- @opentelemetry/resource-detector-gcp: 0.36.0
+- @opentelemetry/resource-detector-azure: 0.9.0
 
 **To install these exact OpenTelemetry dependencies:**
 
@@ -94,3 +99,30 @@ endpoints are:
    dashboard to see the traces in action.
 
 ![Traces](./traces.png)
+
+## Optional: Using OpenTelemetry Resource Detectors
+
+OpenTelemetry resource detectors can automatically detect environment metadata (such as AWS, GCP, Azure, or container info) and enrich your telemetry data. These are **optional** and can be enabled as needed.
+
+### Example usage in `src/instrumentation.js`:
+
+```js
+// const { ContainerResourceDetector } = require('@opentelemetry/resource-detector-container');
+// const { AwsEc2ResourceDetector, AwsEcsResourceDetector, AwsLambdaResourceDetector } = require('@opentelemetry/resource-detector-aws');
+// const { GcpResourceDetector } = require('@opentelemetry/resource-detector-gcp');
+// const { AzureVmResourceDetector } = require('@opentelemetry/resource-detector-azure');
+
+// const sdk = new NodeSDK({
+//   resourceDetectors: [
+//     new ContainerResourceDetector(),
+//     new AwsEc2ResourceDetector(),
+//     new AwsEcsResourceDetector(),
+//     new AwsLambdaResourceDetector(),
+//     new GcpResourceDetector(),
+//     new AzureVmResourceDetector(),
+//   ],
+//   ...
+// });
+```
+
+See the [OpenTelemetry JS Contrib Resource Detectors documentation](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/detectors/node) for more details.
