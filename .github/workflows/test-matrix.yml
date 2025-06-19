@@ -1,0 +1,69 @@
+name: Test Matrix and Update README
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install tox
+      run: |
+        python -m pip install --upgrade pip
+        pip install tox
+
+    - name: Run tox tests
+      run: |
+        cd ../..
+        tox
+
+    - name: Generate package matrix
+      run: |
+        cd ../..
+        python python/django/list_otel_packages.py > package_matrix.txt
+        cat package_matrix.txt
+
+    - name: Update README with matrix
+      run: |
+        cd python/django
+        python update_readme_matrix.py ../../package_matrix.txt
+
+    - name: Check for changes
+      id: check_changes
+      run: |
+        if git diff --quiet README.md; then
+          echo "changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "changes=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Commit and push changes
+      if: steps.check_changes.outputs.changes == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md
+        git commit -m "Update OpenTelemetry package matrix [skip ci]"
+        git push
+
+    - name: Clean up
+      run: |
+        rm -f package_matrix.txt 
