@@ -26,25 +26,48 @@ jobs:
 
       - name: Run Django tests and capture packages
         run: |
+          # Clean any previous package data
+          rm -f PACKAGES.txt
+          
           # Test compatible Django versions per Python
           # Python 3.8/3.9: Django 3.2, 4.2
           # Python 3.10/3.11: Django 3.2, 4.2, 5.0, 5.1
           
           tox -e py311-django32,py311-django42,py311-django50,py311-django51
           
-          # Capture package info during tox run
+          # Convert captured package data to markdown table
           echo "# OpenTelemetry Package Matrix" > PACKAGE_MATRIX.md
           echo "" >> PACKAGE_MATRIX.md
           echo "| Environment | OpenTelemetry Packages |" >> PACKAGE_MATRIX.md
           echo "|-------------|------------------------|" >> PACKAGE_MATRIX.md
           
-          # Get packages from one Django environment to show what's installed
-          cd python/django/mysite
-          if [ -d ".tox/py311-django51" ]; then
-            packages=$(.tox/py311-django51/bin/pip list --format=freeze | grep "^opentelemetry" | tr '\n' ', ' | sed 's/,$//')
-            echo "| Python 3.11 + Django 5.1 | $packages |" >> ../../../PACKAGE_MATRIX.md
+          if [ -f PACKAGES.txt ]; then
+            # Process the captured package data
+            current_env=""
+            packages=""
+            while IFS= read -r line; do
+              if [[ $line == "=== "* ]]; then
+                # Save previous environment if exists
+                if [[ -n "$current_env" && -n "$packages" ]]; then
+                  echo "| $current_env | $packages |" >> PACKAGE_MATRIX.md
+                fi
+                # Start new environment
+                current_env=$(echo "$line" | sed 's/=== //g' | sed 's/ ===//g')
+                packages=""
+              elif [[ $line == opentelemetry* ]]; then
+                if [[ -n "$packages" ]]; then
+                  packages="$packages, $line"
+                else
+                  packages="$line"
+                fi
+              fi
+            done < PACKAGES.txt
+            
+            # Don't forget the last environment
+            if [[ -n "$current_env" && -n "$packages" ]]; then
+              echo "| $current_env | $packages |" >> PACKAGE_MATRIX.md
+            fi
           fi
-          cd ../../..
 
       - name: Update README with package matrix
         run: |
