@@ -85,7 +85,7 @@ python manage.py runserver
 ## Testing with tox
 
 A `tox.ini` configuration at the repository root defines a matrix for Python 3.8
-through 3.11 and Django 3.2, 4.1, 5.0 and 5.1. Run all environments with:
+through 3.11 and Django 3.2, 4.2, 5.0 and 5.1. Run all environments with:
 
 ```bash
 tox
@@ -95,6 +95,19 @@ Each environment installs `Django==${DJANGO}` and only the OpenTelemetry
 packages listed in `mysite/requirements.txt`, then bootstraps instrumentation
 and executes `python manage.py check`. The detailed output for every run is
 available under `.tox/<env>/log/`.
+
+> **Note:** This matrix is for testing OpenTelemetry compatibility only. Django/Python compatibility is determined by the Django project. See below for the official compatibility table.
+
+### Official Django/Python Compatibility
+
+| Django Version | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 | Python 3.12 |
+|---------------|:----------:|:----------:|:-----------:|:-----------:|:-----------:|
+| 3.2 (LTS)     |     ✅     |     ✅     |     ✅      |     ❌      |     ❌      |
+| 4.2 (LTS)     |     ✅     |     ✅     |     ✅      |     ✅      |     ❌      |
+| 5.0           |     ✅     |     ✅     |     ✅      |     ✅      |     ✅      |
+| 5.1           |     ✅     |     ✅     |     ✅      |     ✅      |     ✅      |
+
+_Source: [Django/Python compatibility](https://docs.djangoproject.com/en/stable/faq/install/#what-python-version-can-i-use-with-django)_
 
 ### Collecting OTEL package lists
 
@@ -116,19 +129,19 @@ This matrix shows the OpenTelemetry packages installed in each test environment:
 | Environment | OTEL Packages |
 |------------|--------------|
 | py38-django32 | opentelemetry-api, opentelemetry-sdk |
-| py38-django41 | opentelemetry-api, opentelemetry-sdk |
+| py38-django42 | opentelemetry-api, opentelemetry-sdk |
 | py38-django50 | opentelemetry-api, opentelemetry-sdk |
 | py38-django51 | opentelemetry-api, opentelemetry-sdk |
 | py39-django32 | opentelemetry-api, opentelemetry-sdk |
-| py39-django41 | opentelemetry-api, opentelemetry-sdk |
+| py39-django42 | opentelemetry-api, opentelemetry-sdk |
 | py39-django50 | opentelemetry-api, opentelemetry-sdk |
 | py39-django51 | opentelemetry-api, opentelemetry-sdk |
 | py310-django32 | opentelemetry-api, opentelemetry-sdk |
-| py310-django41 | opentelemetry-api, opentelemetry-sdk |
+| py310-django42 | opentelemetry-api, opentelemetry-sdk |
 | py310-django50 | opentelemetry-api, opentelemetry-sdk |
 | py310-django51 | opentelemetry-api, opentelemetry-sdk |
 | py311-django32 | opentelemetry-api, opentelemetry-sdk |
-| py311-django41 | opentelemetry-api, opentelemetry-sdk |
+| py311-django42 | opentelemetry-api, opentelemetry-sdk |
 | py311-django50 | opentelemetry-api, opentelemetry-sdk |
 | py311-django51 | opentelemetry-api, opentelemetry-sdk |
 ```
