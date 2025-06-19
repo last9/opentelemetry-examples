@@ -32,19 +32,16 @@ jobs:
 
     - name: Run tox tests
       run: |
-        cd ../..
         tox
 
     - name: Generate package matrix
       run: |
-        cd ../..
         python python/django/list_otel_packages.py > package_matrix.txt
         cat package_matrix.txt
 
     - name: Update README with matrix
       run: |
-        cd python/django
-        python update_readme_matrix.py ../../package_matrix.txt
+        python python/django/update_readme_matrix.py package_matrix.txt
 
     - name: Check for changes
       id: check_changes
