@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.11]
+        python-version: [3.8, 3.9, 3.10, 3.11, 3.12]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,29 +32,34 @@ jobs:
 
       - name: Run tox tests
         run: |
+          # Convert Python version format (3.8 -> 38, 3.10 -> 310)
+          py_ver=$(echo "${{ matrix.python-version }}" | sed 's/\.//')
+          
           if [[ "${{ matrix.python-version }}" == "3.8" || "${{ matrix.python-version }}" == "3.9" ]]; then
-            envs="py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42"
+            # Python 3.8/3.9: Only Django 3.2, 4.2 (Django 5.x requires Python 3.10+)
+            envs="py${py_ver}-django32,py${py_ver}-django42"
           else
-            envs="py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42,py${{ matrix.python-version }}-django50,py${{ matrix.python-version }}-django51"
+            # Python 3.10/3.11/3.12: Django 3.2, 4.2, 5.0, 5.1
+            envs="py${py_ver}-django32,py${py_ver}-django42,py${py_ver}-django50,py${py_ver}-django51"
           fi
           # Run tox tests
           tox -e $envs
           
           # Simple approach: manually create package matrix content
           mkdir -p package_data
-          echo "| Environment | OTEL Packages |" > package_data/py${{ matrix.python-version }}.txt
-          echo "|------------|--------------|" >> package_data/py${{ matrix.python-version }}.txt
+          echo "| Environment | OTEL Packages |" > package_data/py${py_ver}.txt
+          echo "|------------|--------------|" >> package_data/py${py_ver}.txt
           
           # Add sample data for now - this proves the pipeline works
           for env in $(echo $envs | tr ',' ' '); do
-            echo "| $env | opentelemetry-api==1.27.0, opentelemetry-sdk==1.27.0 |" >> package_data/py${{ matrix.python-version }}.txt
+            echo "| $env | opentelemetry-api==1.27.0, opentelemetry-sdk==1.27.0 |" >> package_data/py${py_ver}.txt
           done
 
       - name: Upload package data
         uses: actions/upload-artifact@v4
         with:
           name: package-data-py${{ matrix.python-version }}
-          path: package_data/py${{ matrix.python-version }}.txt
+          path: package_data/py$(echo "${{ matrix.python-version }}" | sed 's/\.//').txt
           if-no-files-found: ignore
 
   update-readme:
