@@ -33,16 +33,76 @@ jobs:
       - name: Run tox tests
         run: |
           if [[ "${{ matrix.python-version }}" == "3.8" || "${{ matrix.python-version }}" == "3.9" ]]; then
-            tox -e py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42
+            envs="py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42"
           else
-            tox -e py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42,py${{ matrix.python-version }}-django50,py${{ matrix.python-version }}-django51
+            envs="py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42,py${{ matrix.python-version }}-django50,py${{ matrix.python-version }}-django51"
           fi
+          tox -e $envs
+          
+          # Capture package versions for matrix generation
+          mkdir -p package_data
+          for env in $(echo $envs | tr ',' ' '); do
+            if [ -f "python/django/mysite/.tox/$env/bin/pip" ]; then
+              echo "=== $env ===" >> package_data/py${{ matrix.python-version }}.txt
+              python/django/mysite/.tox/$env/bin/pip list --format=freeze | grep "^opentelemetry" >> package_data/py${{ matrix.python-version }}.txt
+              echo "" >> package_data/py${{ matrix.python-version }}.txt
+            fi
+          done
+
+      - name: Upload package data
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-data-py${{ matrix.python-version }}
+          path: package_data/py${{ matrix.python-version }}.txt
+          if-no-files-found: ignore
+
+      - name: Download all package data
+        if: matrix.python-version == '3.11'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-data-py*
+          path: all_package_data
+          merge-multiple: true
 
       - name: Generate package matrix
         if: matrix.python-version == '3.11'
         run: |
-          python python/django/list_otel_packages.py > package_matrix.txt
-          cat package_matrix.txt
+          python3 -c "
+import os
+from pathlib import Path
+
+# Generate matrix from captured package data
+matrix_lines = ['| Environment | OTEL Packages |', '|------------|--------------|']
+
+for file_path in sorted(Path('all_package_data').glob('py*.txt')):
+    if file_path.stat().st_size > 0:
+        with open(file_path) as f:
+            content = f.read().strip()
+            if content:
+                lines = content.split('\n')
+                current_env = None
+                packages = []
+                
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith('=== ') and line.endswith(' ==='):
+                        if current_env and packages:
+                            matrix_lines.append(f'| {current_env} | {', '.join(packages)} |')
+                        current_env = line[4:-4]  # Remove === and ===
+                        packages = []
+                    elif line.startswith('opentelemetry') and '==' in line:
+                        packages.append(line)
+                
+                # Handle last environment
+                if current_env and packages:
+                    matrix_lines.append(f'| {current_env} | {', '.join(packages)} |')
+
+# Write matrix to file
+with open('package_matrix.txt', 'w') as f:
+    f.write('\n'.join(matrix_lines))
+
+print('\n'.join(matrix_lines))
+"
 
       - name: Show list_otel_packages.py contents
         if: matrix.python-version == '3.11'
