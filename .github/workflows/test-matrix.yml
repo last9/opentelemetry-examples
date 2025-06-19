@@ -67,42 +67,7 @@ jobs:
       - name: Generate package matrix
         if: matrix.python-version == '3.11'
         run: |
-          python3 -c "
-import os
-from pathlib import Path
-
-# Generate matrix from captured package data
-matrix_lines = ['| Environment | OTEL Packages |', '|------------|--------------|']
-
-for file_path in sorted(Path('all_package_data').glob('py*.txt')):
-    if file_path.stat().st_size > 0:
-        with open(file_path) as f:
-            content = f.read().strip()
-            if content:
-                lines = content.split('\n')
-                current_env = None
-                packages = []
-                
-                for line in lines:
-                    line = line.strip()
-                    if line.startswith('=== ') and line.endswith(' ==='):
-                        if current_env and packages:
-                            matrix_lines.append(f'| {current_env} | {\", \".join(packages)} |')
-                        current_env = line[4:-4]  # Remove === and ===
-                        packages = []
-                    elif line.startswith('opentelemetry') and '==' in line:
-                        packages.append(line)
-                
-                # Handle last environment
-                if current_env and packages:
-                    matrix_lines.append(f'| {current_env} | {\", \".join(packages)} |')
-
-# Write matrix to file
-with open('package_matrix.txt', 'w') as f:
-    f.write('\n'.join(matrix_lines))
-
-print('\n'.join(matrix_lines))
-"
+          python3 python/django/generate_matrix.py
 
       - name: Show list_otel_packages.py contents
         if: matrix.python-version == '3.11'
