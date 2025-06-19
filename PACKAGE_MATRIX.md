@@ -2,7 +2,7 @@
 
 This matrix shows OpenTelemetry packages tested in each environment:
 
-### py311-django32
+### Python 3.11 + Django 3.2
 
 - `opentelemetry-api` (1.27.0)
 - `opentelemetry-distro` (0.48b0)
@@ -66,7 +66,7 @@ This matrix shows OpenTelemetry packages tested in each environment:
 - `opentelemetry-semantic-conventions` (0.48b0)
 - `opentelemetry-util-http` (0.48b0)
 
-### py311-django42
+### Python 3.11 + Django 4.2
 
 - `opentelemetry-api` (1.27.0)
 - `opentelemetry-distro` (0.48b0)
@@ -130,7 +130,7 @@ This matrix shows OpenTelemetry packages tested in each environment:
 - `opentelemetry-semantic-conventions` (0.48b0)
 - `opentelemetry-util-http` (0.48b0)
 
-### py311-django50
+### Python 3.11 + Django 5.0
 
 - `opentelemetry-api` (1.27.0)
 - `opentelemetry-distro` (0.48b0)
@@ -194,7 +194,7 @@ This matrix shows OpenTelemetry packages tested in each environment:
 - `opentelemetry-semantic-conventions` (0.48b0)
 - `opentelemetry-util-http` (0.48b0)
 
-### py311-django51
+### Python 3.11 + Django 5.1
 
 - `opentelemetry-api` (1.27.0)
 - `opentelemetry-distro` (0.48b0)
