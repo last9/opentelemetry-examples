@@ -87,7 +87,7 @@ for file_path in sorted(Path('all_package_data').glob('py*.txt')):
                     line = line.strip()
                     if line.startswith('=== ') and line.endswith(' ==='):
                         if current_env and packages:
-                            matrix_lines.append(f'| {current_env} | {', '.join(packages)} |')
+                            matrix_lines.append(f'| {current_env} | {\", \".join(packages)} |')
                         current_env = line[4:-4]  # Remove === and ===
                         packages = []
                     elif line.startswith('opentelemetry') and '==' in line:
@@ -95,7 +95,7 @@ for file_path in sorted(Path('all_package_data').glob('py*.txt')):
                 
                 # Handle last environment
                 if current_env and packages:
-                    matrix_lines.append(f'| {current_env} | {', '.join(packages)} |')
+                    matrix_lines.append(f'| {current_env} | {\", \".join(packages)} |')
 
 # Write matrix to file
 with open('package_matrix.txt', 'w') as f:
