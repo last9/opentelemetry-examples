@@ -38,9 +38,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .tox
-        key: ${{ runner.os }}-tox-${{ hashFiles('**/tox.ini', '**/pyproject.toml', '**/requirements*.txt') }}
+        key: ${{ runner.os }}-tox-v2-${{ hashFiles('**/tox.ini', '**/pyproject.toml', '**/requirements*.txt', 'python/django/list_otel_packages.py') }}
         restore-keys: |
-          ${{ runner.os }}-tox-
+          ${{ runner.os }}-tox-v2-
 
     - name: Install tox
       run: |
@@ -54,6 +54,14 @@ jobs:
     - name: Generate package matrix
       run: |
         python python/django/list_otel_packages.py > package_matrix.txt
+        cat package_matrix.txt
+
+    - name: Show list_otel_packages.py contents
+      run: |
+        cat python/django/list_otel_packages.py
+
+    - name: Show generated package_matrix.txt
+      run: |
         cat package_matrix.txt
 
     - name: Update README with matrix
