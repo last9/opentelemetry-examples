@@ -25,22 +25,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/tox.ini') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Cache tox environments
-        uses: actions/cache@v4
-        with:
-          path: .tox
-          key: ${{ runner.os }}-tox-v2-${{ hashFiles('**/tox.ini', '**/pyproject.toml', '**/requirements*.txt', 'python/django/list_otel_packages.py') }}-${{ matrix.python-version }}
-          restore-keys: |
-            ${{ runner.os }}-tox-v2-
-
       - name: Install tox
         run: |
           python -m pip install --upgrade pip
