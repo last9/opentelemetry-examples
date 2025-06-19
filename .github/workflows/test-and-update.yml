@@ -1,0 +1,67 @@
+name: Test and Update Package Matrix
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install tox
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox
+
+      - name: Run Django tests and capture packages
+        run: |
+          # Test compatible Django versions per Python
+          # Python 3.8/3.9: Django 3.2, 4.2
+          # Python 3.10/3.11: Django 3.2, 4.2, 5.0, 5.1
+          
+          tox -e py311-django32,py311-django42,py311-django50,py311-django51
+          
+          # Capture package info during tox run
+          echo "# OpenTelemetry Package Matrix" > PACKAGE_MATRIX.md
+          echo "" >> PACKAGE_MATRIX.md
+          echo "| Environment | OpenTelemetry Packages |" >> PACKAGE_MATRIX.md
+          echo "|-------------|------------------------|" >> PACKAGE_MATRIX.md
+          
+          # Get packages from one Django environment to show what's installed
+          cd python/django/mysite
+          if [ -d ".tox/py311-django51" ]; then
+            packages=$(.tox/py311-django51/bin/pip list --format=freeze | grep "^opentelemetry" | tr '\n' ', ' | sed 's/,$//')
+            echo "| Python 3.11 + Django 5.1 | $packages |" >> ../../../PACKAGE_MATRIX.md
+          fi
+          cd ../../..
+
+      - name: Update README with package matrix
+        run: |
+          if [ -f PACKAGE_MATRIX.md ]; then
+            echo "" >> README.md
+            cat PACKAGE_MATRIX.md >> README.md
+            echo "" >> README.md
+            echo "*Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*" >> README.md
+          fi
+
+      - name: Commit changes
+        if: github.event_name == 'push'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md PACKAGE_MATRIX.md
+          if ! git diff --staged --quiet; then
+            git commit -m "Update OpenTelemetry package matrix [skip ci]"
+            git push
+          fi
