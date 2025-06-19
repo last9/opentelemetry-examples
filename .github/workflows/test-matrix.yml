@@ -71,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: package-data-py${{ matrix.python-version }}
-          path: package_data/py$(echo "${{ matrix.python-version }}" | sed 's/\.//').txt
+          path: package_data/
           if-no-files-found: ignore
 
   update-readme:
