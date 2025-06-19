@@ -10,82 +10,86 @@ on:
 jobs:
   test-and-update:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    
+    strategy:
+      matrix:
+        python-version: [3.1, 3.7, 3.8, 3.9, 3.11, 4.6]
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Cache pip packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/tox.ini') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/tox.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-    - name: Cache tox environments
-      uses: actions/cache@v4
-      with:
-        path: .tox
-        key: ${{ runner.os }}-tox-v2-${{ hashFiles('**/tox.ini', '**/pyproject.toml', '**/requirements*.txt', 'python/django/list_otel_packages.py') }}
-        restore-keys: |
-          ${{ runner.os }}-tox-v2-
+      - name: Cache tox environments
+        uses: actions/cache@v4
+        with:
+          path: .tox
+          key: ${{ runner.os }}-tox-v2-${{ hashFiles('**/tox.ini', '**/pyproject.toml', '**/requirements*.txt', 'python/django/list_otel_packages.py') }}-${{ matrix.python-version }}
+          restore-keys: |
+            ${{ runner.os }}-tox-v2-
 
-    - name: Install tox
-      run: |
-        python -m pip install --upgrade pip
-        pip install tox
+      - name: Install tox
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox
 
-    - name: Run tox tests
-      run: |
-        tox
+      - name: Run tox tests
+        run: tox -e py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django41,py${{ matrix.python-version }}-django50,py${{ matrix.python-version }}-django51
 
-    - name: Generate package matrix
-      run: |
-        python python/django/list_otel_packages.py > package_matrix.txt
-        cat package_matrix.txt
+      - name: Generate package matrix
+        if: matrix.python-version == '3.11'
+        run: |
+          python python/django/list_otel_packages.py > package_matrix.txt
+          cat package_matrix.txt
 
-    - name: Show list_otel_packages.py contents
-      run: |
-        cat python/django/list_otel_packages.py
+      - name: Show list_otel_packages.py contents
+        if: matrix.python-version == '3.11'
+        run: |
+          cat python/django/list_otel_packages.py
 
-    - name: Show generated package_matrix.txt
-      run: |
-        cat package_matrix.txt
+      - name: Show generated package_matrix.txt
+        if: matrix.python-version == '3.11'
+        run: |
+          cat package_matrix.txt
 
-    - name: Update README with matrix
-      run: |
-        python python/django/update_readme_matrix.py package_matrix.txt
+      - name: Update README with matrix
+        if: matrix.python-version == '3.11'
+        run: |
+          python python/django/update_readme_matrix.py package_matrix.txt
 
-    - name: Check for changes
-      id: check_changes
-      run: |
-        if git diff --quiet README.md; then
-          echo "changes=false" >> $GITHUB_OUTPUT
-        else
-          echo "changes=true" >> $GITHUB_OUTPUT
-        fi
+      - name: Check for changes
+        if: matrix.python-version == '3.11'
+        id: check_changes
+        run: |
+          if git diff --quiet README.md; then
+            echo "changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
 
-    - name: Commit and push changes
-      if: steps.check_changes.outputs.changes == 'true' && github.event_name == 'push'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add README.md
-        git commit -m "Update OpenTelemetry package matrix [skip ci]"
-        git push origin HEAD:${{ github.ref_name }}
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changes == 'true' && github.event_name == 'push' && matrix.python-version == '3.11'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "Update OpenTelemetry package matrix [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
 
-    - name: Clean up
-      run: |
-        rm -f package_matrix.txt 
+      - name: Clean up
+        if: matrix.python-version == '3.11'
+        run: |
+          rm -f package_matrix.txt 
