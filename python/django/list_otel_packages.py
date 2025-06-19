@@ -19,13 +19,14 @@ def get_packages(pip_path: Path):
 
 def main():
     rows = []
-    for pip in TOX_DIR.glob('py*-django*/bin/pip'):
-        env = pip.parent.parent.name
-        pkgs = get_packages(pip)
-        if pkgs:
-            # Format packages as "name==version"
-            pkg_strings = [f"{name}=={version}" for name, version in pkgs]
-            rows.append((env, ', '.join(pkg_strings)))
+    for pattern in ['py*-django*/bin/pip', 'py*-fastapi*/bin/pip', 'py*-flask*/bin/pip']:
+        for pip in TOX_DIR.glob(pattern):
+            env = pip.parent.parent.name
+            pkgs = get_packages(pip)
+            if pkgs:
+                # Format packages as "name==version"
+                pkg_strings = [f"{name}=={version}" for name, version in pkgs]
+                rows.append((env, ', '.join(pkg_strings)))
     if not rows:
         print('No tox environments found. Run "tox" first.')
         return
