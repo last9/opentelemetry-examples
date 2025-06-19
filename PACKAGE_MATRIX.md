@@ -1,6 +1,18 @@
 # OpenTelemetry Package Matrix
 
-This matrix shows OpenTelemetry packages tested in each environment:
+This matrix shows OpenTelemetry packages tested in each environment.
+
+## Summary
+
+| Environment | Package Count | Details |
+|-------------|---------------|---------|
+| Python 3.11 + Django 3.2 | 61 packages | [View Details](#python-3-11---django-3-2) |
+| Python 3.11 + Django 4.2 | 61 packages | [View Details](#python-3-11---django-4-2) |
+| Python 3.11 + Django 5.0 | 61 packages | [View Details](#python-3-11---django-5-0) |
+| Python 3.11 + Django 5.1 | 61 packages | [View Details](#python-3-11---django-5-1) |
+
+
+## Detailed Package Lists
 
 ### Python 3.11 + Django 3.2
 
