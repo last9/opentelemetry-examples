@@ -31,7 +31,12 @@ jobs:
           pip install tox
 
       - name: Run tox tests
-        run: tox -e py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42,py${{ matrix.python-version }}-django50,py${{ matrix.python-version }}-django51
+        run: |
+          if [[ "${{ matrix.python-version }}" == "3.8" || "${{ matrix.python-version }}" == "3.9" ]]; then
+            tox -e py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42
+          else
+            tox -e py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42,py${{ matrix.python-version }}-django50,py${{ matrix.python-version }}-django51
+          fi
 
       - name: Generate package matrix
         if: matrix.python-version == '3.11'
