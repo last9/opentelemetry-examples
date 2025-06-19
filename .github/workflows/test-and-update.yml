@@ -2,7 +2,7 @@ name: Test and Update Package Matrix
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, otel-package-matrix ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
