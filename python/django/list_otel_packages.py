@@ -7,14 +7,25 @@ TOX_DIR = Path(__file__).resolve().parents[1] / '.tox'
 
 def get_packages(pip_path: Path):
     result = subprocess.run([str(pip_path), 'list', '--format=freeze'], capture_output=True, text=True, check=True)
-    return sorted(pkg.split('==')[0] for pkg in result.stdout.splitlines() if pkg.startswith('opentelemetry'))
+    packages = []
+    for pkg in result.stdout.splitlines():
+        if pkg.startswith('opentelemetry'):
+            if '==' in pkg:
+                name, version = pkg.split('==', 1)
+                packages.append((name, version))
+            else:
+                packages.append((pkg, 'unknown'))
+    return sorted(packages)
 
 def main():
     rows = []
     for pip in TOX_DIR.glob('py*-django*/bin/pip'):
         env = pip.parent.parent.name
         pkgs = get_packages(pip)
-        rows.append((env, ', '.join(pkgs)))
+        if pkgs:
+            # Format packages as "name==version"
+            pkg_strings = [f"{name}=={version}" for name, version in pkgs]
+            rows.append((env, ', '.join(pkg_strings)))
     if not rows:
         print('No tox environments found. Run "tox" first.')
         return
