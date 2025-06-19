@@ -54,7 +54,7 @@ jobs:
         fi
 
     - name: Commit and push changes
-      if: steps.check_changes.outputs.changes == 'true'
+      if: steps.check_changes.outputs.changes == 'true' && github.event_name == 'push'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
