@@ -38,24 +38,65 @@ jobs:
           # Convert captured package data to clean markdown format
           echo "# OpenTelemetry Package Matrix" > PACKAGE_MATRIX.md
           echo "" >> PACKAGE_MATRIX.md
-          echo "This matrix shows OpenTelemetry packages tested in each environment:" >> PACKAGE_MATRIX.md
+          echo "This matrix shows OpenTelemetry packages tested in each environment." >> PACKAGE_MATRIX.md
+          echo "" >> PACKAGE_MATRIX.md
+          echo "## Summary" >> PACKAGE_MATRIX.md
+          echo "" >> PACKAGE_MATRIX.md
+          echo "| Environment | Package Count | Details |" >> PACKAGE_MATRIX.md
+          echo "|-------------|---------------|---------|" >> PACKAGE_MATRIX.md
           
           if [ -f PACKAGES.txt ]; then
-            # Process the captured package data
+            # First pass: collect data for summary table
+            current_env=""
+            packages=()
+            summary_data=""
+            while IFS= read -r line; do
+              if [[ $line == "=== "* ]]; then
+                # Save previous environment if exists
+                if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
+                  python_ver=$(echo "$current_env" | sed 's/py\([0-9]\)\([0-9]\+\)-.*/Python \1.\2/')
+                  django_ver=$(echo "$current_env" | sed 's/.*django\([0-9]\)\([0-9]\)/Django \1.\2/')
+                  env_name="$python_ver + $django_ver"
+                  anchor=$(echo "$env_name" | tr '[:upper:]' '[:lower:]' | tr ' +.' '-')
+                  count=${#packages[@]}
+                  summary_data="$summary_data| $env_name | $count packages | [View Details](#$anchor) |\n"
+                fi
+                # Start new environment
+                current_env=$(echo "$line" | sed 's/=== //g' | sed 's/ ===//g')
+                packages=()
+              elif [[ $line == opentelemetry* ]]; then
+                packages+=("$line")
+              fi
+            done < PACKAGES.txt
+            
+            # Don't forget the last environment for summary
+            if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
+              python_ver=$(echo "$current_env" | sed 's/py\([0-9]\)\([0-9]\+\)-.*/Python \1.\2/')
+              django_ver=$(echo "$current_env" | sed 's/.*django\([0-9]\)\([0-9]\)/Django \1.\2/')
+              env_name="$python_ver + $django_ver"
+              anchor=$(echo "$env_name" | tr '[:upper:]' '[:lower:]' | tr ' +.' '-')
+              count=${#packages[@]}
+              summary_data="$summary_data| $env_name | $count packages | [View Details](#$anchor) |\n"
+            fi
+            
+            # Add summary table
+            echo -e "$summary_data" >> PACKAGE_MATRIX.md
+            echo "" >> PACKAGE_MATRIX.md
+            echo "## Detailed Package Lists" >> PACKAGE_MATRIX.md
+            
+            # Second pass: generate detailed sections
             current_env=""
             packages=()
             while IFS= read -r line; do
               if [[ $line == "=== "* ]]; then
                 # Save previous environment if exists
                 if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
-                  # Convert py311-django32 to "Python 3.11 + Django 3.2"
                   python_ver=$(echo "$current_env" | sed 's/py\([0-9]\)\([0-9]\+\)-.*/Python \1.\2/')
                   django_ver=$(echo "$current_env" | sed 's/.*django\([0-9]\)\([0-9]\)/Django \1.\2/')
                   echo "" >> PACKAGE_MATRIX.md
                   echo "### $python_ver + $django_ver" >> PACKAGE_MATRIX.md
                   echo "" >> PACKAGE_MATRIX.md
                   for pkg in "${packages[@]}"; do
-                    # Extract just the package name (before ==)
                     pkg_name=$(echo "$pkg" | cut -d'=' -f1)
                     pkg_version=$(echo "$pkg" | cut -d'=' -f3)
                     echo "- \`$pkg_name\` ($pkg_version)" >> PACKAGE_MATRIX.md
@@ -69,9 +110,8 @@ jobs:
               fi
             done < PACKAGES.txt
             
-            # Don't forget the last environment
+            # Don't forget the last environment for details
             if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
-              # Convert py311-django32 to "Python 3.11 + Django 3.2"
               python_ver=$(echo "$current_env" | sed 's/py\([0-9]\)\([0-9]\+\)-.*/Python \1.\2/')
               django_ver=$(echo "$current_env" | sed 's/.*django\([0-9]\)\([0-9]\)/Django \1.\2/')
               echo "" >> PACKAGE_MATRIX.md
