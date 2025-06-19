@@ -37,27 +37,19 @@ jobs:
           else
             envs="py${{ matrix.python-version }}-django32,py${{ matrix.python-version }}-django42,py${{ matrix.python-version }}-django50,py${{ matrix.python-version }}-django51"
           fi
-          tox -e $envs
+          # Run tox but preserve environments for package capture
+          tox -e $envs --recreate
           
-          # Capture package versions for matrix generation
+          # Capture package versions immediately after tox completes
           mkdir -p package_data
           cd python/django/mysite
-          echo "Looking for tox environments in: $(pwd)/.tox"
-          ls -la .tox/ || echo "No .tox directory found"
           for env in $(echo $envs | tr ',' ' '); do
-            echo "Checking environment: $env"
             if [ -f ".tox/$env/bin/pip" ]; then
-              echo "Found pip for $env, capturing packages..."
               echo "=== $env ===" >> ../../../package_data/py${{ matrix.python-version }}.txt
-              .tox/$env/bin/pip list --format=freeze | grep "^opentelemetry" >> ../../../package_data/py${{ matrix.python-version }}.txt
+              .tox/$env/bin/pip list --format=freeze | grep "^opentelemetry" >> ../../../package_data/py${{ matrix.python-version }}.txt || echo "No opentelemetry packages found" >> ../../../package_data/py${{ matrix.python-version }}.txt
               echo "" >> ../../../package_data/py${{ matrix.python-version }}.txt
-            else
-              echo "No pip found at .tox/$env/bin/pip"
-              ls -la .tox/$env/bin/ 2>/dev/null || echo "Directory .tox/$env/bin/ does not exist"
             fi
           done
-          echo "Package data file contents:"
-          cat ../../../package_data/py${{ matrix.python-version }}.txt 2>/dev/null || echo "No package data file created"
           cd ../../..
 
       - name: Upload package data
