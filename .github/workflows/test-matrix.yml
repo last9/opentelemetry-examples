@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-and-update:
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -56,8 +56,23 @@ jobs:
           path: package_data/py${{ matrix.python-version }}.txt
           if-no-files-found: ignore
 
+  update-readme:
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
       - name: Download all package data
-        if: matrix.python-version == '3.11'
         uses: actions/download-artifact@v4
         with:
           pattern: package-data-py*
@@ -65,27 +80,22 @@ jobs:
           merge-multiple: true
 
       - name: Generate package matrix
-        if: matrix.python-version == '3.11'
         run: |
           python3 python/django/generate_matrix.py
 
       - name: Show list_otel_packages.py contents
-        if: matrix.python-version == '3.11'
         run: |
           cat python/django/list_otel_packages.py
 
       - name: Show generated package_matrix.txt
-        if: matrix.python-version == '3.11'
         run: |
           cat package_matrix.txt
 
       - name: Update README with matrix
-        if: matrix.python-version == '3.11'
         run: |
           python python/django/update_readme_matrix.py package_matrix.txt
 
       - name: Check for changes
-        if: matrix.python-version == '3.11'
         id: check_changes
         run: |
           if git diff --quiet README.md; then
@@ -95,7 +105,7 @@ jobs:
           fi
 
       - name: Commit and push changes
-        if: steps.check_changes.outputs.changes == 'true' && github.event_name == 'push' && matrix.python-version == '3.11'
+        if: steps.check_changes.outputs.changes == 'true' && github.event_name == 'push'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -104,6 +114,5 @@ jobs:
           git push origin HEAD:${{ github.ref_name }}
 
       - name: Clean up
-        if: matrix.python-version == '3.11'
         run: |
           rm -f package_matrix.txt 
