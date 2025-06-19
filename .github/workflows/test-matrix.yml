@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10, 3.11, 3.12]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,8 +35,8 @@ jobs:
           # Convert Python version format (3.8 -> 38, 3.10 -> 310)
           py_ver=$(echo "${{ matrix.python-version }}" | sed 's/\.//')
           
-          if [[ "${{ matrix.python-version }}" == "3.8" || "${{ matrix.python-version }}" == "3.9" ]]; then
-            # Python 3.8/3.9: Only Django 3.2, 4.2 (Django 5.x requires Python 3.10+)
+          if [[ "${{ matrix.python-version }}" == "3.9" ]]; then
+            # Python 3.9: Only Django 3.2, 4.2 (Django 5.x requires Python 3.10+)
             envs="py${py_ver}-django32,py${py_ver}-django42"
           else
             # Python 3.10/3.11/3.12: Django 3.2, 4.2, 5.0, 5.1
@@ -45,14 +45,26 @@ jobs:
           # Run tox tests
           tox -e $envs
           
-          # Simple approach: manually create package matrix content
+          # Capture actual OpenTelemetry packages for each environment
           mkdir -p package_data
           echo "| Environment | OTEL Packages |" > package_data/py${py_ver}.txt
           echo "|------------|--------------|" >> package_data/py${py_ver}.txt
           
-          # Add sample data for now - this proves the pipeline works
+          # For each environment tested, capture the actual installed packages
           for env in $(echo $envs | tr ',' ' '); do
-            echo "| $env | opentelemetry-api==1.27.0, opentelemetry-sdk==1.27.0 |" >> package_data/py${py_ver}.txt
+            # Get the virtual environment path for this tox environment
+            venv_path=".tox/$env"
+            if [ -d "$venv_path" ]; then
+              # List OpenTelemetry packages from the tox environment
+              packages=$($venv_path/bin/pip list --format=freeze | grep "^opentelemetry" | tr '\n' ', ' | sed 's/,$//')
+              if [ -n "$packages" ]; then
+                echo "| $env | $packages |" >> package_data/py${py_ver}.txt
+              else
+                echo "| $env | No OpenTelemetry packages found |" >> package_data/py${py_ver}.txt
+              fi
+            else
+              echo "| $env | Environment not found |" >> package_data/py${py_ver}.txt
+            fi
           done
 
       - name: Upload package data
