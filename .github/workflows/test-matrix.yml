@@ -41,13 +41,15 @@ jobs:
           
           # Capture package versions for matrix generation
           mkdir -p package_data
+          cd python/django/mysite
           for env in $(echo $envs | tr ',' ' '); do
-            if [ -f "python/django/mysite/.tox/$env/bin/pip" ]; then
-              echo "=== $env ===" >> package_data/py${{ matrix.python-version }}.txt
-              python/django/mysite/.tox/$env/bin/pip list --format=freeze | grep "^opentelemetry" >> package_data/py${{ matrix.python-version }}.txt
-              echo "" >> package_data/py${{ matrix.python-version }}.txt
+            if [ -f ".tox/$env/bin/pip" ]; then
+              echo "=== $env ===" >> ../../../package_data/py${{ matrix.python-version }}.txt
+              .tox/$env/bin/pip list --format=freeze | grep "^opentelemetry" >> ../../../package_data/py${{ matrix.python-version }}.txt
+              echo "" >> ../../../package_data/py${{ matrix.python-version }}.txt
             fi
           done
+          cd ../../..
 
       - name: Upload package data
         uses: actions/upload-artifact@v4
