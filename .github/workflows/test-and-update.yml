@@ -48,8 +48,11 @@ jobs:
               if [[ $line == "=== "* ]]; then
                 # Save previous environment if exists
                 if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
+                  # Convert py311-django32 to "Python 3.11 + Django 3.2"
+                  python_ver=$(echo "$current_env" | sed 's/py\([0-9]\)\([0-9]\+\)-.*/Python \1.\2/')
+                  django_ver=$(echo "$current_env" | sed 's/.*django\([0-9]\)\([0-9]\)/Django \1.\2/')
                   echo "" >> PACKAGE_MATRIX.md
-                  echo "### $current_env" >> PACKAGE_MATRIX.md
+                  echo "### $python_ver + $django_ver" >> PACKAGE_MATRIX.md
                   echo "" >> PACKAGE_MATRIX.md
                   for pkg in "${packages[@]}"; do
                     # Extract just the package name (before ==)
@@ -68,8 +71,11 @@ jobs:
             
             # Don't forget the last environment
             if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
+              # Convert py311-django32 to "Python 3.11 + Django 3.2"
+              python_ver=$(echo "$current_env" | sed 's/py\([0-9]\)\([0-9]\+\)-.*/Python \1.\2/')
+              django_ver=$(echo "$current_env" | sed 's/.*django\([0-9]\)\([0-9]\)/Django \1.\2/')
               echo "" >> PACKAGE_MATRIX.md
-              echo "### $current_env" >> PACKAGE_MATRIX.md
+              echo "### $python_ver + $django_ver" >> PACKAGE_MATRIX.md
               echo "" >> PACKAGE_MATRIX.md
               for pkg in "${packages[@]}"; do
                 pkg_name=$(echo "$pkg" | cut -d'=' -f1)
