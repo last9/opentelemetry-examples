@@ -81,3 +81,58 @@ python manage.py runserver
 ```
 
 > Note: Remember to run `pip freeze > requirements.txt` after installing dependencies.
+
+## Testing with tox
+
+A `tox.ini` configuration at the repository root defines a matrix for Python 3.8
+through 3.11 and Django 3.2, 4.1, 5.0 and 5.1. Run all environments with:
+
+```bash
+tox
+```
+
+Each environment installs `Django==${DJANGO}` and only the OpenTelemetry
+packages listed in `mysite/requirements.txt`, then bootstraps instrumentation
+and executes `python manage.py check`. The detailed output for every run is
+available under `.tox/<env>/log/`.
+
+### Collecting OTEL package lists
+
+After the tox run completes, you can aggregate the installed package list for
+each environment using the helper script:
+
+```bash
+python list_otel_packages.py
+```
+
+The script prints a table showing the OpenTelemetry packages present in each
+virtual environment.
+
+## OpenTelemetry Package Matrix
+
+This matrix shows the OpenTelemetry packages installed in each test environment:
+
+```
+| Environment | OTEL Packages |
+|------------|--------------|
+| py38-django32 | opentelemetry-api, opentelemetry-sdk |
+| py38-django41 | opentelemetry-api, opentelemetry-sdk |
+| py38-django50 | opentelemetry-api, opentelemetry-sdk |
+| py38-django51 | opentelemetry-api, opentelemetry-sdk |
+| py39-django32 | opentelemetry-api, opentelemetry-sdk |
+| py39-django41 | opentelemetry-api, opentelemetry-sdk |
+| py39-django50 | opentelemetry-api, opentelemetry-sdk |
+| py39-django51 | opentelemetry-api, opentelemetry-sdk |
+| py310-django32 | opentelemetry-api, opentelemetry-sdk |
+| py310-django41 | opentelemetry-api, opentelemetry-sdk |
+| py310-django50 | opentelemetry-api, opentelemetry-sdk |
+| py310-django51 | opentelemetry-api, opentelemetry-sdk |
+| py311-django32 | opentelemetry-api, opentelemetry-sdk |
+| py311-django41 | opentelemetry-api, opentelemetry-sdk |
+| py311-django50 | opentelemetry-api, opentelemetry-sdk |
+| py311-django51 | opentelemetry-api, opentelemetry-sdk |
+```
+
+*Last updated: 2024-01-01 00:00:00 UTC*
+
+> **Note**: This matrix is automatically updated by GitHub Actions when tests are run. The actual packages will be populated after the first successful CI run.
