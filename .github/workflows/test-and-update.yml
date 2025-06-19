@@ -35,37 +35,47 @@ jobs:
           
           tox -e py311-django32,py311-django42,py311-django50,py311-django51
           
-          # Convert captured package data to markdown table
+          # Convert captured package data to clean markdown format
           echo "# OpenTelemetry Package Matrix" > PACKAGE_MATRIX.md
           echo "" >> PACKAGE_MATRIX.md
-          echo "| Environment | OpenTelemetry Packages |" >> PACKAGE_MATRIX.md
-          echo "|-------------|------------------------|" >> PACKAGE_MATRIX.md
+          echo "This matrix shows OpenTelemetry packages tested in each environment:" >> PACKAGE_MATRIX.md
           
           if [ -f PACKAGES.txt ]; then
             # Process the captured package data
             current_env=""
-            packages=""
+            packages=()
             while IFS= read -r line; do
               if [[ $line == "=== "* ]]; then
                 # Save previous environment if exists
-                if [[ -n "$current_env" && -n "$packages" ]]; then
-                  echo "| $current_env | $packages |" >> PACKAGE_MATRIX.md
+                if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
+                  echo "" >> PACKAGE_MATRIX.md
+                  echo "### $current_env" >> PACKAGE_MATRIX.md
+                  echo "" >> PACKAGE_MATRIX.md
+                  for pkg in "${packages[@]}"; do
+                    # Extract just the package name (before ==)
+                    pkg_name=$(echo "$pkg" | cut -d'=' -f1)
+                    pkg_version=$(echo "$pkg" | cut -d'=' -f3)
+                    echo "- \`$pkg_name\` ($pkg_version)" >> PACKAGE_MATRIX.md
+                  done
                 fi
                 # Start new environment
                 current_env=$(echo "$line" | sed 's/=== //g' | sed 's/ ===//g')
-                packages=""
+                packages=()
               elif [[ $line == opentelemetry* ]]; then
-                if [[ -n "$packages" ]]; then
-                  packages="$packages, $line"
-                else
-                  packages="$line"
-                fi
+                packages+=("$line")
               fi
             done < PACKAGES.txt
             
             # Don't forget the last environment
-            if [[ -n "$current_env" && -n "$packages" ]]; then
-              echo "| $current_env | $packages |" >> PACKAGE_MATRIX.md
+            if [[ -n "$current_env" && ${#packages[@]} -gt 0 ]]; then
+              echo "" >> PACKAGE_MATRIX.md
+              echo "### $current_env" >> PACKAGE_MATRIX.md
+              echo "" >> PACKAGE_MATRIX.md
+              for pkg in "${packages[@]}"; do
+                pkg_name=$(echo "$pkg" | cut -d'=' -f1)
+                pkg_version=$(echo "$pkg" | cut -d'=' -f3)
+                echo "- \`$pkg_name\` ($pkg_version)" >> PACKAGE_MATRIX.md
+              done
             fi
           fi
 
