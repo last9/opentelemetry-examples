@@ -1,4 +1,5 @@
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-node');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { resourceFromAttributes, envDetector, processDetector, hostDetector } = require('@opentelemetry/resources');
 const { RuntimeNodeInstrumentation } = require('@opentelemetry/instrumentation-runtime-node');
@@ -22,12 +23,14 @@ const logger = {
 
 logger.info(`Initializing OpenTelemetry for service: ${process.env.OTEL_SERVICE_NAME}`);
 
+const traceExporter = new OTLPTraceExporter();
+
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
     'service.name': process.env.OTEL_SERVICE_NAME,
     'deployment.environment': process.env.NODE_ENV,
   }),
-  traceExporter: new OTLPTraceExporter(),
+  spanProcessor: new BatchSpanProcessor(traceExporter),
   instrumentations: [
     getNodeAutoInstrumentations({}),
     new RuntimeNodeInstrumentation({
