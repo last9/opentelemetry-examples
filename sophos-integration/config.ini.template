@@ -1,0 +1,16 @@
+[login]
+client_id = ${SOPHOS_CLIENT_ID}
+client_secret = ${SOPHOS_CLIENT_SECRET}
+tenant_id = ${SOPHOS_TENANT_ID}
+auth_url = https://id.sophos.com/api/v2/oauth2/token
+api_host = api.central.sophos.com
+
+# Output format configuration
+format = json
+filename = stdout
+
+# State file path
+state_file_path = state/siem_sophos.json
+
+# Default endpoint
+endpoint = all
