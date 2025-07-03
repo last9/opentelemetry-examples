@@ -1,0 +1,13 @@
+{
+  "name": "@opentelemetry/instrumentation-polka",
+  "version": "0.1.0",
+  "main": "index.js",
+  "description": "OpenTelemetry instrumentation for Polka web framework.",
+  "keywords": ["opentelemetry", "instrumentation", "polka", "tracing"],
+  "author": "Your Name",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@opentelemetry/api": "^1.8.0",
+    "@opentelemetry/instrumentation": "^0.202.0"
+  }
+} 
