@@ -37,7 +37,6 @@ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.42.0
 go.opentelemetry.io/otel v1.16.0
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.16.0
 go.opentelemetry.io/otel/sdk v1.16.0
-go.opentelemetry.io/otel/semconv/v1.22.0 v1.22.0
 ```
 
 ## Installation
@@ -96,4 +95,4 @@ go run main.go
 - DELETE `/users/:id` - Delete a user
 - GET    `/joke` - Get a random joke using external API
 
-4. Sign in to [Last9](https://app.last9.io) and visit the APM dashboard to see the traces and metrics.
+4. Sign in to [Last9](https://app.last9.io) and visit the APM dashboard to see the traces.
