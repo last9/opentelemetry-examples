@@ -31,12 +31,16 @@ It generates traces for HTTP requests, and external API calls.
 Following packages are used to instrument the Gin application. You can install them using the following commands:
 
 ```go
-github.com/gin-gonic/gin v1.9.1
-go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.42.0
-go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.42.0
-go.opentelemetry.io/otel v1.16.0
-go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.16.0
-go.opentelemetry.io/otel/sdk v1.16.0
+go get go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin@v0.42.0
+go get go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.55.0
+go get go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace@v0.55.0
+go get go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc@v1.30.0
+go get go.opentelemetry.io/otel@v1.30.0
+go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.30.0
+go get go.opentelemetry.io/otel/sdk@v1.30.0
+go get go.opentelemetry.io/otel/exporters/stdout/stdoutmetric@v1.30.0
+go get go.opentelemetry.io/otel/exporters/stdout/stdouttrace@v1.30.0
+go get go.nhat.io/otelsql@v0.14.0
 ```
 
 ## Installation

@@ -2,120 +2,184 @@ package users
 
 import (
 	"context"
-	"errors"
+	"database/sql"
+	"encoding/json"
 	"fmt"
-	"sync"
+	"log"
+	"strconv"
+
+	_ "github.com/lib/pq"
+	"go.nhat.io/otelsql"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+
+	"github.com/redis/go-redis/v9"
 )
 
+var dsnName = "postgres://postgres:postgres@localhost/otel_demo?sslmode=disable"
+
 type UsersController struct {
-	users map[string]*User
-	mutex sync.RWMutex
+	redisClient *redis.Client
 }
 
-func NewUsersController() *UsersController {
-	controller := &UsersController{
-		users: make(map[string]*User),
-		mutex: sync.RWMutex{},
+func initDB() (*sql.DB, error) {
+	driverName, err := otelsql.Register("postgres",
+		// Read more about the options here: https://github.com/nhatthm/otelsql?tab=readme-ov-file#options
+		otelsql.AllowRoot(),
+		otelsql.TraceQueryWithoutArgs(),
+		otelsql.TraceRowsClose(),
+		otelsql.TraceRowsAffected(),
+		otelsql.WithDatabaseName("otel_demo"), // database name
+		otelsql.WithSystem(semconv.DBSystemPostgreSQL),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register driver: %v", err)
 	}
-	
-	// Initialize with some sample data
-	sampleUsers := []*User{
-		{ID: "1", Name: "John Doe", Email: "john@example.com"},
-		{ID: "2", Name: "Jane Smith", Email: "jane@example.com"},
-		{ID: "3", Name: "Bob Johnson", Email: "bob@example.com"},
+
+	db, err := sql.Open(driverName, dsnName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
-	
-	for _, user := range sampleUsers {
-		controller.users[user.ID] = user
+
+	// Record stats to expose metrics
+	if err := otelsql.RecordStats(db); err != nil {
+		return nil, err
 	}
-	
-	return controller
+
+	return db, nil
+}
+
+func NewUsersController(redisClient *redis.Client) *UsersController {
+	return &UsersController{redisClient: redisClient}
 }
 
 func (c *UsersController) GetUsers(ctx context.Context) ([]User, error) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	
-	users := make([]User, 0, len(c.users))
-	for _, user := range c.users {
-		users = append(users, *user)
+	// First, try to get users from Redis
+	usersJSON, err := c.redisClient.Get(ctx, "users").Result()
+	if err == nil {
+		var users []User
+		err = json.Unmarshal([]byte(usersJSON), &users)
+		if err == nil {
+			return users, nil
+		}
 	}
-	
+
+	// If not found in Redis or error occurred, fetch from database
+	users, err := fetchUsersFromDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	// Store users in Redis for future requests
+	jsonUsers, _ := json.Marshal(users)
+	c.redisClient.Set(ctx, "users", jsonUsers, 0)
+
 	return users, nil
 }
 
 func (c *UsersController) GetUser(ctx context.Context, id string) (*User, error) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	
-	user, exists := c.users[id]
-	if !exists {
-		return nil, errors.New("user not found")
+	// Try to get user from Redis
+	userJSON, err := c.redisClient.Get(ctx, fmt.Sprintf("user:%s", id)).Result()
+	if err == nil {
+		var user User
+		err = json.Unmarshal([]byte(userJSON), &user)
+		if err == nil {
+			return &user, nil
+		}
 	}
-	
-	// Return a copy to prevent external modification
-	userCopy := *user
-	return &userCopy, nil
+
+	// If not found in Redis or error occurred, fetch from database
+	user, err := fetchUserFromDatabase(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store user in Redis for future request
+	jsonUser, _ := json.Marshal(user)
+	c.redisClient.Set(ctx, fmt.Sprintf("user:%s", id), jsonUser, 0)
+
+	return user, nil
 }
 
 func (c *UsersController) CreateUser(ctx context.Context, user *User) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	
-	if user.ID == "" {
-		return errors.New("user ID cannot be empty")
+	// Create user in database
+	err := createUserInDatabase(user)
+	if err != nil {
+		return err
 	}
-	
-	if user.Name == "" {
-		return errors.New("user name cannot be empty")
+
+	// Store user in Redis
+	userJSON, err := json.Marshal(user)
+	if err != nil {
+		return err
 	}
-	
-	if user.Email == "" {
-		return errors.New("user email cannot be empty")
-	}
-	
-	// Check if user already exists
-	if _, exists := c.users[user.ID]; exists {
-		return errors.New("user already exists")
-	}
-	
-	// Store a copy
-	userCopy := *user
-	c.users[user.ID] = &userCopy
-	
+	c.redisClient.Set(ctx, fmt.Sprintf("user:%s", user.ID), userJSON, 0)
+
+	// Update users list in Redis
+	c.redisClient.Del(ctx, "users")
+
 	return nil
 }
 
-func (c *UsersController) UpdateUser(ctx context.Context, id string, user *User) (*User, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	
-	existingUser, exists := c.users[id]
-	if !exists {
-		return nil, errors.New("user not found")
-	}
-	
-	// Update fields if provided
-	if user.Name != "" {
-		existingUser.Name = user.Name
-	}
-	if user.Email != "" {
-		existingUser.Email = user.Email
-	}
-	
-	// Return a copy
-	userCopy := *existingUser
-	return &userCopy, nil
+// Implement UpdateUser and DeleteUser methods similarly,
+// updating Redis cache accordingly
+
+// Helper functions (implement these according to your database setup)
+func fetchUsersFromDatabase() ([]User, error) {
+	// Implement database fetch logic
+	return nil, nil // Temporary placeholder
 }
 
-func (c *UsersController) DeleteUser(ctx context.Context, id string) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	
-	if _, exists := c.users[id]; !exists {
-		return fmt.Errorf("user with ID %s not found", id)
+func fetchUserFromDatabase(id string) (*User, error) {
+	// Implement database fetch logic
+	return nil, nil // Temporary placeholder
+}
+
+func createUserInDatabase(user *User) error {
+	// Implement database creation logic
+	db, err := initDB()
+	if err != nil {
+		log.Printf("failed to initialize database: %v", err)
+		return err
 	}
-	
-	delete(c.users, id)
+	defer db.Close()
+
+	// CREATE TABLE users (
+	// 	id SERIAL PRIMARY KEY,
+	// 	name VARCHAR(255) NOT NULL,
+	// 	email VARCHAR(255) NOT NULL UNIQUE
+	// );
+	stmt, err := db.Prepare("INSERT INTO users (id, name, email) VALUES ($1, $2, $3)")
+	if err != nil {
+		log.Printf("failed to prepare statement: %v", err)
+		return fmt.Errorf("failed to prepare statement: %v", err)
+	}
+	defer stmt.Close()
+
+	// Execute the SQL statement
+	_, err = stmt.Exec(user.ID, user.Name, user.Email)
+	if err != nil {
+		log.Printf("failed to insert user: %v", err)
+		return fmt.Errorf("failed to insert user: %v", err)
+	}
+	return nil // Temporary placeholder
+}
+
+// Add this method to the UsersController struct
+func (c *UsersController) UpdateUser(id int, name string) *User {
+	// Implementation here
+	ctx := context.Background() // Create a context
+	user, err := c.GetUser(ctx, strconv.Itoa(id))
+	if err != nil {
+		return nil
+	}
+	if user != nil {
+		user.Name = name
+		// Update user in storage
+	}
+	return user
+}
+
+func (uc *UsersController) DeleteUser(ctx context.Context, id int) error {
+	// Implement user deletion logic here
 	return nil
 }

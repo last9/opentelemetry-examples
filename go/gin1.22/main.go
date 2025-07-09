@@ -2,126 +2,127 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"gin1.22/users"
+	"io"
 	"log"
 	"net/http"
-	"os"
-	"time"
+	"net/http/httptrace"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/extra/redisotel/v9"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.16.0"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func main() {
-	// Initialize OpenTelemetry
-	cleanup := initOpenTelemetry()
-	defer cleanup()
-
-	// Create Gin router with OpenTelemetry middleware
 	r := gin.Default()
-	r.Use(otelgin.Middleware("gin-otel-example"))
+	i := NewInstrumentation()
+	mp, err := initMetrics()
+	if err != nil {
+		log.Fatalf("failed to initialize metrics: %v", err)
+	}
 
-	// Initialize users controller and handler
-	controller := users.NewUsersController()
-	tracer := otel.Tracer("gin-otel-example")
-	handler := users.NewUsersHandler(controller, tracer)
+	// Handle shutdown properly so nothing leaks.
+	defer func() {
+		if err := mp.Shutdown(context.Background()); err != nil {
+			log.Println(err)
+		}
+	}()
 
-	// Basic health check endpoint
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "healthy",
-			"time":   time.Now().UTC(),
-		})
+	// Register as global meter provider so that it can be used via otel.Meter
+	// and accessed using otel.GetMeterProvider.
+	// Most instrumentation libraries use the global meter provider as default.
+	// If the global meter provider is not set then a no-op implementation
+	// is used, which fails to generate data.
+	otel.SetMeterProvider(mp)
+
+	defer func() {
+		if err := i.TracerProvider.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
+
+	// Initialize Redis client
+	redisClient := initRedis()
+
+	// Initialize the controller with Redis client
+	c := users.NewUsersController(redisClient)
+	h := users.NewUsersHandler(c, i.Tracer)
+
+	r.Use(otelgin.Middleware("gin-server"))
+
+	// Routes
+	r.GET("/users", h.GetUsers)
+	r.GET("/users/:id", h.GetUser)
+	r.POST("/users", h.CreateUser)
+	r.PUT("/users/:id", h.UpdateUser)
+	r.DELETE("/users/:id", h.DeleteUser)
+	// New route for fetching a random joke
+	r.GET("/joke", func(c *gin.Context) {
+		getRandomJoke(c, i)
 	})
 
-	// Users API routes
-	r.GET("/users", handler.GetUsers)
-	r.GET("/users/:id", handler.GetUser)
-	r.POST("/users", handler.CreateUser)
-	r.PUT("/users/:id", handler.UpdateUser)
-	r.DELETE("/users/:id", handler.DeleteUser)
-
-	log.Println("Server starting on :8080")
-	log.Println("Available endpoints:")
-	log.Println("  GET    /health")
-	log.Println("  GET    /users")
-	log.Println("  GET    /users/:id")
-	log.Println("  POST   /users")
-	log.Println("  PUT    /users/:id")
-	log.Println("  DELETE /users/:id")
-	log.Fatal(r.Run(":8080"))
+	r.Run()
 }
 
-func initOpenTelemetry() func() {
-	ctx := context.Background()
+func initRedis() *redis.Client {
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379", // Update this with your Redis server address
+	})
 
-	// Debug: Print environment variables
-	log.Printf("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: %s", os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"))
-	log.Printf("OTEL_EXPORTER_OTLP_TRACES_HEADERS: %s", os.Getenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS"))
-	log.Printf("OTEL_RESOURCE_ATTRIBUTES: %s", os.Getenv("OTEL_RESOURCE_ATTRIBUTES"))
+	// Setup traces for redis instrumentation
+	if err := redisotel.InstrumentTracing(rdb); err != nil {
+		log.Fatalf("failed to instrument traces for Redis client: %v", err)
+		return nil
+	}
+	return rdb
+}
 
-	// Create resource with service attributes
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			// Service identification
-			semconv.ServiceNameKey.String("gin-users-api"),        // Updated service name
-			semconv.ServiceVersionKey.String("1.0.0"),
-			semconv.ServiceInstanceIDKey.String("instance-1"),
-			// Environment information
-			semconv.DeploymentEnvironmentKey.String("development"), // or "production", "staging"
-			// Additional custom attributes
-			semconv.ServiceNamespaceKey.String("users-service"),
-		),
-		// You can also detect resource attributes automatically
-		resource.WithFromEnv(),   // Reads from OTEL_RESOURCE_ATTRIBUTES env var
-		resource.WithProcess(),   // Adds process info
-		resource.WithOS(),        // Adds OS info
-		resource.WithHost(),      // Adds host info
-	)
+func getRandomJoke(c *gin.Context, i *Instrumentation) {
+	// Start a new span for the external API call
+	ctx := c.Request.Context()
+	ctx, span := i.Tracer.Start(ctx, "get-random-joke")
+	defer span.End()
+
+	// Create an HTTP client with OpenTelemetry instrumentation
+	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport,
+		// By setting the otelhttptrace client in this transport, it can be
+		// injected into the context after the span is started, which makes the
+		// httptrace spans children of the transport one.
+		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
+			return otelhttptrace.NewClientTrace(ctx)
+		}))}
+
+	// Make a request to the external API
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://official-joke-api.appspot.com/random_joke", nil)
+	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Failed to create resource:", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch joke"})
+		return
 	}
+	defer resp.Body.Close()
 
-	// Debug: Print final resource attributes
-	for _, attr := range res.Attributes() {
-		log.Printf("Resource attribute: %s = %s", attr.Key, attr.Value.AsString())
+	// Read and parse the response
+	body, _ := io.ReadAll(resp.Body)
+	var joke struct {
+		Setup     string `json:"setup"`
+		Punchline string `json:"punchline"`
 	}
+	json.Unmarshal(body, &joke)
 
-	// Let OpenTelemetry handle the environment variables automatically
-	// This should use OTEL_EXPORTER_OTLP_TRACES_ENDPOINT and OTEL_EXPORTER_OTLP_TRACES_HEADERS
-	traceExporter, err := otlptracehttp.New(ctx)
-	if err != nil {
-		log.Fatal("Failed to create trace exporter:", err)
-	}
-
-	// Create trace provider with more frequent batch processing
-	traceProvider := trace.NewTracerProvider(
-		trace.WithBatcher(traceExporter,
-			trace.WithBatchTimeout(2*time.Second),    // Export every 2 seconds
-			trace.WithMaxExportBatchSize(10),         // Smaller batch size
-		),
-		trace.WithResource(res),
+	// Add attributes to the external API call span
+	span.SetAttributes(
+		attribute.String("joke.setup", joke.Setup),
+		attribute.String("joke.punchline", joke.Punchline),
 	)
 
-	// Set global providers
-	otel.SetTracerProvider(traceProvider)
-
-	log.Println("OpenTelemetry initialized successfully")
-
-	// Return cleanup function
-	return func() {
-		log.Println("Shutting down OpenTelemetry...")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := traceProvider.Shutdown(ctx); err != nil {
-			log.Printf("Failed to shutdown tracer provider: %v", err)
-		} else {
-			log.Println("OpenTelemetry shut down successfully")
-		}
-	}
+	c.JSON(http.StatusOK, joke)
 }
