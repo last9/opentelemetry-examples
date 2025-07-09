@@ -1,136 +1,110 @@
 package users
 
 import (
-	"net/http"
+	"log"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type UsersHandler struct {
-	controller *UsersController
-	tracer     trace.Tracer
+	controller *UsersController // Changed from UsersControllers to UsersController
+	tracer     oteltrace.Tracer
 }
 
-func NewUsersHandler(controller *UsersController, tracer trace.Tracer) *UsersHandler {
+func NewUsersHandler(c *UsersController, t oteltrace.Tracer) *UsersHandler {
 	return &UsersHandler{
-		controller: controller,
-		tracer:     tracer,
+		controller: c,
+		tracer:     t,
 	}
 }
 
-func (h *UsersHandler) GetUsers(c *gin.Context) {
-	ctx, span := h.tracer.Start(c.Request.Context(), "GetUsers")
+func (u *UsersHandler) GetUsers(c *gin.Context) {
+	ctx, span := u.tracer.Start(c.Request.Context(), "GetUsers")
 	defer span.End()
 
-	users, err := h.controller.GetUsers(ctx)
+	users, err := u.controller.GetUsers(ctx)
 	if err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		c.JSON(500, gin.H{"error": "Failed to fetch users"})
 		return
 	}
-
-	span.SetAttributes(attribute.Int("users.count", len(users)))
-	c.JSON(http.StatusOK, users)
+	c.JSON(200, users)
 }
 
-func (h *UsersHandler) GetUser(c *gin.Context) {
+func (u *UsersHandler) GetUser(c *gin.Context) {
+	_, span := u.tracer.Start(c.Request.Context(), "GetUser", oteltrace.WithAttributes(
+		attribute.String("user.id", c.Param("id")),
+	))
+	defer span.End()
+
 	id := c.Param("id")
-	ctx, span := h.tracer.Start(c.Request.Context(), "GetUser")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("user.id", id))
-
-	user, err := h.controller.GetUser(ctx, id)
+	user, err := u.controller.GetUser(c.Request.Context(), id)
 	if err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("error", err.Error()))
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		c.JSON(404, gin.H{"message": "User not found"})
 		return
 	}
-
-	span.SetAttributes(
-		attribute.String("user.name", user.Name),
-		attribute.String("user.email", user.Email),
-	)
-	c.JSON(http.StatusOK, user)
+	c.JSON(200, user)
 }
 
-func (h *UsersHandler) CreateUser(c *gin.Context) {
-	ctx, span := h.tracer.Start(c.Request.Context(), "CreateUser")
+func (u *UsersHandler) CreateUser(c *gin.Context) {
+	log.Println("here")
+	_, span := u.tracer.Start(c.Request.Context(), "CreateUser")
 	defer span.End()
-
 	var newUser User
 	if err := c.ShouldBindJSON(&newUser); err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("error", "Invalid JSON input"))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data"})
+		c.JSON(400, gin.H{"error": "Invalid input data"})
 		return
 	}
-
-	span.SetAttributes(
-		attribute.String("user.id", newUser.ID),
-		attribute.String("user.name", newUser.Name),
-		attribute.String("user.email", newUser.Email),
-	)
-
-	err := h.controller.CreateUser(ctx, &newUser)
+	err := u.controller.CreateUser(c.Request.Context(), &newUser)
 	if err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": err})
 		return
 	}
-
-	c.JSON(http.StatusCreated, newUser)
+	c.JSON(201, nil)
 }
 
-func (h *UsersHandler) UpdateUser(c *gin.Context) {
-	id := c.Param("id")
-	ctx, span := h.tracer.Start(c.Request.Context(), "UpdateUser")
+func (u *UsersHandler) UpdateUser(c *gin.Context) {
+	_, span := u.tracer.Start(c.Request.Context(), "UpdateUser", oteltrace.WithAttributes(
+		attribute.String("user.id", c.Param("id")),
+	))
+
 	defer span.End()
 
-	span.SetAttributes(attribute.String("user.id", id))
+	id := c.Param("id")
+	idInt, err := strconv.ParseInt(id, 2, 32)
 
-	var updateUser User
-	if err := c.ShouldBindJSON(&updateUser); err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("error", "Invalid JSON input"))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data"})
-		return
-	}
-
-	user, err := h.controller.UpdateUser(ctx, id, &updateUser)
 	if err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("error", err.Error()))
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
+		c.JSON(400, gin.H{"message": "Invalid ID"})
 	}
 
-	span.SetAttributes(
-		attribute.String("user.name", user.Name),
-		attribute.String("user.email", user.Email),
-	)
-	c.JSON(http.StatusOK, user)
+	name := c.PostForm("name")
+	user := u.controller.UpdateUser(int(idInt), name)
+	if user == nil {
+		c.JSON(404, gin.H{"message": "User not found"})
+		return
+	}
+	c.JSON(200, user)
 }
 
-func (h *UsersHandler) DeleteUser(c *gin.Context) {
-	id := c.Param("id")
-	ctx, span := h.tracer.Start(c.Request.Context(), "DeleteUser")
+func (u *UsersHandler) DeleteUser(c *gin.Context) {
+	_, span := u.tracer.Start(c.Request.Context(), "UpdateUser", oteltrace.WithAttributes(
+		attribute.String("user.id", c.Param("id")),
+	))
 	defer span.End()
 
-	span.SetAttributes(attribute.String("user.id", id))
+	id := c.Param("id")
+	idInt, err := strconv.ParseInt(id, 2, 32)
 
-	err := h.controller.DeleteUser(ctx, id)
 	if err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("error", err.Error()))
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
+		c.JSON(400, gin.H{"message": "Invalid ID"})
 	}
 
-	c.JSON(http.StatusNoContent, nil)
+	err = u.controller.DeleteUser(c.Request.Context(), int(idInt))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to delete user"})
+		return
+	}
+	c.JSON(204, nil)
 }
