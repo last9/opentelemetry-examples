@@ -61,10 +61,10 @@ Get-ChildItem "$env:USERPROFILE\.otel-dotnet-auto\instrument.cmd"
 export OTEL_DOTNET_AUTO_INSTRUMENTATION_ENABLED=true
 export OTEL_SERVICE_NAME="<your_service_name>"
 export OTEL_TRACES_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_ENDPOINT="{{ .Logs.WriteURL }}"
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization={{ .Logs.AuthValue }}"
+export OTEL_EXPORTER_OTLP_ENDPOINT="<last9_otel_endpoint>"
+export OTEL_EXPORTER_OTLP_HEADERS="<last9_auth_header>"
 export OTEL_TRACES_SAMPLER="always_on"
-export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production"
+export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=local"
 export OTEL_LOG_LEVEL=debug
 ```
 
@@ -73,8 +73,8 @@ export OTEL_LOG_LEVEL=debug
 $env:OTEL_DOTNET_AUTO_INSTRUMENTATION_ENABLED="true"
 $env:OTEL_SERVICE_NAME="<your_service_name>"
 $env:OTEL_TRACES_EXPORTER="otlp"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT="{{ .Logs.WriteURL }}"
-$env:OTEL_EXPORTER_OTLP_HEADERS="Authorization={{ .Logs.AuthValue }}"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT="<last9_otel_endpoint>"
+$env:OTEL_EXPORTER_OTLP_HEADERS="<last9_auth_header>"
 $env:OTEL_TRACES_SAMPLER="always_on"
 $env:OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production"
 $env:OTEL_LOG_LEVEL=debug
