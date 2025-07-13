@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -37,20 +36,13 @@ func initMetrics() (*metric.MeterProvider, error) {
 	// 	}),
 	// )
 
-	attr := resource.WithAttributes(
-		semconv.DeploymentEnvironmentKey.String("production"), // You can change this value to "development" or "staging" or you can get the value from the environment variables
-		// You can add more attributes here
-		semconv.ServiceNameKey.String("gin-server"),
-	)
-
 	resources, err := resource.New(context.Background(),
 		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
 		resource.WithProcess(),
 		resource.WithOS(),
 		resource.WithContainer(),
-		resource.WithHost(),
-		attr)
+		resource.WithHost())
 
 	if err != nil {
 		return nil, err
@@ -77,20 +69,13 @@ func initTracerProvider() *sdktrace.TracerProvider {
 		panic(err)
 	}
 
-	attr := resource.WithAttributes(
-		semconv.DeploymentEnvironmentKey.String("production"), // You can change this value to "development" or "staging" or you can get the value from the environment variables
-		// You can add more attributes here
-		semconv.ServiceNameKey.String("gin-server"),
-	)
-
 	resources, err := resource.New(context.Background(),
 		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
 		resource.WithProcess(),
 		resource.WithOS(),
 		resource.WithContainer(),
-		resource.WithHost(),
-		attr)
+		resource.WithHost())
 
 	if err != nil {
 		panic(err)
