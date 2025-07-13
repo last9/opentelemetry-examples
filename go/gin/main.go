@@ -18,8 +18,37 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/plugin/opentelemetry/tracing"
 )
 
+// Post is a GORM model for demonstration
+// You can move this to a separate file if needed
+// It will be auto-migrated
+type Post struct {
+	ID      uint   `gorm:"primaryKey" json:"id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+func initGormDB() (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open("gorm.db"), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+	// Add OpenTelemetry tracing plugin
+	if err := db.Use(tracing.NewPlugin()); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+// This example demonstrates BOTH:
+// 1. otelsql instrumentation (raw SQL, see /users endpoints)
+// 2. GORM + OpenTelemetry plugin (see /posts endpoints)
+//
+// See README for details.
 func main() {
 	r := gin.Default()
 	i := NewInstrumentation()
@@ -57,7 +86,8 @@ func main() {
 
 	r.Use(otelgin.Middleware("gin-server"))
 
-	// Routes
+	// --- otelsql example: /users endpoints use raw SQL with otelsql instrumentation ---
+	// See users/controller.go for otelsql setup and usage
 	r.GET("/users", h.GetUsers)
 	r.GET("/users/:id", h.GetUser)
 	r.POST("/users", h.CreateUser)
@@ -66,6 +96,36 @@ func main() {
 	// New route for fetching a random joke
 	r.GET("/joke", func(c *gin.Context) {
 		getRandomJoke(c, i)
+	})
+
+	db, err := initGormDB()
+	if err != nil {
+		log.Fatalf("failed to initialize GORM: %v", err)
+	}
+	// Auto-migrate Post model
+	db.AutoMigrate(&Post{})
+
+	// --- GORM + OpenTelemetry example: /posts endpoints use GORM with otel plugin ---
+	r.GET("/posts", func(c *gin.Context) {
+		var posts []Post
+		if err := db.WithContext(c.Request.Context()).Find(&posts).Error; err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, posts)
+	})
+
+	r.POST("/posts", func(c *gin.Context) {
+		var post Post
+		if err := c.ShouldBindJSON(&post); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid input"})
+			return
+		}
+		if err := db.WithContext(c.Request.Context()).Create(&post).Error; err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(201, post)
 	})
 
 	r.Run()

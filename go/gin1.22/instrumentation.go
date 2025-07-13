@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -23,7 +23,7 @@ type Instrumentation struct {
 func initMetrics() (*metric.MeterProvider, error) {
 	// Set environment variables OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS
 	// to the destination where you want to push traces.
-	exporter, err := otlpmetricgrpc.New(context.Background())
+	exporter, err := otlpmetrichttp.New(context.Background())
 	if err != nil {
 		fmt.Println("Error creating metrics exporter:", err)
 		return nil, err

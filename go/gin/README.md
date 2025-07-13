@@ -1,7 +1,10 @@
 # Instrumenting Gin application using OpenTelemetry
 
-This example demonstrates how to instrument a simple Gin application with
-OpenTelemetry.
+**This example demonstrates BOTH:**
+- **otelsql** instrumentation (raw SQL, see `/users` endpoints, code in `users/controller.go`)
+- **GORM + OpenTelemetry** plugin (see `/posts` endpoints, code in `main.go`)
+
+See below for details on both approaches.
 
 ## Prerequisites
 
@@ -14,6 +17,8 @@ It uses the following libraries:
 - [OpenTelemetry](https://github.com/open-telemetry/opentelemetry-go)
 - [PostgreSQL](https://github.com/lib/pq)
 - [Redis](https://github.com/redis/go-redis/v9)
+- [GORM](https://gorm.io/)
+- [GORM OpenTelemetry Tracing Plugin](https://github.com/go-gorm/opentelemetry)
 
 ## Traces
 
@@ -43,8 +48,9 @@ It generates traces for HTTP requests, database queries, Redis commands, and ext
 
 Following packages are used to instrument the Gin application. You can install them using the following commands:
 
-```sh
-go get go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin
+#### Core OpenTelemetry packages
+
+```bash
 go get go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 go get go.opentelemetry.io/otel
 go get go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc
@@ -52,8 +58,30 @@ go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp
 go get go.opentelemetry.io/otel/sdk
 go get go.opentelemetry.io/otel/sdk/metric
 go get go.opentelemetry.io/otel/trace
+```
+
+#### Otel package for Gin
+
+```bash
+go get go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin
+```
+
+#### Otel package for Redis
+
+```bash
 go get github.com/redis/go-redis/extra/redisotel/v9
+```
+
+#### Otel package for raw SQL
+
+```bash
 go get go.nhat.io/otelsql
+```
+
+#### Otel package for Gorm
+
+```bash
+go get gorm.io/plugin/opentelemetry/tracing
 ```
 
 ## Metrics
@@ -63,6 +91,40 @@ It also generates metrics for database queries using [otelsql](https://github.co
 ## Exporting Telemetry Data to Last9
 
 It uses GRPC exporters to export the traces and metrics to Last9. You can also use any other OpenTelemetry compatible backend.
+
+## Endpoints
+
+- GET `/users` - Get all users (**otelsql, raw SQL**)
+- GET `/users/:id` - Get a user by ID (**otelsql, raw SQL**)
+- POST `/users` - Create a new user (**otelsql, raw SQL**)
+- PUT `/users/:id` - Update a user (**otelsql, raw SQL**)
+- DELETE `/users/:id` - Delete a user (**otelsql, raw SQL**)
+- GET `/joke` - Get a random joke using external API
+- GET `/posts` - Get all posts (**GORM + OpenTelemetry**)
+- POST `/posts` - Create a new post (**GORM + OpenTelemetry**)
+
+## Database Instrumentation Approaches
+
+### 1. otelsql (raw SQL, `/users` endpoints)
+- Uses the [otelsql](https://github.com/nhatthm/otelsql) package to instrument raw SQL queries.
+- See `users/controller.go` for setup and usage.
+- All `/users` endpoints use this approach.
+
+**Example usage:**
+```go
+import (
+    "database/sql"
+    "go.nhat.io/otelsql"
+)
+
+db, err := sql.Open(otelsql.DriverName("postgres"), dsn)
+// Use db as usual, context will be propagated if you use db.QueryContext, db.ExecContext, etc.
+```
+
+### 2. GORM + OpenTelemetry (`/posts` endpoints)
+- Uses [GORM](https://gorm.io/) with the [OpenTelemetry tracing plugin](https://github.com/go-gorm/opentelemetry).
+- See `main.go` for setup and usage.
+- All `/posts` endpoints use this approach.
 
 ## Running the application
 
@@ -79,8 +141,10 @@ go mod tidy
 3. Next, run the commands below to set the environment variables.
 
 ```bash
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <BASIC_AUTH_TOKEN>"
-export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io" # or your endpoint
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <BASIC_AUTH_TOKEN>" # change this to your Last9 otel authorization header
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io" # change this to your Last9 Otel endpoint
+export OTEL_SERVICE_NAME="<service_name>" # change this to correct service name
+export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=local" # change this to correct deployment environment
 ```
 
 4. Run the Gin application:
@@ -100,3 +164,9 @@ go build -o gin && ./gin
 - GET    `/joke` - Get a random joke using external API
 
 6. Sign in to [Last9](https://app.last9.io) and visit the APM dashboard to see the traces and metrics.
+
+## References
+
+- [otelsql (raw SQL OpenTelemetry)](https://github.com/nhatthm/otelsql)
+- [GORM](https://gorm.io/)
+- [GORM OpenTelemetry Plugin](https://github.com/go-gorm/opentelemetry)
