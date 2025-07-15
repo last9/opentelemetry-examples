@@ -1,0 +1,35 @@
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# Spring Application Configuration
+spring:
+  application:
+    name: spring-boot-test-app
+  
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+# Logging Configuration
+logging:
+  level:
+    com.example: DEBUG
+    org.springframework.web: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# Management Endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always 
