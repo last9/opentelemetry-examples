@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-boot-sample
+  labels:
+    app: spring-boot-sample
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spring-boot-sample
+  template:
+    metadata:
+      labels:
+        app: spring-boot-sample
+      annotations:
+        # Enable OpenTelemetry auto-instrumentation for Java
+        instrumentation.opentelemetry.io/inject-java: "java-instrumentation"
+    spec:
+      containers:
+      - name: spring-boot-app
+        # Using a simple Spring Boot application without external dependencies
+        image: docker.io/springio/gs-spring-boot-docker:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: "health,info,metrics"
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+
