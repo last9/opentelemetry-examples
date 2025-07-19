@@ -27,9 +27,9 @@ spec:
       
       # Uncomment and configure for Last9 or other backends
       otlp/last9:
-        endpoint: "https://otlp-aps1.last9.io:443"
+        endpoint: "{$LAST9 ENDPOINT}"
         headers:
-          authorization: "Basic redact="
+          authorization: "{$LAST9 BASIC AUTH}"
 
     service:
       pipelines:
