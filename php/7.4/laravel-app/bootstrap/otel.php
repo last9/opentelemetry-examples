@@ -52,10 +52,7 @@ class Last9Tracer
             }
         }
         
-        // Debug: Log which endpoint is being used (only in development)
-        if (($_ENV['APP_ENV'] ?? 'production') === 'local') {
-            error_log("OpenTelemetry endpoint: " . $this->collectorUrl);
-        }
+
     }
     
     public static function getInstance()
@@ -130,19 +127,12 @@ class Last9Tracer
                 'timeout' => 2.0,
                 'verify' => false
             ]);
-            $response = $client->post($this->collectorUrl, [
+            $client->post($this->collectorUrl, [
                 'json' => $traceData,
                 'headers' => $this->headers
             ]);
-            // Debug: Log successful span export
-            if (($_ENV['APP_ENV'] ?? 'production') === 'local') {
-                file_put_contents('/tmp/debug.log', "[Span Export] Success: " . $span['name'] . " (Status: " . $response->getStatusCode() . ")\n", FILE_APPEND);
-            }
         } catch (Exception $e) {
-            // Debug: Log failed span export
-            if (($_ENV['APP_ENV'] ?? 'production') === 'local') {
-                file_put_contents('/tmp/debug.log', "[Span Export] Failed: " . $span['name'] . " - " . $e->getMessage() . "\n", FILE_APPEND);
-            }
+            // Silently fail - tracing should not break the application
         }
         return $span;
     }
@@ -165,18 +155,14 @@ class SimpleTracer {
     }
     
     public function traceDatabase($query, $dbName = null, $connectionName = null, $duration = null, $rowCount = null, $error = null, $customSpanName = null) {
-        file_put_contents('/tmp/debug.log', "[traceDatabase] Called with customSpanName: " . ($customSpanName ?? 'NULL') . "\n", FILE_APPEND);
-        file_put_contents('/tmp/debug.log', "[traceDatabase] All params: query=" . substr($query, 0, 50) . ", dbName=" . ($dbName ?? 'NULL') . ", connectionName=" . ($connectionName ?? 'NULL') . ", duration=" . ($duration ?? 'NULL') . ", rowCount=" . ($rowCount ?? 'NULL') . ", error=" . ($error ?? 'NULL') . ", customSpanName=" . ($customSpanName ?? 'NULL') . "\n", FILE_APPEND);
         $operation = $this->extractDbOperation($query);
         $tableName = $this->extractTableName($query, $operation);
         
         // Use custom span name if provided (for Eloquent events), otherwise use default
         if ($customSpanName) {
             $spanName = $customSpanName;
-            file_put_contents('/tmp/debug.log', "[Span Name] Using custom name: {$spanName}\n", FILE_APPEND);
         } else {
             $spanName = 'db.' . $operation . ($tableName ? " {$tableName}" : '');
-            file_put_contents('/tmp/debug.log', "[Span Name] Using default name: {$spanName}\n", FILE_APPEND);
         }
         
         $traceId = isset($GLOBALS['otel_trace_id']) ? $GLOBALS['otel_trace_id'] : bin2hex(random_bytes(16));

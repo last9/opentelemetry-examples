@@ -51,30 +51,13 @@ Route::get('/api/example', function () {
 });
 
 Route::get('/api/database-example', function () {
-    // First test basic PHP functionality
-    file_put_contents('/tmp/debug.log', "Route called at " . date('Y-m-d H:i:s') . "\n", FILE_APPEND);
-    
-    // Check if OpenTelemetry bootstrap was loaded
-    file_put_contents('/tmp/debug.log', "SimpleTracer class exists: " . (class_exists('SimpleTracer') ? 'YES' : 'NO') . "\n", FILE_APPEND);
-    
     // Example of database operation tracing with Eloquent ORM
-    file_put_contents('/tmp/debug.log', "About to execute Eloquent query\n", FILE_APPEND);
-    
-    // Use Eloquent ORM instead of raw DB query
     $users = \App\User::where('email', 'like', '%@%')->limit(1)->get();
     
-    // Debug: Check if tracer exists - use file_put_contents since error_log is disabled
-    file_put_contents('/tmp/debug.log', "Tracer exists: " . (isset($GLOBALS['simple_tracer']) ? 'YES' : 'NO') . "\n", FILE_APPEND);
-    
     // The DB::listen handler in AppServiceProvider will automatically trace this Eloquent query
-    file_put_contents('/tmp/debug.log', "About to execute DB query\n", FILE_APPEND);
-    
-    // Also create a regular trace to test if spans work
-    file_put_contents('/tmp/debug.log', "About to call createTrace\n", FILE_APPEND);
     if (isset($GLOBALS['simple_tracer'])) {
         $GLOBALS['simple_tracer']->createTrace('test.span', ['test' => 'value']);
     }
-    file_put_contents('/tmp/debug.log', "After createTrace call\n", FILE_APPEND);
     
     return response()->json([
         'message' => 'Eloquent ORM operation with automatic tracing',
@@ -363,14 +346,8 @@ date_default_timezone_set('UTC');
 use App\User;
 
 Route::get('/api/eloquent-example', function () {
-    // Clear debug log for this test
-    file_put_contents('/tmp/debug.log', "\n--- /api/eloquent-example called at ".date('Y-m-d H:i:s')." ---\n", FILE_APPEND);
-    
     // Fetch paginated users using Eloquent ORM
     $users = User::where('email', 'like', '%@%')->paginate(5);
-    
-    // Log result count
-    file_put_contents('/tmp/debug.log', "Fetched ".count($users)." users\n", FILE_APPEND);
     
     // Return paginated users as JSON
     return response()->json([

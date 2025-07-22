@@ -23,10 +23,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        file_put_contents('/tmp/debug.log', "[AppServiceProvider] boot called\n", FILE_APPEND);
         // OpenTelemetry: Trace all database queries
         \Illuminate\Support\Facades\DB::listen(function ($query) {
-            file_put_contents('/tmp/debug.log', "[DB::listen] Query: " . $query->sql . "\n", FILE_APPEND);
             try {
                 $sql = $query->sql;
                 if (!empty($query->bindings)) {
@@ -44,7 +42,6 @@ class AppServiceProvider extends ServiceProvider
                     }
                 }
                 if (isset($GLOBALS['simple_tracer'])) {
-                    file_put_contents('/tmp/debug.log', "[DB::listen] Creating span for: " . $sql . "\n", FILE_APPEND);
                     $GLOBALS['simple_tracer']->traceDatabase(
                         $sql,
                         $query->connectionName ?? null,
@@ -53,10 +50,9 @@ class AppServiceProvider extends ServiceProvider
                         null,
                         null
                     );
-                    file_put_contents('/tmp/debug.log', "[DB::listen] Span created\n", FILE_APPEND);
                 }
             } catch (\Throwable $e) {
-                file_put_contents('/tmp/debug.log', "[DB::listen] Error: " . $e->getMessage() . "\n", FILE_APPEND);
+                // Silently fail - tracing should not break the application
             }
         });
 
@@ -72,7 +68,6 @@ class AppServiceProvider extends ServiceProvider
             'eloquent.saved: *',
             'eloquent.restored: *',
         ], function ($eventName, $models) {
-            file_put_contents('/tmp/debug.log', "[Eloquent Event] {$eventName} triggered\n", FILE_APPEND);
             if (isset($GLOBALS['simple_tracer'])) {
                 $modelClass = get_class($models[0]);
                 $operation = str_replace('eloquent.', '', explode(':', $eventName)[0]);
@@ -87,8 +82,6 @@ class AppServiceProvider extends ServiceProvider
                     }
                     // Create a different span name for Eloquent events to distinguish from DB::listen
                     $spanName = "eloquent.{$operation}.{$modelClass}";
-                    file_put_contents('/tmp/debug.log', "[Eloquent Event] Creating span: {$spanName} for: {$sql}\n", FILE_APPEND);
-                    file_put_contents('/tmp/debug.log', "[Eloquent Event] Passing customSpanName: {$spanName}\n", FILE_APPEND);
                     $GLOBALS['simple_tracer']->traceDatabase(
                         $sql,
                         $modelClass, // dbName
@@ -98,12 +91,7 @@ class AppServiceProvider extends ServiceProvider
                         null, // error
                         $spanName // custom span name
                     );
-                    file_put_contents('/tmp/debug.log', "[Eloquent Event] Span created\n", FILE_APPEND);
-                } else {
-                    file_put_contents('/tmp/debug.log', "[Eloquent Event] No query log found\n", FILE_APPEND);
                 }
-            } else {
-                file_put_contents('/tmp/debug.log', "[Eloquent Event] Tracer not found\n", FILE_APPEND);
             }
         });
     }
