@@ -21,10 +21,10 @@ define('LARAVEL_START', microtime(true));
 |
 */
 
-require __DIR__.'/../vendor/autoload.php';
+// Initialize manual OpenTelemetry instrumentation (PHP 7.4 compatible)
+require_once __DIR__.'/../bootstrap/otel.php';
 
-// Initialize OpenTelemetry
-require_once __DIR__.'/../otel-config.php';
+require __DIR__.'/../vendor/autoload.php';
 
 /*
 |--------------------------------------------------------------------------
