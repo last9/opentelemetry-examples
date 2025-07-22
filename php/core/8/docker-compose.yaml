@@ -1,0 +1,40 @@
+version: '3'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html:cached
+    environment:
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_ENDPOINT=<Last9_OTLP_Endpoint>/v1/traces
+      - OTEL_EXPORTER_OTLP_HEADERS=<Last9_OTLP_Header>
+      - OTEL_SERVICE_NAME=php-8-service
+      - OTEL_DEPLOYMENT_ENVIRONMENT=production
+      - OTEL_LOG_LEVEL=debug
+      - DB_HOST=db
+      - DB_USER=diceuser
+      - DB_PASSWORD=dicepass
+      - DB_NAME=dicedb
+      - OTEL_PHP_AUTOLOAD_ENABLED=true
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+      - OTEL_PROPAGATORS=baggage,tracecontext
+    depends_on:
+      - db
+
+  db:
+    image: mariadb:10.5
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: dicedb
+      MYSQL_USER: diceuser
+      MYSQL_PASSWORD: dicepass
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+volumes:
+  db_data:

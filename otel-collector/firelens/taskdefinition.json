@@ -1,0 +1,56 @@
+{
+  "family": "firelens-otel-example",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "nginx:alpine",
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awsfirelens",
+        "options": {
+          "Name": "forward",
+          "Host": "127.0.0.1",
+          "Port": "24224"
+        }
+      },
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "name": "otel-collector",
+      "image": "otel/opentelemetry-collector:0.125.0",
+      "essential": false,
+      "portMappings": [
+        {
+          "containerPort": 24224,
+          "protocol": "tcp"
+        }
+      ],
+      "command": [
+        "--config=/etc/otel-collector-config.yaml"
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "otel-config",
+          "containerPath": "/etc/"
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "otel-config",
+      "host": {
+        "sourcePath": "/path/to/your/config"
+      }
+    }
+  ]
+} 

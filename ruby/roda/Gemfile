@@ -1,0 +1,11 @@
+# Gemfile
+source 'https://rubygems.org'
+gem 'roda'
+gem 'puma'
+gem 'rack'
+gem 'rackup'
+
+gem "opentelemetry-sdk", "~> 1.5"
+gem "opentelemetry-instrumentation-all", "~> 0.63.0"
+
+gem "opentelemetry-exporter-otlp", "~> 0.29.0"

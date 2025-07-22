@@ -1,0 +1,52 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.118.0
+    container_name: otel-collector
+    command:
+      [
+        "--config=/etc/otel-collector-config.yaml",
+        "--feature-gates=transform.flatten.logs"
+      ]
+    volumes:
+      - ./otel-config.yaml:/etc/otel-collector-config.yaml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - nginx_logs:/var/log/nginx
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+    restart: on-failure
+    user: "0" # root user to access docker stats
+    environment:
+      - LOGSPOUT=ignore
+    networks:
+      - otel_network  
+
+  logspout:
+    image: "gliderlabs/logspout:v3.2.14"
+    container_name: logspout
+    volumes:
+      - /etc/hostname:/etc/host_hostname:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: syslog+tcp://otel-collector:2255
+    depends_on:
+      - otel-collector
+    restart: on-failure
+    networks:
+      - nginx_network
+      - apache_network
+      - otel_network
+
+networks:
+  nginx_network:
+    external: true
+    name: nginx_network
+  apache_network:
+    external: true
+    name: apache_network
+  otel_network:
+    name: otel_network
+
+volumes:
+  nginx_logs:
+    external: true
+    name: nginx_logs

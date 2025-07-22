@@ -1,0 +1,38 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        include_metadata: true
+      http:
+        include_metadata: true
+
+processors:
+  # keep it as first processor
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 85
+    spike_limit_percentage: 15
+  batch:
+    timeout: 5s
+    send_batch_size: 100000
+  resource:
+    attributes:
+    - key: host
+      from_context: X-Logging-Host
+      action: insert
+    - key: service.name
+      from_context: X-Logging-Name
+      action: insert
+    - key: deployment.environment
+      from_context: X-Logging-Env
+      action: insert
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug]
