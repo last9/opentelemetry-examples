@@ -30,8 +30,7 @@ class OpenTelemetryMiddleware
         // Store in globals for DB/curl spans
         $GLOBALS['otel_trace_id'] = $traceId;
         $GLOBALS['otel_span_id'] = $spanId;
-        // Debug: Log HTTP span context
-        file_put_contents('/tmp/debug.log', "[OpenTelemetryMiddleware] HTTP traceId: {$traceId}, spanId: {$spanId}\n", FILE_APPEND);
+
         
         try {
             $response = $next($request);
@@ -193,7 +192,6 @@ class OpenTelemetryMiddleware
         // Send to collector
         try {
             $url = env('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT') ?? 'http://localhost:4318/v1/traces';
-            echo $url;
             $headers = ['Content-Type' => 'application/json'];
             // Parse OTEL_EXPORTER_OTLP_HEADERS if set
             if (!empty(env('OTEL_EXPORTER_OTLP_HEADERS'))) {

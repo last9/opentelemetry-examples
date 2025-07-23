@@ -344,8 +344,7 @@ if (!function_exists('traced_guzzle_request')) {
         $spanId = bin2hex(random_bytes(8));
         $startTime = microtime(true);
         
-        // Debug: Log HTTP client span context
-        file_put_contents('/tmp/debug.log', "[traced_guzzle_request] HTTP Client traceId: {$traceId}, spanId: {$spanId}, parentSpanId: " . ($parentSpanId ?? 'null') . "\n", FILE_APPEND);
+
         
         try {
             // Add trace headers to the request
@@ -481,8 +480,7 @@ if (!function_exists('traced_curl_exec')) {
         $spanId = bin2hex(random_bytes(8));
         $startTime = microtime(true);
         
-        // Debug: Log cURL span context
-        file_put_contents('/tmp/debug.log', "[traced_curl_exec] cURL traceId: {$traceId}, spanId: {$spanId}, parentSpanId: " . ($parentSpanId ?? 'null') . "\n", FILE_APPEND);
+
         
         try {
             // Get URL from cURL handle
@@ -633,8 +631,7 @@ if (!function_exists('traced_pdo_query')) {
         $spanId = bin2hex(random_bytes(8));
         $startTime = microtime(true);
         
-        // Debug: Log PDO query span context
-        file_put_contents('/tmp/debug.log', "[traced_pdo_query] PDO Query traceId: {$traceId}, spanId: {$spanId}, parentSpanId: " . ($parentSpanId ?? 'null') . "\n", FILE_APPEND);
+
         
         try {
             $result = $pdo->query($query);
@@ -748,8 +745,7 @@ if (!function_exists('traced_pdo_prepare')) {
         $spanId = bin2hex(random_bytes(8));
         $startTime = microtime(true);
         
-        // Debug: Log PDO prepare span context
-        file_put_contents('/tmp/debug.log', "[traced_pdo_prepare] PDO Prepare traceId: {$traceId}, spanId: {$spanId}, parentSpanId: " . ($parentSpanId ?? 'null') . "\n", FILE_APPEND);
+
         
         try {
             $stmt = $pdo->prepare($query);
