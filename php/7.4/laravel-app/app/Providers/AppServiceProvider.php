@@ -77,7 +77,17 @@ class AppServiceProvider extends ServiceProvider
                     $sql = $lastQuery['query'] ?? "Eloquent {$operation}: {$modelClass}";
                     $bindings = $lastQuery['bindings'] ?? [];
                     foreach ($bindings as $binding) {
-                        $binding = is_numeric($binding) ? $binding : (is_null($binding) ? 'NULL' : (string)$binding);
+                        if ($binding instanceof \DateTimeInterface) {
+                            $binding = $binding->format('Y-m-d H:i:s');
+                        } elseif (is_bool($binding)) {
+                            $binding = $binding ? '1' : '0';
+                        } elseif (is_null($binding)) {
+                            $binding = 'NULL';
+                        } elseif (is_numeric($binding)) {
+                            $binding = (string)$binding;
+                        } else {
+                            $binding = (string)$binding;
+                        }
                         $sql = preg_replace('/\?/', "'" . addslashes($binding) . "'", $sql, 1);
                     }
                     // Create a different span name for Eloquent events to distinguish from DB::listen
