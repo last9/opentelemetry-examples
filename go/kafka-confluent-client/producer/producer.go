@@ -67,6 +67,7 @@ func main() {
 			
 			// Create a new trace span for the message
 			ctx, span := tracer.Start(context.Background(), "produce_message",
+				trace.WithSpanKind(trace.SpanKindProducer),
 				trace.WithAttributes(
 					attribute.String("messaging.system", "kafka"),
 					attribute.String("messaging.operation", "publish"),
