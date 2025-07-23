@@ -170,17 +170,17 @@ class SimpleTracer {
         $spanId = bin2hex(random_bytes(8));
         $startTime = microtime(true);
         $endTime = $startTime + ($duration ? $duration / 1000 : 0.001);
-        $attributes = [
-            ['key' => 'db.system', 'value' => ['stringValue' => 'mysql']],
-            ['key' => 'db.statement', 'value' => ['stringValue' => $query]],
-            ['key' => 'db.operation', 'value' => ['stringValue' => $operation]],
-            ['key' => 'db.name', 'value' => ['stringValue' => $dbName ?? $_ENV['DB_DATABASE'] ?? 'laravel']],
-            ['key' => 'server.address', 'value' => ['stringValue' => $_ENV['DB_HOST'] ?? 'mysql']],
-            ['key' => 'server.port', 'value' => ['intValue' => (int)($_ENV['DB_PORT'] ?? 3306)]],
-            ['key' => 'network.transport', 'value' => ['stringValue' => 'tcp']],
-            ['key' => 'network.type', 'value' => ['stringValue' => 'ipv4']],
-            ['key' => 'db.user', 'value' => ['stringValue' => $_ENV['DB_USERNAME'] ?? 'root']],
-        ];
+                    $attributes = [
+                ['key' => 'db.system', 'value' => ['stringValue' => 'mysql']],
+                ['key' => 'db.statement', 'value' => ['stringValue' => $query]],
+                ['key' => 'db.operation', 'value' => ['stringValue' => $operation]],
+                ['key' => 'db.name', 'value' => ['stringValue' => $dbName ?? $_ENV['DB_DATABASE'] ?? 'laravel']],
+                ['key' => 'server.address', 'value' => ['stringValue' => $_ENV['DB_HOST'] ?? 'mysql']],
+                ['key' => 'server.port', 'value' => ['intValue' => (int)($_ENV['DB_PORT'] ?? 3306)]],
+                ['key' => 'network.transport', 'value' => ['stringValue' => 'tcp']],
+                ['key' => 'network.type', 'value' => ['stringValue' => 'ipv4']],
+                // Removed db.user to prevent credential leakage
+            ];
         if ($tableName) {
             $attributes[] = ['key' => 'db.sql.table', 'value' => ['stringValue' => $tableName]];
         }
@@ -294,6 +294,48 @@ if (!function_exists('tracer')) {
     }
 }
 
+// Helper function to sanitize URLs and remove sensitive data
+if (!function_exists('sanitize_url_for_tracing')) {
+    function sanitize_url_for_tracing($url) {
+        $parsedUrl = parse_url($url);
+        if (!$parsedUrl) {
+            return $url;
+        }
+        
+        // Remove sensitive query parameters
+        if (isset($parsedUrl['query'])) {
+            $queryParams = [];
+            parse_str($parsedUrl['query'], $queryParams);
+            
+            // List of sensitive parameter names to redact
+            $sensitiveParams = [
+                'password', 'passwd', 'pwd', 'secret', 'key', 'token', 'auth', 
+                'api_key', 'api_secret', 'access_token', 'refresh_token',
+                'session', 'sessionid', 'sid', 'csrf', 'xsrf',
+                'authorization', 'bearer', 'apikey', 'apisecret'
+            ];
+            
+            foreach ($sensitiveParams as $param) {
+                if (isset($queryParams[$param])) {
+                    $queryParams[$param] = '[REDACTED]';
+                }
+            }
+            
+            $parsedUrl['query'] = http_build_query($queryParams);
+        }
+        
+        // Rebuild URL without sensitive data
+        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] . '://' : '';
+        $host = $parsedUrl['host'] ?? '';
+        $port = isset($parsedUrl['port']) ? ':' . $parsedUrl['port'] : '';
+        $path = $parsedUrl['path'] ?? '';
+        $query = isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '';
+        $fragment = isset($parsedUrl['fragment']) ? '#' . $parsedUrl['fragment'] : '';
+        
+        return $scheme . $host . $port . $path . $query . $fragment;
+    }
+}
+
 // Helper function for traced Guzzle HTTP requests
 if (!function_exists('traced_guzzle_request')) {
     function traced_guzzle_request($client, $method, $url, $options = []) {
@@ -315,20 +357,24 @@ if (!function_exists('traced_guzzle_request')) {
             $response = $client->request($method, $url, $options);
             $endTime = microtime(true);
             
-            // Extract URL components for attributes
+            // Extract URL components for attributes (sanitized)
             $parsedUrl = parse_url($url);
             $scheme = $parsedUrl['scheme'] ?? 'http';
             $host = $parsedUrl['host'] ?? '';
             $port = $parsedUrl['port'] ?? ($scheme === 'https' ? 443 : 80);
             $path = $parsedUrl['path'] ?? '/';
-            $query = isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '';
+            
+            // Sanitize URL for tracing
+            $sanitizedUrl = sanitize_url_for_tracing($url);
+            $sanitizedQuery = parse_url($sanitizedUrl, PHP_URL_QUERY);
+            $query = $sanitizedQuery ? '?' . $sanitizedQuery : '';
             
             $attributes = [
                 ['key' => 'http.request.method', 'value' => ['stringValue' => strtoupper($method)]],
                 ['key' => 'url.scheme', 'value' => ['stringValue' => $scheme]],
                 ['key' => 'url.path', 'value' => ['stringValue' => $path]],
                 ['key' => 'url.query', 'value' => ['stringValue' => $query]],
-                ['key' => 'url.full', 'value' => ['stringValue' => $url]],
+                ['key' => 'url.full', 'value' => ['stringValue' => $sanitizedUrl]],
                 ['key' => 'server.address', 'value' => ['stringValue' => $host]],
                 ['key' => 'server.port', 'value' => ['intValue' => $port]],
                 ['key' => 'http.response.status_code', 'value' => ['intValue' => $response->getStatusCode()]],
@@ -376,20 +422,24 @@ if (!function_exists('traced_guzzle_request')) {
         } catch (Exception $e) {
             $endTime = microtime(true);
             
-            // Extract URL components for attributes
+            // Extract URL components for attributes (sanitized)
             $parsedUrl = parse_url($url);
             $scheme = $parsedUrl['scheme'] ?? 'http';
             $host = $parsedUrl['host'] ?? '';
             $port = $parsedUrl['port'] ?? ($scheme === 'https' ? 443 : 80);
             $path = $parsedUrl['path'] ?? '/';
-            $query = isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '';
+            
+            // Sanitize URL for tracing
+            $sanitizedUrl = sanitize_url_for_tracing($url);
+            $sanitizedQuery = parse_url($sanitizedUrl, PHP_URL_QUERY);
+            $query = $sanitizedQuery ? '?' . $sanitizedQuery : '';
             
             $attributes = [
                 ['key' => 'http.request.method', 'value' => ['stringValue' => strtoupper($method)]],
                 ['key' => 'url.scheme', 'value' => ['stringValue' => $scheme]],
                 ['key' => 'url.path', 'value' => ['stringValue' => $path]],
                 ['key' => 'url.query', 'value' => ['stringValue' => $query]],
-                ['key' => 'url.full', 'value' => ['stringValue' => $url]],
+                ['key' => 'url.full', 'value' => ['stringValue' => $sanitizedUrl]],
                 ['key' => 'server.address', 'value' => ['stringValue' => $host]],
                 ['key' => 'server.port', 'value' => ['intValue' => $port]],
                 ['key' => 'network.protocol.name', 'value' => ['stringValue' => 'http']],
@@ -461,20 +511,24 @@ if (!function_exists('traced_curl_exec')) {
             $sizeDownload = curl_getinfo($ch, CURLINFO_SIZE_DOWNLOAD);
             $sizeUpload = curl_getinfo($ch, CURLINFO_SIZE_UPLOAD);
             
-            // Extract URL components for attributes
+            // Extract URL components for attributes (sanitized)
             $parsedUrl = parse_url($url);
             $scheme = $parsedUrl['scheme'] ?? 'http';
             $host = $parsedUrl['host'] ?? '';
             $port = $parsedUrl['port'] ?? ($scheme === 'https' ? 443 : 80);
             $path = $parsedUrl['path'] ?? '/';
-            $query = isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '';
+            
+            // Sanitize URL for tracing
+            $sanitizedUrl = sanitize_url_for_tracing($url);
+            $sanitizedQuery = parse_url($sanitizedUrl, PHP_URL_QUERY);
+            $query = $sanitizedQuery ? '?' . $sanitizedQuery : '';
             
             $attributes = [
                 ['key' => 'http.request.method', 'value' => ['stringValue' => strtoupper($method)]],
                 ['key' => 'url.scheme', 'value' => ['stringValue' => $scheme]],
                 ['key' => 'url.path', 'value' => ['stringValue' => $path]],
                 ['key' => 'url.query', 'value' => ['stringValue' => $query]],
-                ['key' => 'url.full', 'value' => ['stringValue' => $url]],
+                ['key' => 'url.full', 'value' => ['stringValue' => $sanitizedUrl]],
                 ['key' => 'server.address', 'value' => ['stringValue' => $host]],
                 ['key' => 'server.port', 'value' => ['intValue' => $port]],
                 ['key' => 'http.response.status_code', 'value' => ['intValue' => $httpCode]],
@@ -520,20 +574,24 @@ if (!function_exists('traced_curl_exec')) {
         } catch (Exception $e) {
             $endTime = microtime(true);
             
-            // Extract URL components for attributes
+            // Extract URL components for attributes (sanitized)
             $parsedUrl = parse_url($url ?? '');
             $scheme = $parsedUrl['scheme'] ?? 'http';
             $host = $parsedUrl['host'] ?? '';
             $port = $parsedUrl['port'] ?? ($scheme === 'https' ? 443 : 80);
             $path = $parsedUrl['path'] ?? '/';
-            $query = isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '';
+            
+            // Sanitize URL for tracing
+            $sanitizedUrl = sanitize_url_for_tracing($url ?? '');
+            $sanitizedQuery = parse_url($sanitizedUrl, PHP_URL_QUERY);
+            $query = $sanitizedQuery ? '?' . $sanitizedQuery : '';
             
             $attributes = [
                 ['key' => 'http.request.method', 'value' => ['stringValue' => strtoupper($method ?? 'GET')]],
                 ['key' => 'url.scheme', 'value' => ['stringValue' => $scheme]],
                 ['key' => 'url.path', 'value' => ['stringValue' => $path]],
                 ['key' => 'url.query', 'value' => ['stringValue' => $query]],
-                ['key' => 'url.full', 'value' => ['stringValue' => $url ?? '']],
+                ['key' => 'url.full', 'value' => ['stringValue' => $sanitizedUrl]],
                 ['key' => 'server.address', 'value' => ['stringValue' => $host]],
                 ['key' => 'server.port', 'value' => ['intValue' => $port]],
                 ['key' => 'network.protocol.name', 'value' => ['stringValue' => 'http']],
