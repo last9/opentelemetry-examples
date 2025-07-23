@@ -30,8 +30,7 @@ class OpenTelemetryMiddleware
         // Store in globals for DB/curl spans
         $GLOBALS['otel_trace_id'] = $traceId;
         $GLOBALS['otel_span_id'] = $spanId;
-        // Debug: Log HTTP span context
-        file_put_contents('/tmp/debug.log', "[OpenTelemetryMiddleware] HTTP traceId: {$traceId}, spanId: {$spanId}\n", FILE_APPEND);
+
         
         try {
             $response = $next($request);
@@ -70,13 +69,56 @@ class OpenTelemetryMiddleware
             $attributes[] = ['key' => 'http.route', 'value' => ['stringValue' => $request->route()->uri()]];
         }
         
-        // Add query string if present
+        // Add query string if present (sanitized)
         if ($request->getQueryString()) {
-            $attributes[] = ['key' => 'url.query', 'value' => ['stringValue' => $request->getQueryString()]];
+            $queryString = $request->getQueryString();
+            // Sanitize query string to remove sensitive parameters
+            $queryParams = [];
+            parse_str($queryString, $queryParams);
+            
+            // List of sensitive parameter names to redact
+            $sensitiveParams = [
+                'password', 'passwd', 'pwd', 'secret', 'key', 'token', 'auth', 
+                'api_key', 'api_secret', 'access_token', 'refresh_token',
+                'session', 'sessionid', 'sid', 'csrf', 'xsrf',
+                'authorization', 'bearer', 'apikey', 'apisecret'
+            ];
+            
+            foreach ($sensitiveParams as $param) {
+                if (isset($queryParams[$param])) {
+                    $queryParams[$param] = '[REDACTED]';
+                }
+            }
+            
+            $sanitizedQueryString = http_build_query($queryParams);
+            $attributes[] = ['key' => 'url.query', 'value' => ['stringValue' => $sanitizedQueryString]];
         }
         
-        // Add full URL for reference
-        $attributes[] = ['key' => 'url.full', 'value' => ['stringValue' => $request->fullUrl()]];
+        // Add full URL for reference (sanitized)
+        $fullUrl = $request->fullUrl();
+        if ($request->getQueryString()) {
+            $queryParams = [];
+            parse_str($request->getQueryString(), $queryParams);
+            
+            // List of sensitive parameter names to redact
+            $sensitiveParams = [
+                'password', 'passwd', 'pwd', 'secret', 'key', 'token', 'auth', 
+                'api_key', 'api_secret', 'access_token', 'refresh_token',
+                'session', 'sessionid', 'sid', 'csrf', 'xsrf',
+                'authorization', 'bearer', 'apikey', 'apisecret'
+            ];
+            
+            foreach ($sensitiveParams as $param) {
+                if (isset($queryParams[$param])) {
+                    $queryParams[$param] = '[REDACTED]';
+                }
+            }
+            
+            $sanitizedQueryString = http_build_query($queryParams);
+            $fullUrl = $request->url() . ($sanitizedQueryString ? '?' . $sanitizedQueryString : '');
+        }
+        
+        $attributes[] = ['key' => 'url.full', 'value' => ['stringValue' => $fullUrl]];
         
         // Add request body size if available
         if ($request->header('Content-Length')) {
@@ -150,7 +192,6 @@ class OpenTelemetryMiddleware
         // Send to collector
         try {
             $url = env('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT') ?? 'http://localhost:4318/v1/traces';
-            echo $url;
             $headers = ['Content-Type' => 'application/json'];
             // Parse OTEL_EXPORTER_OTLP_HEADERS if set
             if (!empty(env('OTEL_EXPORTER_OTLP_HEADERS'))) {
