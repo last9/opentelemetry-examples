@@ -71,22 +71,16 @@ try {
     $GLOBALS['official_batch_processor'] = $batchProcessor;
     
     // Log successful initialization
-    error_log('OpenTelemetry SDK initialized successfully');
-    error_log('Endpoint: ' . getenv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'));
-    error_log('Service: laravel-app');
+    
     
     // Register shutdown function to flush remaining traces
     register_shutdown_function(function() use ($batchProcessor, $tracerProvider) {
-        error_log('Shutdown function called - flushing traces');
         $batchProcessor->shutdown();
         $tracerProvider->shutdown();
-        error_log('Shutdown function completed');
     });
     
 } catch (Exception $e) {
     // Log error but don't break the application
-    error_log('Failed to initialize OpenTelemetry SDK: ' . $e->getMessage());
-    error_log('Stack trace: ' . $e->getTraceAsString());
 }
 
 // Simple tracer class for easy usage with official SDK
@@ -99,7 +93,6 @@ class SimpleTracer {
     
     public function createTrace($name, $attributes = []) {
         if (!$this->tracer) {
-            error_log('No tracer available for createTrace: ' . $name);
             return;
         }
         
@@ -123,13 +116,10 @@ class SimpleTracer {
         $span = $span->startSpan();
         $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
         $span->end();
-        
-        error_log('Created trace: ' . $name . ' with parent: ' . ($spanContext->isValid() ? 'yes' : 'no'));
     }
     
     public function traceDatabase($query, $dbName = null, $connectionName = null, $duration = null, $rowCount = null, $error = null, $customSpanName = null) {
         if (!$this->tracer) {
-            error_log('No tracer available for traceDatabase: ' . $query);
             return;
         }
         
@@ -180,8 +170,6 @@ class SimpleTracer {
         }
         
         $span->end();
-        
-        error_log('Created database trace: ' . $spanName . ' with parent: ' . ($spanContext->isValid() ? 'yes' : 'no'));
     }
     
     private function extractDbOperation($query) {
