@@ -154,9 +154,7 @@ class SimpleTracer {
             $span->setAttribute('db.sql.table', $tableName);
         }
         
-        if ($duration !== null) {
-            $span->setAttribute('db.duration', (string)$duration);
-        }
+
         
         if ($rowCount !== null) {
             $span->setAttribute('db.rows_affected', $rowCount);
@@ -224,22 +222,90 @@ if (!function_exists('official_tracer')) {
 // Helper functions for traced operations using official SDK
 if (!function_exists('traced_pdo_query')) {
 function traced_pdo_query($pdo, $query, $params = []) {
-        $startTime = microtime(true);
-        try {
+        if (!isset($GLOBALS['official_tracer'])) {
             $stmt = $pdo->prepare($query);
             $stmt->execute($params);
-            $duration = (microtime(true) - $startTime) * 1000;
-            
-                    if (isset($GLOBALS['simple_tracer'])) {
-            $GLOBALS['simple_tracer']->traceDatabase($query, null, null, $duration, $stmt->rowCount());
-        }
-            
             return $stmt;
-        } catch (Exception $e) {
-            $duration = (microtime(true) - $startTime) * 1000;
-                    if (isset($GLOBALS['simple_tracer'])) {
-            $GLOBALS['simple_tracer']->traceDatabase($query, null, null, $duration, null, $e);
         }
+        
+        $operation = 'query';
+        $tableName = null;
+        
+        // Extract operation and table name
+        $queryUpper = trim(strtoupper($query));
+        if (preg_match('/^(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|REPLACE|SHOW|DESCRIBE|EXPLAIN)/', $queryUpper, $matches)) {
+            $operation = strtolower($matches[1]);
+        }
+        
+        // Extract table name based on operation
+        switch ($operation) {
+            case 'select':
+                if (preg_match('/\bFROM\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?/i', $query, $matches)) {
+                    $tableName = $matches[1];
+                }
+                break;
+            case 'insert':
+                if (preg_match('/\bINTO\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?/i', $query, $matches)) {
+                    $tableName = $matches[1];
+                }
+                break;
+            case 'update':
+                if (preg_match('/\bUPDATE\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?/i', $query, $matches)) {
+                    $tableName = $matches[1];
+                }
+                break;
+            case 'delete':
+                if (preg_match('/\bFROM\s+`?([a-zA-Z0-9_]*)`?/i', $query, $matches)) {
+                    $tableName = $matches[1];
+                }
+                break;
+        }
+        
+        $spanName = 'db.' . $operation . ($tableName ? " {$tableName}" : '');
+        
+        // Get current span context for parent-child relationship
+        $currentSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
+        $spanContext = $currentSpan->getContext();
+        
+        $span = $GLOBALS['official_tracer']->spanBuilder($spanName)
+            ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
+            ->setAttribute('db.system', 'mysql')
+            ->setAttribute('db.statement', $query)
+            ->setAttribute('db.operation', $operation)
+            ->setAttribute('db.name', 'laravel')
+            ->setAttribute('server.address', 'mysql')
+            ->setAttribute('server.port', 3306)
+            ->setAttribute('network.transport', 'tcp')
+            ->setAttribute('network.type', 'ipv4');
+        
+        // Set parent context if we have a current span
+        if ($spanContext->isValid()) {
+            $span->setParent(\OpenTelemetry\Context\Context::getCurrent());
+        }
+        
+        // Start the span - SDK will automatically capture start time
+        $span = $span->startSpan();
+        
+        if ($tableName) {
+            $span->setAttribute('db.sql.table', $tableName);
+        }
+        
+        try {
+            // Execute the actual database operation within the span timing
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
+            
+            // Set row count attribute
+            $span->setAttribute('db.rows_affected', $stmt->rowCount());
+            $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+            
+            $span->end();
+            return $stmt;
+            
+        } catch (Exception $e) {
+            $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
+            $span->recordException($e);
+            $span->end();
             throw $e;
         }
     }
@@ -251,24 +317,48 @@ function traced_curl_exec($ch) {
             return curl_exec($ch);
         }
         
-        $startTime = microtime(true);
-        $result = curl_exec($ch);
-        $duration = (microtime(true) - $startTime) * 1000;
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $url = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+        
+        // Get current span context for parent-child relationship
+        $currentSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
+        $spanContext = $currentSpan->getContext();
         
         $span = $GLOBALS['official_tracer']->spanBuilder('http.client.curl')
             ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
             ->setAttribute('http.url', $url)
-            ->setAttribute('http.status_code', $httpCode)
-            ->setAttribute('http.duration_ms', $duration)
-            ->setAttribute('http.method', 'GET')
-            ->startSpan();
+            ->setAttribute('http.method', 'GET');
         
-        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
-        $span->end();
+        // Set parent context if we have a current span
+        if ($spanContext->isValid()) {
+            $span->setParent(\OpenTelemetry\Context\Context::getCurrent());
+        }
         
-        return $result;
+        // Start the span - SDK will automatically capture start time
+        $span = $span->startSpan();
+        
+        try {
+            // Execute the curl request within the span timing
+            $result = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            // Set response attributes
+            $span->setAttribute('http.status_code', $httpCode);
+            
+            if ($httpCode >= 400) {
+                $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, 'HTTP ' . $httpCode);
+            } else {
+                $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+            }
+            
+            $span->end();
+            return $result;
+            
+        } catch (Exception $e) {
+            $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
+            $span->recordException($e);
+            $span->end();
+            throw $e;
+        }
     }
 }
 
@@ -278,38 +368,43 @@ function traced_guzzle_request($client, $method, $url, $options = []) {
             return $client->request($method, $url, $options);
         }
         
-        $startTime = microtime(true);
+        // Get current span context for parent-child relationship
+        $currentSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
+        $spanContext = $currentSpan->getContext();
+        
+        $span = $GLOBALS['official_tracer']->spanBuilder('http.client.guzzle')
+            ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
+            ->setAttribute('http.url', $url)
+            ->setAttribute('http.method', $method);
+        
+        // Set parent context if we have a current span
+        if ($spanContext->isValid()) {
+            $span->setParent(\OpenTelemetry\Context\Context::getCurrent());
+        }
+        
+        // Start the span - SDK will automatically capture start time
+        $span = $span->startSpan();
+        
         try {
+            // Execute the HTTP request within the span timing
             $response = $client->request($method, $url, $options);
-            $duration = (microtime(true) - $startTime) * 1000;
             
-            $span = $GLOBALS['official_tracer']->spanBuilder('http.client.guzzle')
-                ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
-                ->setAttribute('http.url', $url)
-                ->setAttribute('http.method', $method)
-                ->setAttribute('http.status_code', $response->getStatusCode())
-                ->setAttribute('http.duration_ms', $duration)
-                ->startSpan();
+            // Set response attributes
+            $span->setAttribute('http.status_code', $response->getStatusCode());
             
-            $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+            if ($response->getStatusCode() >= 400) {
+                $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, 'HTTP ' . $response->getStatusCode());
+            } else {
+                $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+            }
+            
             $span->end();
-            
             return $response;
+            
         } catch (Exception $e) {
-            $duration = (microtime(true) - $startTime) * 1000;
-            
-            $span = $GLOBALS['official_tracer']->spanBuilder('http.client.guzzle.error')
-                ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
-                ->setAttribute('http.url', $url)
-                ->setAttribute('http.method', $method)
-                ->setAttribute('http.duration_ms', $duration)
-                ->setAttribute('error.message', $e->getMessage())
-                ->startSpan();
-            
             $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
             $span->recordException($e);
             $span->end();
-            
             throw $e;
         }
     }
