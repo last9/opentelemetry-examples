@@ -212,7 +212,7 @@ class SimpleTracer {
 }
 
 // Initialize simple tracer for route usage
-$GLOBALS['official_simple_tracer'] = new SimpleTracer();
+    $GLOBALS['simple_tracer'] = new SimpleTracer();
 
 // Helper function for easy access
 if (!function_exists('official_tracer')) {
@@ -230,16 +230,16 @@ function traced_pdo_query($pdo, $query, $params = []) {
             $stmt->execute($params);
             $duration = (microtime(true) - $startTime) * 1000;
             
-            if (isset($GLOBALS['official_simple_tracer'])) {
-                $GLOBALS['official_simple_tracer']->traceDatabase($query, null, null, $duration, $stmt->rowCount());
-            }
+                    if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->traceDatabase($query, null, null, $duration, $stmt->rowCount());
+        }
             
             return $stmt;
         } catch (Exception $e) {
             $duration = (microtime(true) - $startTime) * 1000;
-            if (isset($GLOBALS['official_simple_tracer'])) {
-                $GLOBALS['official_simple_tracer']->traceDatabase($query, null, null, $duration, null, $e);
-            }
+                    if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->traceDatabase($query, null, null, $duration, null, $e);
+        }
             throw $e;
         }
     }

@@ -39,8 +39,8 @@ Route::get('/api/test-debug', function () {
 
 Route::get('/api/example', function () {
     // Example of custom tracing in your application using official SDK
-    if (isset($GLOBALS['official_simple_tracer'])) {
-        $GLOBALS['official_simple_tracer']->createTrace('business.logic', [
+            if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->createTrace('business.logic', [
             'operation' => 'example_processing',
             'user_id' => 'anonymous'
         ]);
@@ -58,8 +58,8 @@ Route::get('/api/test-batch', function () {
     
     // Generate multiple traces to test batching
     for ($i = 1; $i <= 25; $i++) {
-        if (isset($GLOBALS['official_simple_tracer'])) {
-            $GLOBALS['official_simple_tracer']->createTrace("batch.test.{$i}", [
+        if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->createTrace("batch.test.{$i}", [
                 'iteration' => $i,
                 'test_type' => 'batch_processing',
                 'timestamp' => microtime(true)
@@ -82,8 +82,8 @@ Route::get('/api/test-async', function () {
     
     // Generate traces asynchronously
     for ($i = 1; $i <= 25; $i++) {
-        if (isset($GLOBALS['official_simple_tracer'])) {
-            $GLOBALS['official_simple_tracer']->createTrace("async.test.{$i}", [
+        if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->createTrace("async.test.{$i}", [
                 'iteration' => $i,
                 'test_type' => 'async_processing',
                 'timestamp' => microtime(true)
@@ -158,17 +158,17 @@ Route::get('/api/test-performance', function () {
     
     // Test 1: Single trace
     $startTime = microtime(true);
-    if (isset($GLOBALS['official_simple_tracer'])) {
-        $GLOBALS['official_simple_tracer']->createTrace('performance.single', ['test' => 'single']);
-    }
+            if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->createTrace('performance.single', ['test' => 'single']);
+        }
     $singleDuration = (microtime(true) - $startTime) * 1000;
     $results['single_trace_ms'] = round($singleDuration, 3);
     
     // Test 2: Multiple traces (should be batched)
     $startTime = microtime(true);
     for ($i = 1; $i <= 20; $i++) {
-        if (isset($GLOBALS['official_simple_tracer'])) {
-            $GLOBALS['official_simple_tracer']->createTrace("performance.batch.{$i}", ['test' => 'batch']);
+        if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->createTrace("performance.batch.{$i}", ['test' => 'batch']);
         }
     }
     $batchDuration = (microtime(true) - $startTime) * 1000;
@@ -286,8 +286,8 @@ Route::get('/api/test-custom-spans', function () {
 // Test slow operations
 Route::get('/api/test-slow', function () {
     try {
-        if (isset($GLOBALS['official_simple_tracer'])) {
-            $GLOBALS['official_simple_tracer']->createTrace('slow.operation', [
+        if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->createTrace('slow.operation', [
                 'operation_type' => 'simulated_work',
                 'duration_ms' => 500,
                 'complexity' => 'high'
@@ -370,18 +370,18 @@ Route::get('/api/eloquent-example', function () {
 // Test official OpenTelemetry SDK batch exporter (using global tracer)
 Route::get('/test-official-otel', function () {
     try {
-        if (!isset($GLOBALS['official_simple_tracer'])) {
+        if (!isset($GLOBALS['simple_tracer'])) {
             throw new Exception('OpenTelemetry tracer not initialized');
         }
         
         // Create some test traces
-        $GLOBALS['official_simple_tracer']->createTrace('test.otel.simple', [
+        $GLOBALS['simple_tracer']->createTrace('test.otel.simple', [
             'test.type' => 'sdk',
             'test.message' => 'Using official OpenTelemetry SDK batch exporter'
         ]);
         
         // Test database tracing
-        $GLOBALS['official_simple_tracer']->traceDatabase(
+        $GLOBALS['simple_tracer']->traceDatabase(
             'SELECT * FROM users WHERE id = 1',
             'laravel',
             'mysql',
@@ -415,10 +415,10 @@ Route::get('/test-official-otel', function () {
 // Test database spans with official SDK
 Route::get('/test-db-spans', function () {
     try {
-        if (isset($GLOBALS['official_simple_tracer'])) {
-            $GLOBALS['official_simple_tracer']->traceDatabase('SELECT * FROM users WHERE id = 1', 'laravel', 'mysql', 25.5, 1);
-            $GLOBALS['official_simple_tracer']->traceDatabase('INSERT INTO logs (message, created_at) VALUES (?, ?)', 'laravel', 'mysql', 18.2, 1);
-            $GLOBALS['official_simple_tracer']->traceDatabase('UPDATE users SET last_login = ? WHERE id = ?', 'laravel', 'mysql', 12.8, 1);
+        if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->traceDatabase('SELECT * FROM users WHERE id = 1', 'laravel', 'mysql', 25.5, 1);
+            $GLOBALS['simple_tracer']->traceDatabase('INSERT INTO logs (message, created_at) VALUES (?, ?)', 'laravel', 'mysql', 18.2, 1);
+            $GLOBALS['simple_tracer']->traceDatabase('UPDATE users SET last_login = ? WHERE id = ?', 'laravel', 'mysql', 12.8, 1);
         }
         if (isset($GLOBALS['official_batch_processor'])) {
             $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
@@ -447,13 +447,13 @@ Route::get('/test-all-traces', function () {
         $results = [];
         $results['http_server_span'] = 'Generated by middleware for this request';
         
-        if (isset($GLOBALS['official_simple_tracer'])) {
-            $GLOBALS['official_simple_tracer']->createTrace('business.logic.user_processing', [
+        if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->createTrace('business.logic.user_processing', [
                 'operation' => 'user_processing',
                 'user_id' => 'test_user_123',
                 'priority' => 'high'
             ]);
-            $GLOBALS['official_simple_tracer']->createTrace('business.logic.notification', [
+            $GLOBALS['simple_tracer']->createTrace('business.logic.notification', [
                 'operation' => 'notification_send',
                 'type' => 'email',
                 'recipient' => 'user@example.com'
@@ -461,22 +461,22 @@ Route::get('/test-all-traces', function () {
             $results['custom_spans'] = 'Created 2 business logic spans';
         }
         
-        if (isset($GLOBALS['official_simple_tracer'])) {
-            $GLOBALS['official_simple_tracer']->traceDatabase(
+        if (isset($GLOBALS['simple_tracer'])) {
+            $GLOBALS['simple_tracer']->traceDatabase(
                 'SELECT * FROM users WHERE email = ?',
                 'laravel',
                 'mysql',
                 15.2,
                 1
             );
-            $GLOBALS['official_simple_tracer']->traceDatabase(
+            $GLOBALS['simple_tracer']->traceDatabase(
                 'UPDATE users SET last_activity = ? WHERE id = ?',
                 'laravel',
                 'mysql',
                 8.7,
                 1
             );
-            $GLOBALS['official_simple_tracer']->traceDatabase(
+            $GLOBALS['simple_tracer']->traceDatabase(
                 'INSERT INTO audit_logs (action, user_id, timestamp) VALUES (?, ?, ?)',
                 'laravel',
                 'mysql',

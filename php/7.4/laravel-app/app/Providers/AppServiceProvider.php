@@ -41,8 +41,8 @@ class AppServiceProvider extends ServiceProvider
                         $sql = preg_replace('/\?/', "'" . addslashes($binding) . "'", $sql, 1);
                     }
                 }
-                if (isset($GLOBALS['official_simple_tracer'])) {
-                    $GLOBALS['official_simple_tracer']->traceDatabase(
+                if (isset($GLOBALS['simple_tracer'])) {
+                    $GLOBALS['simple_tracer']->traceDatabase(
                         $sql,
                         $query->connectionName ?? null,
                         null,
@@ -68,7 +68,7 @@ class AppServiceProvider extends ServiceProvider
             'eloquent.saved: *',
             'eloquent.restored: *',
         ], function ($eventName, $models) {
-            if (isset($GLOBALS['official_simple_tracer'])) {
+            if (isset($GLOBALS['simple_tracer'])) {
                 $modelClass = get_class($models[0]);
                 $operation = str_replace('eloquent.', '', explode(':', $eventName)[0]);
                 $queryLog = \Illuminate\Support\Facades\DB::getQueryLog();
@@ -92,7 +92,7 @@ class AppServiceProvider extends ServiceProvider
                     }
                     // Create a different span name for Eloquent events to distinguish from DB::listen
                     $spanName = "eloquent.{$operation}.{$modelClass}";
-                    $GLOBALS['official_simple_tracer']->traceDatabase(
+                    $GLOBALS['simple_tracer']->traceDatabase(
                         $sql,
                         $modelClass, // dbName
                         $lastQuery['connection'] ?? null, // connectionName

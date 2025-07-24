@@ -119,12 +119,12 @@ class SimpleTracer {
     }
 }
 
-$GLOBALS['official_simple_tracer'] = new SimpleTracer();
+$GLOBALS['simple_tracer'] = new SimpleTracer();
 
 // Helper functions for tracing
 function traced_pdo_query($pdo, $query, $params = []) {
     global $GLOBALS;
-    $tracer = $GLOBALS['official_simple_tracer'];
+    $tracer = $GLOBALS['simple_tracer'];
     
     $span = $tracer->traceDatabase($query, [
         'db.type' => 'pdo',
@@ -270,39 +270,15 @@ class OpenTelemetryMiddleware
 }
 ```
 
-### Step 3: Create OtelTracer Service
+### Step 3: OpenTelemetry Bootstrap Setup
 
-Create `app/Services/OtelTracer.php`:
+The OpenTelemetry integration uses a bootstrap approach that provides global access to the tracer. This is handled automatically by `bootstrap/otel.php` which creates:
 
-```php
-<?php
+- `$GLOBALS['official_tracer']` - Main tracer instance for middleware
+- `$GLOBALS['simple_tracer']` - Simple tracer for application code
+- `$GLOBALS['official_batch_processor']` - Batch processor for flushing traces
 
-namespace App\Services;
-
-class OtelTracer
-{
-    public function getTracer()
-    {
-        global $GLOBALS;
-        return $GLOBALS['official_tracer'] ?? null;
-    }
-    
-    public function getBatchProcessor()
-    {
-        global $GLOBALS;
-        return $GLOBALS['official_batch_processor'] ?? null;
-    }
-    
-    public function forceFlush()
-    {
-        global $GLOBALS;
-        if (isset($GLOBALS['official_batch_processor'])) {
-            return $GLOBALS['official_batch_processor']->forceFlush();
-        }
-        return false;
-    }
-}
-```
+No additional service class is needed as the bootstrap provides all necessary functionality.
 
 ### Step 4: Update Application Bootstrap
 
@@ -348,8 +324,8 @@ class AppServiceProvider extends ServiceProvider
         // Database query tracing
         DB::listen(function ($query) {
             global $GLOBALS;
-            if (isset($GLOBALS['official_simple_tracer'])) {
-                $tracer = $GLOBALS['official_simple_tracer'];
+            if (isset($GLOBALS['simple_tracer'])) {
+                $tracer = $GLOBALS['simple_tracer'];
                 $span = $tracer->traceDatabase($query->sql, [
                     'db.type' => 'eloquent',
                     'db.time' => $query->time,
@@ -416,7 +392,7 @@ use Illuminate\Support\Facades\Route;
 // Test PDO tracing
 Route::get('/api/pdo-example', function () {
     global $GLOBALS;
-    $tracer = $GLOBALS['official_simple_tracer'];
+    $tracer = $GLOBALS['simple_tracer'];
     
     $pdo = new PDO('mysql:host=localhost;dbname=your_database', 'your_username', 'your_password');
     $span = $tracer->traceDatabase('SELECT * FROM users WHERE id = ?', ['db.type' => 'pdo']);
@@ -458,7 +434,7 @@ Route::get('/api/guzzle-example', function () {
 // Test all tracing functions
 Route::get('/api/test-all', function () {
     global $GLOBALS;
-    $tracer = $GLOBALS['official_simple_tracer'];
+    $tracer = $GLOBALS['simple_tracer'];
     
     // PDO test
     $pdo = new PDO('mysql:host=localhost;dbname=your_database', 'your_username', 'your_password');
