@@ -367,19 +367,21 @@ Route::get('/api/eloquent-example', function () {
     ]);
 });
 
-// Test official OpenTelemetry SDK batch exporter
+// Test official OpenTelemetry SDK batch exporter (using global tracer)
 Route::get('/test-official-otel', function () {
     try {
-        $tracer = \App\Services\OtelTracer::getInstance();
+        if (!isset($GLOBALS['official_simple_tracer'])) {
+            throw new Exception('OpenTelemetry tracer not initialized');
+        }
         
         // Create some test traces
-        $tracer->createTrace('test.official.otel.simple', [
-            'test.type' => 'official_sdk',
+        $GLOBALS['official_simple_tracer']->createTrace('test.otel.simple', [
+            'test.type' => 'sdk',
             'test.message' => 'Using official OpenTelemetry SDK batch exporter'
         ]);
         
         // Test database tracing
-        $tracer->traceDatabase(
+        $GLOBALS['official_simple_tracer']->traceDatabase(
             'SELECT * FROM users WHERE id = 1',
             'laravel',
             'mysql',
@@ -387,27 +389,16 @@ Route::get('/test-official-otel', function () {
             1
         );
         
-        // Test HTTP client tracing
-        $span = $tracer->createSpan('http.client.request', [
-            'http.method' => 'GET',
-            'http.url' => 'https://api.example.com/test',
-            'http.target' => '/test'
-        ], \OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT);
-        
-        // Simulate some work
-        usleep(100000); // 100ms
-        
-        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
-        $span->end();
-        
         // Force flush to see immediate results
-        $flushResult = $tracer->forceFlush();
+        $flushResult = false;
+        if (isset($GLOBALS['official_batch_processor'])) {
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        }
         
         return response()->json([
             'status' => 'success',
             'message' => 'Official OpenTelemetry SDK traces created and flushed',
             'flush_result' => $flushResult,
-            'batch_stats' => $tracer->getBatchStats(),
             'timestamp' => now()->toISOString()
         ]);
         
