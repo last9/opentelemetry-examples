@@ -38,274 +38,280 @@ Route::get('/api/test-debug', function () {
 });
 
 Route::get('/api/example', function () {
-    // Example of custom tracing in your application
-    $GLOBALS['simple_tracer']->createTrace('business.logic', [
-        'operation' => 'example_processing',
-        'user_id' => 'anonymous'
-    ]);
+    // Example of custom tracing in your application using official SDK
+    if (isset($GLOBALS['official_simple_tracer'])) {
+        $GLOBALS['official_simple_tracer']->createTrace('business.logic', [
+            'operation' => 'example_processing',
+            'user_id' => 'anonymous'
+        ]);
+    }
     
     return response()->json([
-        'message' => 'Example endpoint with custom tracing',
+        'message' => 'Example endpoint with official SDK tracing',
         'traced' => true
     ]);
 });
 
-Route::get('/api/database-example', function () {
-    // Example of database operation tracing with Eloquent ORM
-    $users = \App\User::where('email', 'like', '%@%')->limit(1)->get();
+// Test routes for official SDK export functionality
+Route::get('/api/test-batch', function () {
+    $startTime = microtime(true);
     
-    // The DB::listen handler in AppServiceProvider will automatically trace this Eloquent query
-    if (isset($GLOBALS['simple_tracer'])) {
-        $GLOBALS['simple_tracer']->createTrace('test.span', ['test' => 'value']);
+    // Generate multiple traces to test batching
+    for ($i = 1; $i <= 25; $i++) {
+        if (isset($GLOBALS['official_simple_tracer'])) {
+            $GLOBALS['official_simple_tracer']->createTrace("batch.test.{$i}", [
+                'iteration' => $i,
+                'test_type' => 'batch_processing',
+                'timestamp' => microtime(true)
+            ]);
+        }
     }
     
+    $duration = (microtime(true) - $startTime) * 1000;
+    
     return response()->json([
-        'message' => 'Eloquent ORM operation with automatic tracing',
-        'users_count' => $users->count(),
-        'first_user' => $users->first() ? $users->first()->only(['id', 'name', 'email']) : null
+        'message' => 'Official SDK batch test completed',
+        'traces_generated' => 25,
+        'duration_ms' => round($duration, 2),
+        'timestamp' => date('Y-m-d H:i:s')
     ]);
 });
 
-// Example of PDO database tracing with direct PDO connection
-Route::get('/api/pdo-example', function () {
+Route::get('/api/test-async', function () {
+    $startTime = microtime(true);
+    
+    // Generate traces asynchronously
+    for ($i = 1; $i <= 25; $i++) {
+        if (isset($GLOBALS['official_simple_tracer'])) {
+            $GLOBALS['official_simple_tracer']->createTrace("async.test.{$i}", [
+                'iteration' => $i,
+                'test_type' => 'async_processing',
+                'timestamp' => microtime(true)
+            ]);
+        }
+    }
+    
+    $duration = (microtime(true) - $startTime) * 1000;
+    
+    return response()->json([
+        'message' => 'Official SDK async test completed',
+        'traces_generated' => 25,
+        'duration_ms' => round($duration, 2),
+        'timestamp' => date('Y-m-d H:i:s')
+    ]);
+});
+
+// Test official SDK batch processor status
+Route::get('/api/test-batch-status', function () {
     try {
-        // Create PDO connection (normally you'd use a connection pool)
-        $dsn = 'mysql:host=' . env('DB_HOST', 'mysql') . ';dbname=' . env('DB_DATABASE', 'laravel');
-        $pdo = new PDO($dsn, env('DB_USERNAME', 'root'), env('DB_PASSWORD', 'secret'));
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        
-        // Example of traced PDO query using helper function
-        $query = 'SELECT VERSION() as mysql_version, DATABASE() as current_db';
-        
-        // Use traced_pdo_query helper function for automatic tracing
-        $result = traced_pdo_query($pdo, $query);
-        $data = $result->fetch(PDO::FETCH_ASSOC);
-        
-        return response()->json([
-            'message' => 'PDO database operation with tracing',
-            'traced' => true,
-            'data' => $data
-        ]);
+        if (isset($GLOBALS['official_batch_processor'])) {
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            
+            return response()->json([
+                'message' => 'Official SDK batch processor status',
+                'flush_result' => $flushResult,
+                'processor_type' => 'BatchSpanProcessor',
+                'timestamp' => date('Y-m-d H:i:s')
+            ]);
+        } else {
+            return response()->json([
+                'error' => 'Official SDK batch processor not available',
+                'timestamp' => date('Y-m-d H:i:s')
+            ], 500);
+        }
     } catch (Exception $e) {
         return response()->json([
-            'message' => 'PDO database operation failed',
-            'error' => $e->getMessage(),
-            'traced' => true
+            'error' => 'Failed to get batch processor status',
+            'message' => $e->getMessage()
         ], 500);
     }
 });
 
-// Example of PDO prepared statement tracing
-Route::get('/api/pdo-prepared-example', function () {
+// Test official SDK force flush
+Route::get('/api/test-force-flush', function () {
     try {
-        // Create PDO connection
-        $dsn = 'mysql:host=' . env('DB_HOST', 'localhost') . ';dbname=' . env('DB_DATABASE', 'laravel');
-        $pdo = new PDO($dsn, env('DB_USERNAME', 'root'), env('DB_PASSWORD', ''));
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        
-        // Create a simple table for demonstration
-        traced_pdo_query($pdo, 'CREATE TEMPORARY TABLE users_demo (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100), email VARCHAR(100))');
-        
-        // Insert some sample data using prepared statements
-        $stmt = traced_pdo_prepare($pdo, 'INSERT INTO users_demo (name, email) VALUES (?, ?)');
-        $stmt->execute(['John Doe', 'john@example.com']);
-        $stmt->execute(['Jane Smith', 'jane@example.com']);
-        
-        // Query the data
-        $selectStmt = traced_pdo_prepare($pdo, 'SELECT * FROM users_demo WHERE name LIKE ?');
-        $selectStmt->execute(['%John%']);
-        $users = $selectStmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        return response()->json([
-            'message' => 'PDO prepared statement operations with tracing',
-            'traced' => true,
-            'users' => $users
-        ]);
+        if (isset($GLOBALS['official_batch_processor'])) {
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            
+            return response()->json([
+                'message' => 'Official SDK force flush completed',
+                'flush_result' => $flushResult,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]);
+        } else {
+            return response()->json([
+                'error' => 'Official SDK batch processor not available',
+                'timestamp' => date('Y-m-d H:i:s')
+            ], 500);
+        }
     } catch (Exception $e) {
         return response()->json([
-            'message' => 'PDO prepared statement operation failed',
-            'error' => $e->getMessage(),
-            'traced' => true
+            'error' => 'Failed to force flush',
+            'message' => $e->getMessage()
         ], 500);
     }
 });
 
-// Example of database transaction tracing
-Route::get('/api/database-transaction-example', function () {
+// Test performance with official SDK
+Route::get('/api/test-performance', function () {
+    $results = [];
+    
+    // Test 1: Single trace
+    $startTime = microtime(true);
+    if (isset($GLOBALS['official_simple_tracer'])) {
+        $GLOBALS['official_simple_tracer']->createTrace('performance.single', ['test' => 'single']);
+    }
+    $singleDuration = (microtime(true) - $startTime) * 1000;
+    $results['single_trace_ms'] = round($singleDuration, 3);
+    
+    // Test 2: Multiple traces (should be batched)
+    $startTime = microtime(true);
+    for ($i = 1; $i <= 20; $i++) {
+        if (isset($GLOBALS['official_simple_tracer'])) {
+            $GLOBALS['official_simple_tracer']->createTrace("performance.batch.{$i}", ['test' => 'batch']);
+        }
+    }
+    $batchDuration = (microtime(true) - $startTime) * 1000;
+    $results['batch_20_traces_ms'] = round($batchDuration, 3);
+    $results['avg_per_trace_ms'] = round($batchDuration / 20, 3);
+    
+    // Test 3: Database tracing
+    $startTime = microtime(true);
     try {
-        // Create PDO connection
-        $dsn = 'mysql:host=' . env('DB_HOST', 'localhost') . ';dbname=' . env('DB_DATABASE', 'laravel');
-        $pdo = new PDO($dsn, env('DB_USERNAME', 'root'), env('DB_PASSWORD', ''));
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        
-        // Start transaction
-        $pdo->beginTransaction();
-        
-        // Create temporary table
-        traced_pdo_query($pdo, 'CREATE TEMPORARY TABLE transaction_demo (id INT AUTO_INCREMENT PRIMARY KEY, amount DECIMAL(10,2))');
-        
-        // Insert some data within transaction
-        $stmt = traced_pdo_prepare($pdo, 'INSERT INTO transaction_demo (amount) VALUES (?)');
-        $stmt->execute([100.50]);
-        $stmt->execute([200.75]);
-        
-        // Update data within transaction
-        $updateStmt = traced_pdo_prepare($pdo, 'UPDATE transaction_demo SET amount = amount * 1.1 WHERE id = ?');
-        $updateStmt->execute([1]);
-        
-        // Query the results
-        $result = traced_pdo_query($pdo, 'SELECT * FROM transaction_demo ORDER BY id');
-        $data = $result->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Commit transaction
-        $pdo->commit();
-        
-        return response()->json([
-            'message' => 'Database transaction completed with tracing',
-            'traced' => true,
-            'data' => $data
-        ]);
+        DB::select('SELECT 1 as test');
+        $dbDuration = (microtime(true) - $startTime) * 1000;
+        $results['db_trace_ms'] = round($dbDuration, 3);
     } catch (Exception $e) {
-        // Rollback on error
-        if ($pdo->inTransaction()) {
-            $pdo->rollback();
+        $results['db_trace_error'] = $e->getMessage();
+    }
+    
+    return response()->json([
+        'message' => 'Performance test completed',
+        'results' => $results,
+        'timestamp' => date('Y-m-d H:i:s')
+    ]);
+});
+
+// Test configuration
+Route::get('/api/test-config', function () {
+    return response()->json([
+        'message' => 'Configuration retrieved',
+        'config' => [
+            'service_name' => env('OTEL_SERVICE_NAME', 'laravel-app'),
+            'service_version' => env('OTEL_SERVICE_VERSION', '1.0.0'),
+            'endpoint' => env('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://localhost:4318/v1/traces'),
+            'headers' => env('OTEL_EXPORTER_OTLP_HEADERS', ''),
+            'protocol' => env('OTEL_EXPORTER_OTLP_PROTOCOL', 'http/protobuf'),
+            // OpenTelemetry SDK Standard Batch Span Processor settings
+            'max_export_batch_size' => env('OTEL_BSP_MAX_EXPORT_BATCH_SIZE', 2048),
+            'max_queue_size' => env('OTEL_BSP_MAX_QUEUE_SIZE', 2048),
+            'scheduled_delay_ms' => env('OTEL_BSP_SCHEDULED_DELAY_MS', 5000),
+            'export_timeout_ms' => env('OTEL_BSP_EXPORT_TIMEOUT_MS', 30000),
+            'max_concurrent_exports' => env('OTEL_BSP_MAX_CONCURRENT_EXPORTS', 1),
+        ],
+        'timestamp' => date('Y-m-d H:i:s')
+    ]);
+});
+
+// Test database operations with tracing
+Route::get('/api/test-db', function () {
+    try {
+        // Test database operations with tracing
+        $users = DB::select('SELECT COUNT(*) as count FROM users');
+        $userCount = $users[0]->count ?? 0;
+        
+        // Create a test user if table is empty
+        if ($userCount == 0) {
+            DB::insert('INSERT INTO users (name, email, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [
+                'Test User',
+                'test@example.com',
+                bcrypt('password'),
+                now(),
+                now()
+            ]);
+            $userCount = 1;
         }
         
         return response()->json([
-            'message' => 'Database transaction failed',
-            'error' => $e->getMessage(),
-            'traced' => true
-        ], 500);
-    }
-});
-
-// Example of database error tracing
-Route::get('/api/database-error-example', function () {
-    try {
-        // Create PDO connection
-        $dsn = 'mysql:host=' . env('DB_HOST', 'localhost') . ';dbname=' . env('DB_DATABASE', 'laravel');
-        $pdo = new PDO($dsn, env('DB_USERNAME', 'root'), env('DB_PASSWORD', ''));
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        
-        // Intentionally cause an error for tracing demonstration
-        $result = traced_pdo_query($pdo, 'SELECT * FROM nonexistent_table');
-        
-        return response()->json([
-            'message' => 'This should not be reached',
-            'traced' => true
-        ]);
-    } catch (Exception $e) {
-        return response()->json([
-            'message' => 'Database error traced successfully',
-            'error' => $e->getMessage(),
-            'traced' => true
-        ], 500);
-    }
-});
-
-Route::get('/api/slow-example', function () {
-    // Example of tracing a slow operation
-    $GLOBALS['simple_tracer']->createTrace('slow.operation', [
-        'duration' => '1000ms'
-    ]);
-    
-    sleep(1); // Simulate slow operation
-    
-    return response()->json([
-        'message' => 'Slow operation completed',
-        'duration' => '1 second'
-    ]);
-});
-
-// Example of tracing HTTP client calls with curl
-Route::get('/api/curl-example', function () {
-    // Example of making an external HTTP call with curl tracing
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, 'https://jsonplaceholder.typicode.com/posts/1');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    
-    // Use the traced curl execution
-    $result = traced_curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    return response()->json([
-        'message' => 'External API call completed with curl',
-        'http_code' => $httpCode,
-        'traced' => true,
-        'data' => json_decode($result, true)
-    ]);
-});
-
-// Example of tracing HTTP client calls with Guzzle
-Route::get('/api/guzzle-example', function () {
-    // Example of making an external HTTP call with Guzzle tracing
-    $client = new \GuzzleHttp\Client();
-    
-    try {
-        // Use the traced Guzzle request
-        $response = traced_guzzle_request($client, 'GET', 'https://jsonplaceholder.typicode.com/posts/2');
-        
-        return response()->json([
-            'message' => 'External API call completed with Guzzle',
-            'http_code' => $response->getStatusCode(),
+            'message' => 'Database test completed',
+            'user_count' => $userCount,
             'traced' => true,
-            'data' => json_decode($response->getBody()->getContents(), true)
+            'timestamp' => date('Y-m-d H:i:s')
         ]);
     } catch (Exception $e) {
         return response()->json([
-            'message' => 'External API call failed',
-            'error' => $e->getMessage(),
-            'traced' => true
+            'error' => 'Database test failed',
+            'message' => $e->getMessage()
         ], 500);
     }
 });
 
-// Example of multiple HTTP client calls in one request
-Route::get('/api/multi-http-example', function () {
-    $results = [];
-    
-    // Make multiple external calls with different methods
-    $client = new \GuzzleHttp\Client();
-    
+// Test custom spans
+Route::get('/api/test-custom-spans', function () {
     try {
-        // GET request with Guzzle
-        $response1 = traced_guzzle_request($client, 'GET', 'https://jsonplaceholder.typicode.com/users/1');
-        $results['user'] = json_decode($response1->getBody()->getContents(), true);
-        
-        // POST request with curl
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, 'https://jsonplaceholder.typicode.com/posts');
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-            'title' => 'Test Post',
-            'body' => 'This is a test post',
-            'userId' => 1
-        ]));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        
-        $postResult = traced_curl_exec($ch);
-        $results['post'] = json_decode($postResult, true);
-        curl_close($ch);
-        
+        if (isset($GLOBALS['official_tracer'])) {
+            // Create a custom span
+            $span = $GLOBALS['official_tracer']->spanBuilder('custom.operation')
+                ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_INTERNAL)
+                ->setAttribute('custom.attribute', 'test_value')
+                ->setAttribute('operation.type', 'test_operation')
+                ->startSpan();
+            
+            // Simulate some work
+            usleep(100000); // 100ms
+            
+            $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+            $span->end();
+            
+            return response()->json([
+                'message' => 'Custom span created successfully',
+                'span_name' => 'custom.operation',
+                'duration_ms' => 100,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]);
+        } else {
+            return response()->json([
+                'error' => 'Official SDK tracer not available',
+                'timestamp' => date('Y-m-d H:i:s')
+            ], 500);
+        }
     } catch (Exception $e) {
         return response()->json([
-            'message' => 'One or more external API calls failed',
-            'error' => $e->getMessage(),
-            'traced' => true
+            'error' => 'Failed to create custom span',
+            'message' => $e->getMessage()
         ], 500);
     }
-    
-    return response()->json([
-        'message' => 'Multiple external API calls completed',
-        'traced' => true,
-        'results' => $results
-    ]);
 });
 
-// Example: Instrumented curl call to Postman random joke API
+// Test slow operations
+Route::get('/api/test-slow', function () {
+    try {
+        if (isset($GLOBALS['official_simple_tracer'])) {
+            $GLOBALS['official_simple_tracer']->createTrace('slow.operation', [
+                'operation_type' => 'simulated_work',
+                'duration_ms' => 500,
+                'complexity' => 'high'
+            ]);
+        }
+        
+        // Simulate slow operation
+        usleep(500000); // 500ms
+        
+        return response()->json([
+            'message' => 'Slow operation completed',
+            'duration_ms' => 500,
+            'traced' => true,
+            'timestamp' => date('Y-m-d H:i:s')
+        ]);
+    } catch (Exception $e) {
+        return response()->json([
+            'error' => 'Slow operation failed',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test cURL operations with tracing
 Route::get('/api/joke-curl', function () {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, 'https://official-joke-api.appspot.com/random_joke');
@@ -322,7 +328,7 @@ Route::get('/api/joke-curl', function () {
     ]);
 });
 
-// Example: Instrumented Guzzle call to Postman random joke API
+// Test Guzzle operations with tracing
 Route::get('/api/joke-guzzle', function () {
     $client = new \GuzzleHttp\Client();
     try {
@@ -359,4 +365,394 @@ Route::get('/api/eloquent-example', function () {
             'total' => $users->total(),
         ]
     ]);
+});
+
+// Test official OpenTelemetry SDK batch exporter
+Route::get('/test-official-otel', function () {
+    try {
+        $tracer = \App\Services\OtelTracer::getInstance();
+        
+        // Create some test traces
+        $tracer->createTrace('test.official.otel.simple', [
+            'test.type' => 'official_sdk',
+            'test.message' => 'Using official OpenTelemetry SDK batch exporter'
+        ]);
+        
+        // Test database tracing
+        $tracer->traceDatabase(
+            'SELECT * FROM users WHERE id = 1',
+            'laravel',
+            'mysql',
+            15.5,
+            1
+        );
+        
+        // Test HTTP client tracing
+        $span = $tracer->createSpan('http.client.request', [
+            'http.method' => 'GET',
+            'http.url' => 'https://api.example.com/test',
+            'http.target' => '/test'
+        ], \OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT);
+        
+        // Simulate some work
+        usleep(100000); // 100ms
+        
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+        $span->end();
+        
+        // Force flush to see immediate results
+        $flushResult = $tracer->forceFlush();
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Official OpenTelemetry SDK traces created and flushed',
+            'flush_result' => $flushResult,
+            'batch_stats' => $tracer->getBatchStats(),
+            'timestamp' => now()->toISOString()
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to create traces with official SDK',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Test database spans with official SDK
+Route::get('/test-db-spans', function () {
+    try {
+        error_log('=== Starting database spans test ===');
+        if (isset($GLOBALS['official_simple_tracer'])) {
+            error_log('Creating database spans...');
+            $GLOBALS['official_simple_tracer']->traceDatabase('SELECT * FROM users WHERE id = 1', 'laravel', 'mysql', 25.5, 1);
+            $GLOBALS['official_simple_tracer']->traceDatabase('INSERT INTO logs (message, created_at) VALUES (?, ?)', 'laravel', 'mysql', 18.2, 1);
+            $GLOBALS['official_simple_tracer']->traceDatabase('UPDATE users SET last_login = ? WHERE id = ?', 'laravel', 'mysql', 12.8, 1);
+            error_log('Database spans created successfully');
+        } else {
+            error_log('ERROR: official_simple_tracer not available');
+        }
+        if (isset($GLOBALS['official_batch_processor'])) {
+            error_log('Forcing flush of batch processor...');
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            error_log('Flush result: ' . ($flushResult ? 'SUCCESS' : 'FAILED'));
+        } else {
+            error_log('ERROR: official_batch_processor not available');
+            $flushResult = false;
+        }
+        error_log('=== Database spans test completed ===');
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Database spans test completed',
+            'spans_created' => 3,
+            'flush_result' => $flushResult,
+            'timestamp' => now()->toISOString()
+        ]);
+    } catch (Exception $e) {
+        error_log('ERROR in test-db-spans: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Database spans test failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test all trace types with official SDK
+Route::get('/test-all-traces', function () {
+    try {
+        error_log('=== Starting comprehensive trace test ===');
+        $results = [];
+        $results['http_server_span'] = 'Generated by middleware for this request';
+        error_log('HTTP server span will be generated by middleware');
+        
+        if (isset($GLOBALS['official_simple_tracer'])) {
+            error_log('Creating business logic spans...');
+            $GLOBALS['official_simple_tracer']->createTrace('business.logic.user_processing', [
+                'operation' => 'user_processing',
+                'user_id' => 'test_user_123',
+                'priority' => 'high'
+            ]);
+            $GLOBALS['official_simple_tracer']->createTrace('business.logic.notification', [
+                'operation' => 'notification_send',
+                'type' => 'email',
+                'recipient' => 'user@example.com'
+            ]);
+            $results['custom_spans'] = 'Created 2 business logic spans';
+            error_log('Business logic spans created successfully');
+        } else {
+            error_log('ERROR: official_simple_tracer not available for business logic');
+        }
+        
+        if (isset($GLOBALS['official_simple_tracer'])) {
+            error_log('Creating database spans...');
+            $GLOBALS['official_simple_tracer']->traceDatabase(
+                'SELECT * FROM users WHERE email = ?',
+                'laravel',
+                'mysql',
+                15.2,
+                1
+            );
+            $GLOBALS['official_simple_tracer']->traceDatabase(
+                'UPDATE users SET last_activity = ? WHERE id = ?',
+                'laravel',
+                'mysql',
+                8.7,
+                1
+            );
+            $GLOBALS['official_simple_tracer']->traceDatabase(
+                'INSERT INTO audit_logs (action, user_id, timestamp) VALUES (?, ?, ?)',
+                'laravel',
+                'mysql',
+                12.3,
+                1
+            );
+            $results['database_spans'] = 'Created 3 database spans (SELECT, UPDATE, INSERT)';
+            error_log('Database spans created successfully');
+        } else {
+            error_log('ERROR: official_simple_tracer not available for database');
+        }
+        
+        if (isset($GLOBALS['official_tracer'])) {
+            error_log('Creating HTTP client span...');
+            $span = $GLOBALS['official_tracer']->spanBuilder('http.client.external_api')
+                ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
+                ->startSpan();
+            usleep(50000); // 50ms
+            $span->setAttribute('http.status_code', 200)
+                ->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK)
+                ->end();
+            $results['http_client_spans'] = 'Created 1 HTTP client span';
+            error_log('HTTP client span created successfully');
+        } else {
+            error_log('ERROR: official_tracer not available for HTTP client');
+        }
+        
+        if (isset($GLOBALS['official_tracer'])) {
+            error_log('Creating cache operation span...');
+            $span = $GLOBALS['official_tracer']->spanBuilder('cache.operation')
+                ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_INTERNAL)
+                ->startSpan();
+            $span->setAttribute('cache.hit', false)
+                ->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK)
+                ->end();
+            $results['cache_spans'] = 'Created 1 cache operation span';
+            error_log('Cache operation span created successfully');
+        } else {
+            error_log('ERROR: official_tracer not available for cache');
+        }
+        
+        if (isset($GLOBALS['official_batch_processor'])) {
+            error_log('Forcing flush of all traces...');
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            error_log('Comprehensive flush result: ' . ($flushResult ? 'SUCCESS' : 'FAILED'));
+            $results['flush_result'] = $flushResult;
+        } else {
+            error_log('ERROR: official_batch_processor not available');
+            $results['flush_result'] = false;
+        }
+        
+        $results['total_spans_created'] = '8 spans (1 HTTP server + 2 business logic + 3 database + 1 HTTP client + 1 cache)';
+        $results['timestamp'] = now()->toISOString();
+        $results['message'] = 'All trace types tested successfully';
+        error_log('=== Comprehensive trace test completed ===');
+        
+        return response()->json($results);
+    } catch (Exception $e) {
+        error_log('ERROR in test-all-traces: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Comprehensive trace test failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test traced PDO query
+Route::get('/test-traced-pdo', function () {
+    try {
+        error_log('=== Testing traced PDO query ===');
+        
+        // Create a PDO connection
+        $pdo = new PDO('mysql:host=localhost;dbname=laravel', 'root', '');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        // Test traced PDO query
+        $result = traced_pdo_query($pdo, 'SELECT * FROM users LIMIT 1');
+        $row = $result->fetch(PDO::FETCH_ASSOC);
+        
+        error_log('PDO query executed successfully');
+        
+        if (isset($GLOBALS['official_batch_processor'])) {
+            error_log('Forcing flush of PDO traces...');
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            error_log('PDO flush result: ' . ($flushResult ? 'SUCCESS' : 'FAILED'));
+        } else {
+            error_log('ERROR: official_batch_processor not available');
+            $flushResult = false;
+        }
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'PDO query test completed',
+            'data_found' => !empty($row),
+            'flush_result' => $flushResult,
+            'timestamp' => now()->toISOString()
+        ]);
+    } catch (Exception $e) {
+        error_log('ERROR in test-traced-pdo: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'PDO query test failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test traced curl
+Route::get('/test-traced-curl', function () {
+    try {
+        error_log('=== Testing traced curl ===');
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'https://httpbin.org/get');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        
+        $result = traced_curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        error_log('Curl request executed successfully');
+        
+        if (isset($GLOBALS['official_batch_processor'])) {
+            error_log('Forcing flush of curl traces...');
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            error_log('Curl flush result: ' . ($flushResult ? 'SUCCESS' : 'FAILED'));
+        } else {
+            error_log('ERROR: official_batch_processor not available');
+            $flushResult = false;
+        }
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Curl test completed',
+            'http_code' => $httpCode,
+            'response_size' => strlen($result),
+            'flush_result' => $flushResult,
+            'timestamp' => now()->toISOString()
+        ]);
+    } catch (Exception $e) {
+        error_log('ERROR in test-traced-curl: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Curl test failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test traced Guzzle
+Route::get('/test-traced-guzzle', function () {
+    try {
+        error_log('=== Testing traced Guzzle ===');
+        
+        $client = new \GuzzleHttp\Client();
+        $response = traced_guzzle_request($client, 'GET', 'https://httpbin.org/get');
+        
+        error_log('Guzzle request executed successfully');
+        
+        if (isset($GLOBALS['official_batch_processor'])) {
+            error_log('Forcing flush of Guzzle traces...');
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            error_log('Guzzle flush result: ' . ($flushResult ? 'SUCCESS' : 'FAILED'));
+        } else {
+            error_log('ERROR: official_batch_processor not available');
+            $flushResult = false;
+        }
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Guzzle test completed',
+            'http_code' => $response->getStatusCode(),
+            'response_size' => strlen($response->getBody()->getContents()),
+            'flush_result' => $flushResult,
+            'timestamp' => now()->toISOString()
+        ]);
+    } catch (Exception $e) {
+        error_log('ERROR in test-traced-guzzle: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Guzzle test failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test all traced functions together
+Route::get('/test-all-traced-functions', function () {
+    try {
+        error_log('=== Testing all traced functions ===');
+        $results = [];
+        
+        // Test PDO
+        try {
+            $pdo = new PDO('mysql:host=localhost;dbname=laravel', 'root', '');
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $result = traced_pdo_query($pdo, 'SELECT * FROM users LIMIT 1');
+            $results['pdo_test'] = 'SUCCESS';
+        } catch (Exception $e) {
+            $results['pdo_test'] = 'FAILED: ' . $e->getMessage();
+        }
+        
+        // Test cURL
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, 'https://httpbin.org/get');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            $result = traced_curl_exec($ch);
+            curl_close($ch);
+            $results['curl_test'] = 'SUCCESS';
+        } catch (Exception $e) {
+            $results['curl_test'] = 'FAILED: ' . $e->getMessage();
+        }
+        
+        // Test Guzzle
+        try {
+            $client = new \GuzzleHttp\Client();
+            $response = traced_guzzle_request($client, 'GET', 'https://httpbin.org/get');
+            $results['guzzle_test'] = 'SUCCESS';
+        } catch (Exception $e) {
+            $results['guzzle_test'] = 'FAILED: ' . $e->getMessage();
+        }
+        
+        // Force flush
+        if (isset($GLOBALS['official_batch_processor'])) {
+            error_log('Forcing flush of all traces...');
+            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+            error_log('Comprehensive flush result: ' . ($flushResult ? 'SUCCESS' : 'FAILED'));
+            $results['flush_result'] = $flushResult;
+        } else {
+            error_log('ERROR: official_batch_processor not available');
+            $results['flush_result'] = false;
+        }
+        
+        $results['message'] = 'All traced functions test completed';
+        $results['timestamp'] = now()->toISOString();
+        error_log('=== All traced functions test completed ===');
+        
+        return response()->json($results);
+    } catch (Exception $e) {
+        error_log('ERROR in test-all-traced-functions: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'All traced functions test failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
 });
