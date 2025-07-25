@@ -19,7 +19,7 @@ class OpenTelemetryMiddleware
     public function handle($request, Closure $next)
     {
         $tracer = $GLOBALS['otel_tracer'] ?? null;
-        if (!$tracer || !$this->shouldTrace($request)) {
+        if (!$tracer) {
             return $next($request);
         }
 
@@ -87,8 +87,8 @@ class OpenTelemetryMiddleware
         return $request->method() . ' ' . $request->path();
     }
     
-    // Conditional tracing logic to reduce overhead
-    private function shouldTrace($request)
+    // Conditional tracing logic to reduce overhead (not currently used)
+    private function conditionalTrace($request)
     {
         // Always trace error responses and slow requests
         if ($request->isMethod('POST') || $request->isMethod('PUT') || $request->isMethod('DELETE')) {
