@@ -101,12 +101,6 @@ if (!function_exists('otel_tracer')) {
     }
 }
 
-// Backward compatibility
-if (!function_exists('official_tracer')) {
-    function official_tracer() {
-        return $GLOBALS['otel_tracer'] ?? null;
-    }
-}
 
 // Minimal helper functions for traced operations - no regex parsing
 if (!function_exists('traced_pdo_query')) {

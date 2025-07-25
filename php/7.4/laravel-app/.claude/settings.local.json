@@ -11,7 +11,8 @@
       "Bash(rm:*)",
       "Bash(cat:*)",
       "Bash(git rm:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

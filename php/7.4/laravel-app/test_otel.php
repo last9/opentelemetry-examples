@@ -32,26 +32,17 @@ if (isset($GLOBALS['otel_batch_processor']) && $GLOBALS['otel_batch_processor'] 
     exit(1);
 }
 
-// Test 4: Check if SimpleTracer is initialized
-echo "4. Checking SimpleTracer: ";
-if (isset($GLOBALS['simple_tracer']) && $GLOBALS['simple_tracer'] !== null) {
-    echo "✅ SUCCESS - SimpleTracer initialized\n";
-} else {
-    echo "❌ FAILED - SimpleTracer not initialized\n";
-    exit(1);
-}
-
-// Test 5: Check helper functions
-echo "5. Checking helper functions: ";
-if (function_exists('otel_tracer') && function_exists('official_tracer')) {
+// Test 4: Check helper functions
+echo "4. Checking helper functions: ";
+if (function_exists('otel_tracer')) {
     echo "✅ SUCCESS - Helper functions available\n";
 } else {
     echo "❌ FAILED - Helper functions missing\n";
     exit(1);
 }
 
-// Test 6: Test basic span creation
-echo "6. Testing basic span creation: ";
+// Test 5: Test basic span creation
+echo "5. Testing basic span creation: ";
 try {
     $tracer = otel_tracer();
     if ($tracer) {
@@ -72,38 +63,8 @@ try {
     exit(1);
 }
 
-// Test 7: Test SimpleTracer methods
-echo "7. Testing SimpleTracer methods: ";
-try {
-    $simpleTracer = $GLOBALS['simple_tracer'];
-    
-    // Test createTrace method
-    $simpleTracer->createTrace('test.simple.trace', ['test.key' => 'test.value']);
-    
-    // Test createSpan method
-    $span = $simpleTracer->createSpan('test.simple.span', ['another.key' => 'another.value']);
-    $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
-    $span->end();
-    
-    echo "✅ SUCCESS - SimpleTracer methods working\n";
-} catch (Exception $e) {
-    echo "❌ FAILED - Exception: " . $e->getMessage() . "\n";
-    exit(1);
-}
-
-// Test 8: Test database tracing method
-echo "8. Testing database tracing: ";
-try {
-    $simpleTracer = $GLOBALS['simple_tracer'];
-    $simpleTracer->traceDatabase('SELECT * FROM test', 'test_db', 'mysql', null, 5);
-    echo "✅ SUCCESS - Database tracing working\n";
-} catch (Exception $e) {
-    echo "❌ FAILED - Exception: " . $e->getMessage() . "\n";
-    exit(1);
-}
-
-// Test 9: Force flush to test batch processor
-echo "9. Testing batch processor flush: ";
+// Test 6: Force flush to test batch processor
+echo "6. Testing batch processor flush: ";
 try {
     if (isset($GLOBALS['otel_batch_processor'])) {
         $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();

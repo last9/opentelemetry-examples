@@ -179,3 +179,106 @@ Route::get('/api/test-pdo', function () {
         ], 500);
     }
 });
+
+// Test joke fetching with cURL tracing
+Route::get('/api/joke-curl', function () {
+    try {
+        // Initialize cURL to fetch a random joke
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'https://official-joke-api.appspot.com/random_joke');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Laravel-OpenTelemetry-Joke-Bot/1.0');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Accept: application/json',
+            'Content-Type: application/json'
+        ]);
+        
+        // Use traced cURL execution (will create HTTP client span)
+        $result = traced_curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode >= 200 && $httpCode < 300) {
+            $joke = json_decode($result, true);
+            return response()->json([
+                'message' => 'Joke fetched successfully with cURL',
+                'joke' => [
+                    'setup' => $joke['setup'] ?? 'No setup',
+                    'punchline' => $joke['punchline'] ?? 'No punchline',
+                    'type' => $joke['type'] ?? 'unknown'
+                ],
+                'http_code' => $httpCode,
+                'traced' => 'HTTP client span should appear in traces'
+            ]);
+        } else {
+            return response()->json([
+                'message' => 'Failed to fetch joke',
+                'http_code' => $httpCode,
+                'traced' => 'Error span should appear in traces'
+            ], 500);
+        }
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'message' => 'cURL joke fetch failed',
+            'error' => $e->getMessage(),
+            'traced' => 'Error span should appear in traces'
+        ], 500);
+    }
+});
+
+// Test joke fetching with Guzzle tracing
+Route::get('/api/joke-guzzle', function () {
+    try {
+        // Check if Guzzle is available
+        if (!class_exists('GuzzleHttp\Client')) {
+            return response()->json([
+                'message' => 'Guzzle HTTP client not available',
+                'note' => 'Install with: composer require guzzlehttp/guzzle',
+                'alternative' => 'Use /api/joke-curl endpoint instead'
+            ], 501);
+        }
+        
+        $client = new \GuzzleHttp\Client();
+        
+        // Use traced Guzzle request to fetch a random joke
+        $response = traced_guzzle_request($client, 'GET', 'https://official-joke-api.appspot.com/random_joke', [
+            'headers' => [
+                'User-Agent' => 'Laravel-OpenTelemetry-Joke-Bot/1.0',
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json'
+            ],
+            'timeout' => 10
+        ]);
+        
+        $statusCode = $response->getStatusCode();
+        
+        if ($statusCode >= 200 && $statusCode < 300) {
+            $joke = json_decode($response->getBody()->getContents(), true);
+            return response()->json([
+                'message' => 'Joke fetched successfully with Guzzle',
+                'joke' => [
+                    'setup' => $joke['setup'] ?? 'No setup',
+                    'punchline' => $joke['punchline'] ?? 'No punchline',
+                    'type' => $joke['type'] ?? 'unknown'
+                ],
+                'http_code' => $statusCode,
+                'traced' => 'HTTP client span should appear in traces'
+            ]);
+        } else {
+            return response()->json([
+                'message' => 'Failed to fetch joke',
+                'http_code' => $statusCode,
+                'traced' => 'Error span should appear in traces'
+            ], 500);
+        }
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'message' => 'Guzzle joke fetch failed',
+            'error' => $e->getMessage(),
+            'traced' => 'Error span should appear in traces'
+        ], 500);
+    }
+});

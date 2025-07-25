@@ -8,6 +8,10 @@ require_once __DIR__ . '/bootstrap/otel.php';
 $app = require_once __DIR__ . '/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 
+// Set up the application facade
+\Illuminate\Container\Container::setInstance($app);
+\Illuminate\Support\Facades\Facade::setFacadeApplication($app);
+
 echo "🔍 TESTING DATABASE SPAN GENERATION\n";
 echo "=====================================\n\n";
 
