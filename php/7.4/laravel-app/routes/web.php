@@ -31,11 +31,6 @@ Route::get('/api/health', function () {
     ]);
 });
 
-// Test route to check if basic functionality works
-Route::get('/api/test-debug', function () {
-    file_put_contents('/tmp/test.log', "Test route called\n", FILE_APPEND);
-    return response()->json(['message' => 'Test route working']);
-});
 
 Route::get('/api/example', function () {
     // Example of custom tracing in your application using official SDK
@@ -355,11 +350,6 @@ Route::get('/api/eloquent-example', function () {
     // Fetch paginated users using Eloquent ORM
     $users = User::where('email', 'like', '%@%')->paginate(5);
     
-    // Force flush spans to ensure they are sent
-    if (isset($GLOBALS['otel_batch_processor'])) {
-        $GLOBALS['otel_batch_processor']->forceFlush();
-    }
-    
     // Return paginated users as JSON
     return response()->json([
         'message' => 'Eloquent ORM paginated users',
@@ -368,10 +358,6 @@ Route::get('/api/eloquent-example', function () {
             'current_page' => $users->currentPage(),
             'last_page' => $users->lastPage(),
             'total' => $users->total(),
-        ],
-        'debug_info' => [
-            'db_spans_should_be_created' => 'For COUNT and SELECT queries',
-            'flush_performed' => isset($GLOBALS['otel_batch_processor']),
         ]
     ]);
 });
