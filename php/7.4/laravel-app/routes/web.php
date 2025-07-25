@@ -355,6 +355,11 @@ Route::get('/api/eloquent-example', function () {
     // Fetch paginated users using Eloquent ORM
     $users = User::where('email', 'like', '%@%')->paginate(5);
     
+    // Force flush spans to ensure they are sent
+    if (isset($GLOBALS['otel_batch_processor'])) {
+        $GLOBALS['otel_batch_processor']->forceFlush();
+    }
+    
     // Return paginated users as JSON
     return response()->json([
         'message' => 'Eloquent ORM paginated users',
@@ -363,6 +368,10 @@ Route::get('/api/eloquent-example', function () {
             'current_page' => $users->currentPage(),
             'last_page' => $users->lastPage(),
             'total' => $users->total(),
+        ],
+        'debug_info' => [
+            'db_spans_should_be_created' => 'For COUNT and SELECT queries',
+            'flush_performed' => isset($GLOBALS['otel_batch_processor']),
         ]
     ]);
 });
@@ -623,6 +632,251 @@ Route::get('/test-traced-guzzle', function () {
             'error' => $e->getMessage()
         ], 500);
     }
+});
+
+// Test database timing verification
+Route::get('/test-db-timing-detailed', function () {
+    $results = [];
+    
+    // Test 1: Simple SELECT with timing measurement
+    $start = microtime(true);
+    try {
+        $users = DB::select('SELECT 1 as test');
+        $actualDuration = (microtime(true) - $start) * 1000; // Convert to ms
+        $results['simple_select'] = [
+            'query' => 'SELECT 1 as test',
+            'actual_duration_ms' => round($actualDuration, 3),
+            'result_count' => count($users),
+            'success' => true
+        ];
+    } catch (Exception $e) {
+        $results['simple_select'] = [
+            'query' => 'SELECT 1 as test',
+            'error' => $e->getMessage(),
+            'success' => false
+        ];
+    }
+    
+    // Test 2: COUNT query with timing
+    $start = microtime(true);
+    try {
+        $count = DB::select('SELECT COUNT(*) as count FROM users');
+        $actualDuration = (microtime(true) - $start) * 1000;
+        $results['count_query'] = [
+            'query' => 'SELECT COUNT(*) as count FROM users',
+            'actual_duration_ms' => round($actualDuration, 3),
+            'count' => $count[0]->count ?? 0,
+            'success' => true
+        ];
+    } catch (Exception $e) {
+        $results['count_query'] = [
+            'query' => 'SELECT COUNT(*) as count FROM users',
+            'error' => $e->getMessage(),
+            'success' => false
+        ];
+    }
+    
+    // Test 3: Multiple queries to check consistency
+    $timings = [];
+    for ($i = 0; $i < 5; $i++) {
+        $start = microtime(true);
+        try {
+            DB::select('SELECT ? as iteration', [$i]);
+            $timings[] = round((microtime(true) - $start) * 1000, 3);
+        } catch (Exception $e) {
+            $timings[] = 'ERROR: ' . $e->getMessage();
+        }
+    }
+    
+    $results['multiple_queries'] = [
+        'query' => 'SELECT ? as iteration (5 times)',
+        'individual_timings_ms' => $timings,
+        'avg_timing_ms' => is_numeric($timings[0]) ? round(array_sum($timings) / count($timings), 3) : 'N/A',
+        'min_timing_ms' => is_numeric($timings[0]) ? min($timings) : 'N/A',
+        'max_timing_ms' => is_numeric($timings[0]) ? max($timings) : 'N/A'
+    ];
+    
+    // Force flush spans
+    $flushResult = false;
+    if (isset($GLOBALS['otel_batch_processor'])) {
+        $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
+    }
+    
+    return response()->json([
+        'message' => 'Database timing verification completed',
+        'timing_tests' => $results,
+        'flush_result' => $flushResult,
+        'note' => 'Compare actual_duration_ms with span attributes in your telemetry backend',
+        'timestamp' => now()->toISOString()
+    ]);
+});
+
+// Test database span timing verification with logging
+Route::get('/test-db-span-timing-verification', function () {
+    $results = [];
+    $spanTimings = [];
+    
+    // Capture DB query events with detailed timing
+    DB::listen(function ($query) use (&$spanTimings) {
+        $spanTimings[] = [
+            'sql' => $query->sql,
+            'laravel_reported_time_ms' => $query->time,
+            'connection' => $query->connectionName
+        ];
+    });
+    
+    // Test 1: Simple query
+    $start = microtime(true);
+    DB::select('SELECT 1 as test');
+    $actualTime1 = round((microtime(true) - $start) * 1000, 3);
+    
+    // Test 2: COUNT query  
+    $start = microtime(true);
+    DB::select('SELECT COUNT(*) as count FROM users');
+    $actualTime2 = round((microtime(true) - $start) * 1000, 3);
+    
+    // Test 3: More complex query
+    $start = microtime(true);
+    DB::select('SELECT * FROM users LIMIT 5');
+    $actualTime3 = round((microtime(true) - $start) * 1000, 3);
+    
+    $results = [
+        'query_timing_comparison' => [
+            [
+                'query' => 'SELECT 1 as test',
+                'measured_duration_ms' => $actualTime1,
+                'laravel_reported_ms' => $spanTimings[0]['laravel_reported_time_ms'] ?? 'N/A',
+                'difference_ms' => $actualTime1 - ($spanTimings[0]['laravel_reported_time_ms'] ?? 0)
+            ],
+            [
+                'query' => 'SELECT COUNT(*) as count FROM users', 
+                'measured_duration_ms' => $actualTime2,
+                'laravel_reported_ms' => $spanTimings[1]['laravel_reported_time_ms'] ?? 'N/A',
+                'difference_ms' => $actualTime2 - ($spanTimings[1]['laravel_reported_time_ms'] ?? 0)
+            ],
+            [
+                'query' => 'SELECT * FROM users LIMIT 5',
+                'measured_duration_ms' => $actualTime3, 
+                'laravel_reported_ms' => $spanTimings[2]['laravel_reported_time_ms'] ?? 'N/A',
+                'difference_ms' => $actualTime3 - ($spanTimings[2]['laravel_reported_time_ms'] ?? 0)
+            ]
+        ]
+    ];
+    
+    // Force flush spans
+    $flushResult = false;
+    if (isset($GLOBALS['otel_batch_processor'])) {
+        $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
+    }
+    
+    return response()->json([
+        'message' => 'Database span timing verification completed',
+        'results' => $results,
+        'explanation' => [
+            'measured_duration_ms' => 'Time measured by microtime() in application code',
+            'laravel_reported_ms' => 'Time reported by Laravel\'s DB::listen() (used in span attributes)',
+            'difference_ms' => 'Difference between measured and reported (should be small)',
+            'span_attributes' => 'The span will have db.query.duration_ms attribute with Laravel reported time'
+        ],
+        'flush_result' => $flushResult,
+        'timestamp' => now()->toISOString()
+    ]);
+});
+
+// Diagnostic endpoint to check DB span generation
+Route::get('/diagnostic-db-spans', function () {
+    $diagnostics = [];
+    
+    // Check if OpenTelemetry tracer is available
+    $diagnostics['otel_tracer_available'] = isset($GLOBALS['otel_tracer']);
+    $diagnostics['otel_batch_processor_available'] = isset($GLOBALS['otel_batch_processor']);
+    
+    // Test simple database query
+    $diagnostics['db_query_test'] = 'starting';
+    try {
+        $result = DB::select('SELECT 1 as diagnostic_test');
+        $diagnostics['db_query_test'] = 'success';
+        $diagnostics['db_result'] = $result[0]->diagnostic_test ?? 'no_result';
+    } catch (Exception $e) {
+        $diagnostics['db_query_test'] = 'failed: ' . $e->getMessage();
+    }
+    
+    // Force flush spans
+    $flushResult = false;
+    if (isset($GLOBALS['otel_batch_processor'])) {
+        try {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
+            $diagnostics['flush_result'] = $flushResult;
+        } catch (Exception $e) {
+            $diagnostics['flush_error'] = $e->getMessage();
+        }
+    }
+    
+    return response()->json([
+        'message' => 'Database span diagnostics',
+        'diagnostics' => $diagnostics,
+        'timestamp' => now()->toISOString()
+    ]);
+});
+
+// Test span export configuration and status
+Route::get('/test-span-export-status', function () {
+    $status = [];
+    
+    // Check OpenTelemetry configuration
+    $status['otel_config'] = [
+        'service_name' => env('OTEL_SERVICE_NAME', 'laravel-app'),
+        'endpoint' => env('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://localhost:4318/v1/traces'),
+        'protocol' => env('OTEL_EXPORTER_OTLP_PROTOCOL', 'http/protobuf'),
+        'headers' => env('OTEL_EXPORTER_OTLP_HEADERS', ''),
+    ];
+    
+    // Test database query
+    $queryStart = microtime(true);
+    try {
+        DB::select('SELECT 1 as export_test');
+        $status['db_query'] = 'success';
+        $status['db_query_time_ms'] = round((microtime(true) - $queryStart) * 1000, 3);
+    } catch (Exception $e) {
+        $status['db_query'] = 'failed: ' . $e->getMessage();
+    }
+    
+    // Check batch processor status
+    if (isset($GLOBALS['otel_batch_processor'])) {
+        $status['batch_processor'] = 'available';
+        try {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
+            $status['flush_result'] = $flushResult ? 'success' : 'failed';
+        } catch (Exception $e) {
+            $status['flush_error'] = $e->getMessage();
+        }
+    } else {
+        $status['batch_processor'] = 'not_available';
+    }
+    
+    // Test basic span creation
+    if (isset($GLOBALS['otel_tracer'])) {
+        try {
+            $testSpan = $GLOBALS['otel_tracer']->spanBuilder('test.export.verification')
+                ->setAttribute('test.type', 'export_status_check')
+                ->setAttribute('test.timestamp', microtime(true))
+                ->startSpan();
+            $testSpan->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+            $testSpan->end();
+            $status['test_span'] = 'created';
+        } catch (Exception $e) {
+            $status['test_span'] = 'failed: ' . $e->getMessage();
+        }
+    } else {
+        $status['test_span'] = 'tracer_not_available';
+    }
+    
+    return response()->json([
+        'message' => 'Span export status check',
+        'status' => $status,
+        'note' => 'Check your OpenTelemetry collector logs to see if spans are being received',
+        'timestamp' => now()->toISOString()
+    ]);
 });
 
 // Test all traced functions together

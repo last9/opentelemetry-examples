@@ -23,28 +23,34 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        // Capture tracer reference outside closure to avoid scope issues
+        $tracer = $GLOBALS['otel_tracer'] ?? null;
+        
         // Optimized OpenTelemetry database query tracing using official SDK patterns
-        \Illuminate\Support\Facades\DB::listen(function ($query) {
+        \Illuminate\Support\Facades\DB::listen(function ($query) use ($tracer) {
             // Early return if tracer not available to minimize overhead
-            if (!isset($GLOBALS['otel_tracer'])) {
+            if (!$tracer) {
                 return;
             }
             
             try {
-                // Minimal database span creation - no regex parsing or sensitive filtering
-                $spanBuilder = $GLOBALS['otel_tracer']->spanBuilder('db.query')
+                // Create span with standard attributes and ensure it's properly parented
+                $spanBuilder = $tracer->spanBuilder('db.query')
                     ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
                     ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, 'mysql')
                     ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, $query->connectionName ?? 'laravel')
-                    ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::SERVER_ADDRESS, 'localhost')
-                    ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::SERVER_PORT, 3306);
+                    ->setAttribute('server.address', 'localhost')
+                    ->setAttribute('server.port', 3306)
+                    ->setAttribute('db.statement', $query->sql)
+                    ->setAttribute('db.query.duration_ms', $query->time)
+                    ->setAttribute('db.query.timing', 'post_execution');
                 
-                // Add query duration if available
-                if ($query->time > 0) {
-                    $spanBuilder->setAttribute('db.query.duration', $query->time);
+                // Check if there's an active span to use as parent
+                $activeSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
+                if ($activeSpan && $activeSpan->getContext()->isValid()) {
+                    $spanBuilder->setParent($activeSpan->getContext());
                 }
                 
-                // Create and immediately end span
                 $span = $spanBuilder->startSpan();
                 $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
                 $span->end();
