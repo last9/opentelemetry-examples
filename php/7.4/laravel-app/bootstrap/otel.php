@@ -1,6 +1,6 @@
 <?php
 
-// Optimized OpenTelemetry SDK bootstrap for Laravel - No Regex, Maximum Performance
+// Optimized OpenTelemetry SDK bootstrap for Laravel
 // This file initializes the official OpenTelemetry PHP SDK with minimal overhead
 
 // Load environment variables manually since Laravel hasn't loaded them yet
@@ -19,9 +19,15 @@ if (file_exists(__DIR__ . '/../.env')) {
                 $value = $matches[1];
             }
             
-            // Only set if not already set in environment
+            // Set in all environment arrays for OpenTelemetry SDK
             if (!isset($_ENV[$key])) {
                 $_ENV[$key] = $value;
+            }
+            if (!isset($_SERVER[$key])) {
+                $_SERVER[$key] = $value;
+            }
+            if (!getenv($key)) {
+                putenv("{$key}={$value}");
             }
         }
     }
@@ -30,7 +36,7 @@ if (file_exists(__DIR__ . '/../.env')) {
 // Load autoloader first
 require_once __DIR__ . '/../vendor/autoload.php';
 
-// Initialize the official OpenTelemetry SDK with maximum performance settings
+// Initialize the official OpenTelemetry SDK
 try {
     // Set up resource attributes following official SDK patterns
     $resourceAttributes = \OpenTelemetry\SDK\Common\Attribute\Attributes::create([
@@ -40,32 +46,35 @@ try {
     ]);
     $resource = \OpenTelemetry\SDK\Resource\ResourceInfo::create($resourceAttributes);
     
-    // Create the OTLP exporter using official SDK factory
-    $exporterFactory = new \OpenTelemetry\Contrib\Otlp\SpanExporterFactory();
-    $exporter = $exporterFactory->create();
+    $endpoint = $_ENV['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ?? 'https://otlp-aps1.last9.io:443/v1/traces';
     
-    // Get performance-optimized batch processor settings from environment
-    $maxQueueSize = (int)($_ENV['OTEL_BSP_MAX_QUEUE_SIZE'] ?? 2048);
-    $scheduledDelayMillis = (int)($_ENV['OTEL_BSP_SCHEDULED_DELAY_MS'] ?? 2000);  // Faster exports
-    $exportTimeoutMillis = (int)($_ENV['OTEL_BSP_EXPORT_TIMEOUT_MS'] ?? 10000);   // Shorter timeout
-    $maxExportBatchSize = (int)($_ENV['OTEL_BSP_MAX_EXPORT_BATCH_SIZE'] ?? 512);  // Smaller batches
+    // Parse headers from environment
+    $headers = [];
+    $customHeaders = $_ENV['OTEL_EXPORTER_OTLP_HEADERS'] ?? '';
+    if (!empty($customHeaders)) {
+        $headerPairs = explode(',', $customHeaders);
+        foreach ($headerPairs as $headerPair) {
+            if (strpos($headerPair, '=') !== false) {
+                list($key, $value) = explode('=', $headerPair, 2);
+                $headers[trim($key)] = trim($value);
+            }
+        }
+    }
     
-    // Create batch processor with performance-optimized official SDK settings
+    // Create transport and exporter using the newer, more reliable pattern
+    $transport = (new \OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory())->create(
+        $endpoint, 
+        'application/x-protobuf',
+        $headers
+    );
+    $exporter = new \OpenTelemetry\Contrib\Otlp\SpanExporter($transport);
+    
+    // Create batch processor and tracer provider using the simpler, more reliable pattern
     $batchProcessor = new \OpenTelemetry\SDK\Trace\SpanProcessor\BatchSpanProcessor(
         $exporter,
-        \OpenTelemetry\SDK\Common\Time\ClockFactory::getDefault(),
-        $maxQueueSize,
-        $scheduledDelayMillis,
-        $exportTimeoutMillis,
-        $maxExportBatchSize,
-        true // autoFlush
+        \OpenTelemetry\SDK\Common\Time\ClockFactory::getDefault()
     );
-    
-    // Create tracer provider with resource and batch processor
-    $tracerProvider = (new \OpenTelemetry\SDK\Trace\TracerProviderBuilder())
-        ->addSpanProcessor($batchProcessor)
-        ->setResource($resource)
-        ->build();
+    $tracerProvider = new \OpenTelemetry\SDK\Trace\TracerProvider($batchProcessor, null, $resource);
     
     // Get tracer instance with proper instrumentation scope
     $tracer = $tracerProvider->getTracer(
@@ -79,10 +88,9 @@ try {
     $GLOBALS['otel_tracer_provider'] = $tracerProvider;
     $GLOBALS['otel_batch_processor'] = $batchProcessor;
     
-    // Register optimized shutdown function to flush remaining traces
+    // Register shutdown function to flush remaining traces
     register_shutdown_function(function() use ($tracerProvider) {
         try {
-            // Use TracerProvider shutdown which handles batch processor shutdown internally
             $tracerProvider->shutdown();
         } catch (Throwable $e) {
             // Silently handle shutdown errors to prevent application interruption
@@ -90,7 +98,7 @@ try {
     });
     
 } catch (Exception $e) {
-    // Log error but don't break the application - tracing should be non-intrusive
+    // Silently handle initialization errors - tracing should be non-intrusive
 }
 
 
@@ -102,7 +110,7 @@ if (!function_exists('otel_tracer')) {
 }
 
 
-// Minimal helper functions for traced operations - no regex parsing
+// Minimal helper functions for traced operations
 if (!function_exists('traced_pdo_query')) {
 function traced_pdo_query($pdo, $query, $params = []) {
     if (!isset($GLOBALS['otel_tracer'])) {
@@ -234,5 +242,3 @@ function traced_guzzle_request($client, $method, $url, $options = []) {
     }
 }
 }
-
-// OpenTelemetry official SDK initialized with maximum performance optimizations

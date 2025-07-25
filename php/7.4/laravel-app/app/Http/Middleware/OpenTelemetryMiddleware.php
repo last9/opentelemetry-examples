@@ -12,66 +12,46 @@ use OpenTelemetry\SemConv\TraceAttributes;
 
 class OpenTelemetryMiddleware
 {
+    // Cache for performance optimization
+    private static $requestCount = 0;
+    private static $lastResetTime = 0;
+    
     public function handle($request, Closure $next)
     {
         $tracer = $GLOBALS['otel_tracer'] ?? null;
-        if (!$tracer) {
+        if (!$tracer || !$this->shouldTrace($request)) {
             return $next($request);
         }
 
-        // Create root span for HTTP server request using official SDK semantic conventions
+        // Create root span for HTTP server request with minimal attributes
         $spanBuilder = $tracer->spanBuilder($this->generateSpanName($request))
             ->setSpanKind(SpanKind::KIND_SERVER);
         
-        // Add essential HTTP server attributes following semantic conventions
-        $attributes = [
-            TraceAttributes::HTTP_METHOD => $request->method(),
-            TraceAttributes::HTTP_SCHEME => $request->getScheme(),
-            'url.path' => $request->path(),
-            TraceAttributes::HTTP_HOST => $request->getHost(),
-            'server.port' => $request->getPort(),
-            TraceAttributes::HTTP_USER_AGENT => $request->userAgent(),
-            'client.address' => $request->ip(),
-            'network.protocol.version' => $request->getProtocolVersion(),
-        ];
+        // Add only essential HTTP server attributes to reduce overhead
+        $spanBuilder->setAttribute(TraceAttributes::HTTP_METHOD, $request->method())
+                   ->setAttribute(TraceAttributes::HTTP_SCHEME, $request->getScheme())
+                   ->setAttribute('url.path', $request->path())
+                   ->setAttribute(TraceAttributes::HTTP_HOST, $request->getHost());
         
-        // Add optional attributes only if they exist
-        if ($request->route() && $request->route()->getName()) {
-            $attributes['http.route'] = $request->route()->getName();
+        // Add optional attributes only if they exist and are needed
+        $userAgent = $request->userAgent();
+        if ($userAgent) {
+            $spanBuilder->setAttribute(TraceAttributes::HTTP_USER_AGENT, $userAgent);
         }
         
-        // Add query string without sanitization (no regex overhead)
-        if ($request->getQueryString()) {
-            $attributes['url.query'] = $request->getQueryString();
-        }
-        
-        // Add content length if available
-        $contentLength = $request->header('content-length');
-        if ($contentLength) {
-            $attributes['http.request.body.size'] = (int)$contentLength;
-        }
-        
-        // Add all attributes to span builder
-        foreach ($attributes as $key => $value) {
-            $spanBuilder->setAttribute($key, $value);
+        $clientIp = $request->ip();
+        if ($clientIp) {
+            $spanBuilder->setAttribute('client.address', $clientIp);
         }
         
         $span = $spanBuilder->startSpan();
-
-        // Set this span as the current span for context propagation
         $scope = $span->activate();
 
         try {
             $response = $next($request);
             
-            // Set response attributes using semantic conventions
+            // Set response status code
             $span->setAttribute(TraceAttributes::HTTP_STATUS_CODE, $response->getStatusCode());
-            
-            // Only calculate response size if it's reasonable (avoid memory issues with large responses)
-            $content = $response->getContent();
-            if (strlen($content) < 1024 * 1024) { // Only for responses < 1MB
-                $span->setAttribute('http.response.body.size', strlen($content));
-            }
             
             // Set span status based on HTTP response status code
             if ($response->getStatusCode() >= 400) {
@@ -86,12 +66,8 @@ class OpenTelemetryMiddleware
             return $response;
             
         } catch (Exception $e) {
-            // Set error attributes using semantic conventions
-            $span->setAttribute('exception.type', get_class($e));
-            $span->setAttribute('exception.message', $e->getMessage());
+            // Set error status with minimal overhead
             $span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
-            $span->recordException($e);
-            
             $span->end();
             $scope->detach();
             
@@ -99,15 +75,51 @@ class OpenTelemetryMiddleware
         }
     }
 
-    // Generate span name following official SDK semantic conventions
+    // Generate span name with minimal overhead
     private function generateSpanName($request)
     {
-        // Use route name if available, otherwise use method + path pattern
-        if ($request->route() && $request->route()->getName()) {
-            return $request->route()->getName();
+        // Use route name if available, otherwise use method + path
+        $route = $request->route();
+        if ($route && $route->getName()) {
+            return $route->getName();
         }
         
-        // Use HTTP method and path for span name
         return $request->method() . ' ' . $request->path();
+    }
+    
+    // Conditional tracing logic to reduce overhead
+    private function shouldTrace($request)
+    {
+        // Always trace error responses and slow requests
+        if ($request->isMethod('POST') || $request->isMethod('PUT') || $request->isMethod('DELETE')) {
+            return true; // Trace all mutations
+        }
+        
+        // For GET requests, use adaptive sampling based on request rate
+        $currentTime = time();
+        
+        // Reset counter every minute
+        if ($currentTime - self::$lastResetTime > 60) {
+            self::$requestCount = 0;
+            self::$lastResetTime = $currentTime;
+        }
+        
+        self::$requestCount++;
+        
+        // Sample GET requests based on rate:
+        // - If < 100 requests/min: trace 100%
+        // - If 100-500 requests/min: trace 50%
+        // - If 500-1000 requests/min: trace 25%
+        // - If > 1000 requests/min: trace 10%
+        
+        if (self::$requestCount <= 100) {
+            return true; // Trace all requests when traffic is low
+        } elseif (self::$requestCount <= 500) {
+            return (self::$requestCount % 2) === 0; // 50% sampling
+        } elseif (self::$requestCount <= 1000) {
+            return (self::$requestCount % 4) === 0; // 25% sampling
+        } else {
+            return (self::$requestCount % 10) === 0; // 10% sampling
+        }
     }
 }
