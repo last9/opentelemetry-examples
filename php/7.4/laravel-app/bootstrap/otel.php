@@ -93,11 +93,6 @@ try {
     // Log error but don't break the application - tracing should be non-intrusive
 }
 
-// Load the optimized SimpleTracer class
-require_once __DIR__ . '/otel_simple.php';
-
-// Initialize optimized tracer for route usage
-$GLOBALS['simple_tracer'] = SimpleTracer::getInstance();
 
 // Helper function for easy access to main tracer
 if (!function_exists('otel_tracer')) {
