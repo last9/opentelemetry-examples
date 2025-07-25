@@ -122,13 +122,16 @@ function traced_pdo_query($pdo, $query, $params = []) {
         return $stmt;
     }
     
-    // Simple span without operation parsing
+    // Get database configuration dynamically
+    $defaultConnection = config('database.default');
+    $connection = config("database.connections.{$defaultConnection}", []);
+    
     $span = $GLOBALS['otel_tracer']->spanBuilder('db.query')
         ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
-        ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, 'mysql')
-        ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, 'laravel')
-        ->setAttribute('server.address', 'localhost')
-        ->setAttribute('server.port', 3306)
+        ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, $connection['driver'] ?? 'unknown')
+        ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, $connection['database'] ?? $defaultConnection)
+        ->setAttribute('server.address', $connection['host'] ?? 'localhost')
+        ->setAttribute('server.port', $connection['port'] ?? 3306)
         ->startSpan();
     
     try {

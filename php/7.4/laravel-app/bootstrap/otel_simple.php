@@ -56,12 +56,16 @@ class SimpleTracer {
         // Simple span name without parsing
         $spanName = $customSpanName ?: 'db.query';
         
+        // Get database configuration dynamically
+        $defaultConnection = config('database.default');
+        $connection = config("database.connections.{$defaultConnection}", []);
+        
         $spanBuilder = $this->tracer->spanBuilder($spanName)
             ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
-            ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, 'mysql')
-            ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, $dbName ?? 'laravel')
-            ->setAttribute('server.address', 'localhost')
-            ->setAttribute('server.port', 3306);
+            ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, $dbSystem ?? $connection['driver'] ?? 'unknown')
+            ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, $dbName ?? $connection['database'] ?? $defaultConnection)
+            ->setAttribute('server.address', $connection['host'] ?? 'localhost')
+            ->setAttribute('server.port', $connection['port'] ?? 3306);
         
         if ($rowCount !== null) {
             $spanBuilder->setAttribute('db.rows_affected', $rowCount);
