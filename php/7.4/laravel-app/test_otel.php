@@ -3,7 +3,7 @@
 echo "Testing OpenTelemetry Bootstrap...\n";
 
 // Load the optimized bootstrap
-require_once __DIR__ . '/bootstrap/otel_optimized.php';
+require_once __DIR__ . '/bootstrap/otel.php';
 
 // Test 1: Check if tracer is initialized
 echo "1. Checking tracer initialization: ";

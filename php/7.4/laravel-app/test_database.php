@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/bootstrap/otel_optimized.php';
+require_once __DIR__ . '/bootstrap/otel.php';
 
 echo "🗄️  COMPREHENSIVE DATABASE TRACING TESTS\n";
 echo "==========================================\n\n";

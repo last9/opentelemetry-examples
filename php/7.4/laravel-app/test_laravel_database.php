@@ -1,7 +1,7 @@
 <?php
 
 require_once __DIR__ . '/bootstrap/app.php';
-require_once __DIR__ . '/bootstrap/otel_optimized.php';
+require_once __DIR__ . '/bootstrap/otel.php';
 
 echo "🗄️  LARAVEL DATABASE OPERATIONS TESTS\n";
 echo "=====================================\n\n";

@@ -2,7 +2,7 @@
 
 // Load vendor autoloader and Laravel bootstrap
 require_once __DIR__ . '/vendor/autoload.php';
-require_once __DIR__ . '/bootstrap/otel_optimized.php';
+require_once __DIR__ . '/bootstrap/otel.php';
 
 echo "🗄️  LARAVEL DATABASE OPERATIONS TESTS\n";
 echo "=====================================\n\n";

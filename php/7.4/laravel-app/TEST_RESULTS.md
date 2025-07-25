@@ -90,7 +90,7 @@ This document contains the test results for the optimized OpenTelemetry PHP 7.4 
 ## Architecture Overview
 
 ### **Files Updated:**
-- `bootstrap/otel_optimized.php` - Main bootstrap with zero regex
+- `bootstrap/otel.php` - Main bootstrap with zero regex
 - `bootstrap/otel_simple.php` - Minimal SimpleTracer class
 - `app/Providers/AppServiceProvider.php` - Simplified DB tracing
 - `app/Http/Middleware/OpenTelemetryMiddleware.php` - Optimized HTTP tracing

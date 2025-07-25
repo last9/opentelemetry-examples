@@ -21,8 +21,8 @@ define('LARAVEL_START', microtime(true));
 |
 */
 
-// Initialize official OpenTelemetry SDK instrumentation (optimized - no regex)
-require_once __DIR__.'/../bootstrap/otel_optimized.php';
+// Initialize official OpenTelemetry SDK instrumentation
+require_once __DIR__.'/../bootstrap/otel.php';
 
 /*
 |--------------------------------------------------------------------------
