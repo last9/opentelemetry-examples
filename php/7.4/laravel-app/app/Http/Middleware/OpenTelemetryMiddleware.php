@@ -8,47 +8,72 @@ use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\API\Trace\TracerInterface;
 use OpenTelemetry\Context\Context;
+use OpenTelemetry\SemConv\TraceAttributes;
 
 class OpenTelemetryMiddleware
 {
     public function handle($request, Closure $next)
     {
-        $tracer = $GLOBALS['official_tracer'] ?? null;
+        $tracer = $GLOBALS['otel_tracer'] ?? null;
         if (!$tracer) {
             return $next($request);
         }
 
-        // Create root span for this HTTP request
-        $span = $tracer->spanBuilder($this->generateSpanName($request))
-            ->setSpanKind(SpanKind::KIND_SERVER)
-            ->setAttribute('http.request.method', $request->method())
-            ->setAttribute('url.scheme', $request->getScheme())
-            ->setAttribute('url.path', $request->path())
-            ->setAttribute('server.address', $request->getHost())
-            ->setAttribute('server.port', $request->getPort())
-            ->setAttribute('user_agent.original', $request->userAgent())
-            ->setAttribute('client.address', $request->ip())
-            ->setAttribute('network.protocol.version', $request->getProtocolVersion())
-            ->setAttribute('http.route', $request->route() ? $request->route()->getName() : '')
-            ->setAttribute('url.query', $this->sanitizeQueryString($request->getQueryString()))
-            ->setAttribute('url.full', $this->buildUrl($request))
-            ->setAttribute('http.request.body.size', $request->header('content-length', 0))
-            ->startSpan();
+        // Create root span for HTTP server request using official SDK semantic conventions
+        $spanBuilder = $tracer->spanBuilder($this->generateSpanName($request))
+            ->setSpanKind(SpanKind::KIND_SERVER);
+        
+        // Add essential HTTP server attributes following semantic conventions
+        $attributes = [
+            TraceAttributes::HTTP_METHOD => $request->method(),
+            TraceAttributes::HTTP_SCHEME => $request->getScheme(),
+            'url.path' => $request->path(),
+            TraceAttributes::HTTP_HOST => $request->getHost(),
+            'server.port' => $request->getPort(),
+            TraceAttributes::HTTP_USER_AGENT => $request->userAgent(),
+            'client.address' => $request->ip(),
+            'network.protocol.version' => $request->getProtocolVersion(),
+        ];
+        
+        // Add optional attributes only if they exist
+        if ($request->route() && $request->route()->getName()) {
+            $attributes['http.route'] = $request->route()->getName();
+        }
+        
+        // Add query string without sanitization (no regex overhead)
+        if ($request->getQueryString()) {
+            $attributes['url.query'] = $request->getQueryString();
+        }
+        
+        // Add content length if available
+        $contentLength = $request->header('content-length');
+        if ($contentLength) {
+            $attributes['http.request.body.size'] = (int)$contentLength;
+        }
+        
+        // Add all attributes to span builder
+        foreach ($attributes as $key => $value) {
+            $spanBuilder->setAttribute($key, $value);
+        }
+        
+        $span = $spanBuilder->startSpan();
 
         // Set this span as the current span for context propagation
         $scope = $span->activate();
-        
-        // Store the scope in globals so we can close it later
-        $GLOBALS['current_span_scope'] = $scope;
 
         try {
             $response = $next($request);
             
-            // Set response attributes
-            $span->setAttribute('http.response.status_code', $response->getStatusCode());
-            $span->setAttribute('http.response.body.size', strlen($response->getContent()));
+            // Set response attributes using semantic conventions
+            $span->setAttribute(TraceAttributes::HTTP_STATUS_CODE, $response->getStatusCode());
             
-            // Set span status based on response
+            // Only calculate response size if it's reasonable (avoid memory issues with large responses)
+            $content = $response->getContent();
+            if (strlen($content) < 1024 * 1024) { // Only for responses < 1MB
+                $span->setAttribute('http.response.body.size', strlen($content));
+            }
+            
+            // Set span status based on HTTP response status code
             if ($response->getStatusCode() >= 400) {
                 $span->setStatus(StatusCode::STATUS_ERROR, 'HTTP ' . $response->getStatusCode());
             } else {
@@ -61,10 +86,9 @@ class OpenTelemetryMiddleware
             return $response;
             
         } catch (Exception $e) {
-            // Set error attributes
+            // Set error attributes using semantic conventions
             $span->setAttribute('exception.type', get_class($e));
             $span->setAttribute('exception.message', $e->getMessage());
-            $span->setAttribute('exception.stacktrace', $e->getTraceAsString());
             $span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
             $span->recordException($e);
             
@@ -75,56 +99,15 @@ class OpenTelemetryMiddleware
         }
     }
 
+    // Generate span name following official SDK semantic conventions
     private function generateSpanName($request)
     {
-        $method = $request->method();
-        $path = $request->path();
-        
-        // Generate a meaningful span name
+        // Use route name if available, otherwise use method + path pattern
         if ($request->route() && $request->route()->getName()) {
             return $request->route()->getName();
         }
         
-        return $method . ' ' . $path;
-    }
-
-    private function sanitizeQueryString($queryString)
-    {
-        if (!$queryString) {
-            return '';
-        }
-        
-        // Remove sensitive parameters
-        $params = [];
-        parse_str($queryString, $params);
-        
-        $sensitiveKeys = ['password', 'token', 'key', 'secret', 'auth'];
-        foreach ($sensitiveKeys as $key) {
-            if (isset($params[$key])) {
-                $params[$key] = '[REDACTED]';
-            }
-        }
-        
-        return http_build_query($params);
-    }
-
-    private function buildUrl($request)
-    {
-        $url = $request->getScheme() . '://' . $request->getHost();
-        
-        if ($request->getPort() && $request->getPort() != 80 && $request->getPort() != 443) {
-            $url .= ':' . $request->getPort();
-        }
-        
-        $url .= $request->getRequestUri();
-        
-        return $this->sanitizeUrl($url);
-    }
-
-    private function sanitizeUrl($url)
-    {
-        // Remove sensitive information from URL
-        $url = preg_replace('/\/\/[^:]+:[^@]+@/', '//***:***@', $url);
-        return $url;
+        // Use HTTP method and path for span name
+        return $request->method() . ' ' . $request->path();
     }
 }

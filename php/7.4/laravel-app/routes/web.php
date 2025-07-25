@@ -104,8 +104,8 @@ Route::get('/api/test-async', function () {
 // Test official SDK batch processor status
 Route::get('/api/test-batch-status', function () {
     try {
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
             
             return response()->json([
                 'message' => 'Official SDK batch processor status',
@@ -115,7 +115,7 @@ Route::get('/api/test-batch-status', function () {
             ]);
         } else {
             return response()->json([
-                'error' => 'Official SDK batch processor not available',
+                'error' => 'OpenTelemetry batch processor not available',
                 'timestamp' => date('Y-m-d H:i:s')
             ], 500);
         }
@@ -130,8 +130,8 @@ Route::get('/api/test-batch-status', function () {
 // Test official SDK force flush
 Route::get('/api/test-force-flush', function () {
     try {
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
             
             return response()->json([
                 'message' => 'Official SDK force flush completed',
@@ -140,7 +140,7 @@ Route::get('/api/test-force-flush', function () {
             ]);
         } else {
             return response()->json([
-                'error' => 'Official SDK batch processor not available',
+                'error' => 'OpenTelemetry batch processor not available',
                 'timestamp' => date('Y-m-d H:i:s')
             ], 500);
         }
@@ -249,9 +249,9 @@ Route::get('/api/test-db', function () {
 // Test custom spans
 Route::get('/api/test-custom-spans', function () {
     try {
-        if (isset($GLOBALS['official_tracer'])) {
+        if (isset($GLOBALS['otel_tracer'])) {
             // Create a custom span
-            $span = $GLOBALS['official_tracer']->spanBuilder('custom.operation')
+            $span = $GLOBALS['otel_tracer']->spanBuilder('custom.operation')
                 ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_INTERNAL)
                 ->setAttribute('custom.attribute', 'test_value')
                 ->setAttribute('operation.type', 'test_operation')
@@ -271,7 +271,7 @@ Route::get('/api/test-custom-spans', function () {
             ]);
         } else {
             return response()->json([
-                'error' => 'Official SDK tracer not available',
+                'error' => 'OpenTelemetry tracer not available',
                 'timestamp' => date('Y-m-d H:i:s')
             ], 500);
         }
@@ -391,8 +391,8 @@ Route::get('/test-official-otel', function () {
         
         // Force flush to see immediate results
         $flushResult = false;
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
         }
         
         return response()->json([
@@ -420,8 +420,8 @@ Route::get('/test-db-spans', function () {
             $GLOBALS['simple_tracer']->traceDatabase('INSERT INTO logs (message, created_at) VALUES (?, ?)', 'laravel', 'mysql', 18.2, 1);
             $GLOBALS['simple_tracer']->traceDatabase('UPDATE users SET last_login = ? WHERE id = ?', 'laravel', 'mysql', 12.8, 1);
         }
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
         } else {
             $flushResult = false;
         }
@@ -486,8 +486,8 @@ Route::get('/test-all-traces', function () {
             $results['database_spans'] = 'Created 3 database spans (SELECT, UPDATE, INSERT)';
         }
         
-        if (isset($GLOBALS['official_tracer'])) {
-            $span = $GLOBALS['official_tracer']->spanBuilder('http.client.external_api')
+        if (isset($GLOBALS['otel_tracer'])) {
+            $span = $GLOBALS['otel_tracer']->spanBuilder('http.client.external_api')
                 ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
                 ->startSpan();
             usleep(50000); // 50ms
@@ -497,8 +497,8 @@ Route::get('/test-all-traces', function () {
             $results['http_client_spans'] = 'Created 1 HTTP client span';
         }
         
-        if (isset($GLOBALS['official_tracer'])) {
-            $span = $GLOBALS['official_tracer']->spanBuilder('cache.operation')
+        if (isset($GLOBALS['otel_tracer'])) {
+            $span = $GLOBALS['otel_tracer']->spanBuilder('cache.operation')
                 ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_INTERNAL)
                 ->startSpan();
             $span->setAttribute('cache.hit', false)
@@ -507,8 +507,8 @@ Route::get('/test-all-traces', function () {
             $results['cache_spans'] = 'Created 1 cache operation span';
         }
         
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
             $results['flush_result'] = $flushResult;
         } else {
             $results['flush_result'] = false;
@@ -539,8 +539,8 @@ Route::get('/test-traced-pdo', function () {
         $result = traced_pdo_query($pdo, 'SELECT * FROM users LIMIT 1');
         $row = $result->fetch(PDO::FETCH_ASSOC);
         
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
         } else {
             $flushResult = false;
         }
@@ -573,8 +573,8 @@ Route::get('/test-traced-curl', function () {
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
         } else {
             $flushResult = false;
         }
@@ -602,8 +602,8 @@ Route::get('/test-traced-guzzle', function () {
         $client = new \GuzzleHttp\Client();
         $response = traced_guzzle_request($client, 'GET', 'https://httpbin.org/get');
         
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
         } else {
             $flushResult = false;
         }
@@ -663,8 +663,8 @@ Route::get('/test-all-traced-functions', function () {
         }
         
         // Force flush
-        if (isset($GLOBALS['official_batch_processor'])) {
-            $flushResult = $GLOBALS['official_batch_processor']->forceFlush();
+        if (isset($GLOBALS['otel_batch_processor'])) {
+            $flushResult = $GLOBALS['otel_batch_processor']->forceFlush();
             $results['flush_result'] = $flushResult;
         } else {
             $results['flush_result'] = false;

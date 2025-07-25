@@ -3,49 +3,53 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | OpenTelemetry Configuration
+    | OpenTelemetry Configuration - Official SDK Standards
     |--------------------------------------------------------------------------
     |
-    | Configuration for OpenTelemetry tracing and metrics collection.
+    | Configuration optimized for manual instrumentation performance using
+    | official OpenTelemetry PHP SDK patterns and semantic conventions.
     |
     */
 
     'exporter' => [
         'endpoint' => env('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://localhost:4318/v1/traces'),
         'headers' => env('OTEL_EXPORTER_OTLP_HEADERS', ''),
+        'protocol' => env('OTEL_EXPORTER_OTLP_PROTOCOL', 'http/protobuf'),
+        'compression' => env('OTEL_EXPORTER_OTLP_COMPRESSION', 'gzip'),
     ],
 
     'service' => [
         'name' => env('OTEL_SERVICE_NAME', 'laravel-app'),
         'version' => env('OTEL_SERVICE_VERSION', '1.0.0'),
+        'environment' => env('OTEL_SERVICE_ENVIRONMENT', env('APP_ENV', 'local')),
     ],
 
     'enabled' => env('OTEL_ENABLED', true),
     
     /*
     |--------------------------------------------------------------------------
-    | Batch Span Processor Configuration (OpenTelemetry SDK Defaults)
+    | Performance-Optimized Batch Span Processor Configuration
     |--------------------------------------------------------------------------
     |
-    | Configuration following OpenTelemetry SDK batch span processor defaults.
-    | These settings match the official OpenTelemetry SDK specifications.
+    | Optimized settings for high-performance manual instrumentation based on
+    | official OpenTelemetry SDK specifications and best practices.
     |
     */
     
     'batch_span_processor' => [
-        // Maximum number of spans to batch before sending (OpenTelemetry SDK default: 2048)
-        'max_export_batch_size' => env('OTEL_BSP_MAX_EXPORT_BATCH_SIZE', 2048),
+        // Reduced batch size for faster export cycles
+        'max_export_batch_size' => env('OTEL_BSP_MAX_EXPORT_BATCH_SIZE', 512),
         
-        // Maximum number of spans to queue (OpenTelemetry SDK default: 2048)
+        // Larger queue size to handle bursts
         'max_queue_size' => env('OTEL_BSP_MAX_QUEUE_SIZE', 2048),
         
-        // Scheduled delay in milliseconds (OpenTelemetry SDK default: 5000ms)
-        'scheduled_delay_ms' => env('OTEL_BSP_SCHEDULED_DELAY_MS', 5000),
+        // Faster export frequency for reduced latency
+        'scheduled_delay_ms' => env('OTEL_BSP_SCHEDULED_DELAY_MS', 2000),
         
-        // Export timeout in milliseconds (OpenTelemetry SDK default: 30000ms)
-        'export_timeout_ms' => env('OTEL_BSP_EXPORT_TIMEOUT_MS', 30000),
+        // Reasonable timeout for network operations
+        'export_timeout_ms' => env('OTEL_BSP_EXPORT_TIMEOUT_MS', 10000),
         
-        // Maximum time to wait for spans to be processed (OpenTelemetry SDK default: 30000ms)
+        // Single concurrent export to avoid resource contention
         'max_concurrent_exports' => env('OTEL_BSP_MAX_CONCURRENT_EXPORTS', 1),
     ],
     

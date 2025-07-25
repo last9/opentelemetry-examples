@@ -1,7 +1,7 @@
 <?php
 
-// Official OpenTelemetry SDK bootstrap for Laravel
-// This file initializes the official OpenTelemetry PHP SDK with batch processing
+// Official OpenTelemetry SDK bootstrap for Laravel with optimized manual instrumentation
+// This file initializes the official OpenTelemetry PHP SDK with performance-optimized batch processing
 
 // Load environment variables manually since Laravel hasn't loaded them yet
 if (file_exists(__DIR__ . '/../.env')) {
@@ -27,93 +27,114 @@ if (file_exists(__DIR__ . '/../.env')) {
     }
 }
 
-// Set up environment variables for the official SDK
-
-
-
 // Load autoloader first
 require_once __DIR__ . '/../vendor/autoload.php';
 
-// Initialize the official OpenTelemetry SDK
+// Initialize the official OpenTelemetry SDK with optimized settings
 try {
-    // Create the OTLP exporter using the official factory
+    // Set up resource attributes following official SDK patterns
+    $resource = \OpenTelemetry\SDK\Resource\ResourceInfoFactory::create([
+        \OpenTelemetry\SemConv\ResourceAttributes::SERVICE_NAME => $_ENV['OTEL_SERVICE_NAME'] ?? 'laravel-app',
+        \OpenTelemetry\SemConv\ResourceAttributes::SERVICE_VERSION => $_ENV['OTEL_SERVICE_VERSION'] ?? '1.0.0',
+        \OpenTelemetry\SemConv\ResourceAttributes::DEPLOYMENT_ENVIRONMENT => $_ENV['APP_ENV'] ?? 'local',
+    ]);
+    
+    // Create the OTLP exporter using official SDK factory with optimized settings
     $exporterFactory = new \OpenTelemetry\Contrib\Otlp\SpanExporterFactory();
     $exporter = $exporterFactory->create();
     
-    // Create clock for batch processor
-    $clock = \OpenTelemetry\SDK\Common\Time\ClockFactory::getDefault();
+    // Get optimized batch processor settings from environment
+    $maxQueueSize = (int)($_ENV['OTEL_BSP_MAX_QUEUE_SIZE'] ?? 2048);
+    $scheduledDelayMillis = (int)($_ENV['OTEL_BSP_SCHEDULED_DELAY_MS'] ?? 5000);
+    $exportTimeoutMillis = (int)($_ENV['OTEL_BSP_EXPORT_TIMEOUT_MS'] ?? 30000);
+    $maxExportBatchSize = (int)($_ENV['OTEL_BSP_MAX_EXPORT_BATCH_SIZE'] ?? 512);
     
-    // Create batch processor with official SDK defaults
+    // Create batch processor with performance-optimized official SDK settings
     $batchProcessor = new \OpenTelemetry\SDK\Trace\SpanProcessor\BatchSpanProcessor(
         $exporter,
-        $clock,
-        2048,    // maxQueueSize
-        5000,    // scheduledDelayMillis
-        30000,   // exportTimeoutMillis
-        512,     // maxExportBatchSize
-        true     // autoFlush
+        \OpenTelemetry\SDK\Common\Time\ClockFactory::getDefault(),
+        $maxQueueSize,
+        $scheduledDelayMillis,
+        $exportTimeoutMillis,
+        $maxExportBatchSize,
+        true // autoFlush
     );
     
-    // Create tracer provider with batch processor
-    $tracerProvider = (new \OpenTelemetry\SDK\Trace\TracerProviderBuilder())
+    // Create tracer provider with resource and batch processor
+    $tracerProvider = \OpenTelemetry\SDK\Trace\TracerProviderBuilder::create()
         ->addSpanProcessor($batchProcessor)
+        ->setResource($resource)
         ->build();
     
-    // Get tracer instance
+    // Get tracer instance with proper instrumentation scope
     $tracer = $tracerProvider->getTracer(
-        'laravel-app',
-        '1.0.0'
+        'laravel-manual-instrumentation',
+        '1.0.0',
+        'https://opentelemetry.io/schemas/1.21.0'
     );
     
     // Store in globals for access throughout the application
-    $GLOBALS['official_tracer'] = $tracer;
-    $GLOBALS['official_tracer_provider'] = $tracerProvider;
-    $GLOBALS['official_batch_processor'] = $batchProcessor;
+    $GLOBALS['otel_tracer'] = $tracer;
+    $GLOBALS['otel_tracer_provider'] = $tracerProvider;
+    $GLOBALS['otel_batch_processor'] = $batchProcessor;
     
-    // Log successful initialization
-    
-    
-    // Register shutdown function to flush remaining traces
-    register_shutdown_function(function() use ($batchProcessor, $tracerProvider) {
-        $batchProcessor->shutdown();
-        $tracerProvider->shutdown();
+    // Register optimized shutdown function to flush remaining traces
+    register_shutdown_function(function() use ($tracerProvider) {
+        try {
+            // Use TracerProvider shutdown which handles batch processor shutdown internally
+            $tracerProvider->shutdown();
+        } catch (Throwable $e) {
+            // Silently handle shutdown errors to prevent application interruption
+        }
     });
     
 } catch (Exception $e) {
-    // Log error but don't break the application
+    // Log error but don't break the application - tracing should be non-intrusive
 }
 
-// Simple tracer class for easy usage with official SDK
-class SimpleTracer {
+// Load the optimized SimpleTracer class
+require_once __DIR__ . '/otel_simple.php';
     private $tracer;
+    private static $instance = null;
     
     public function __construct() {
-        $this->tracer = $GLOBALS['official_tracer'] ?? null;
+        $this->tracer = $GLOBALS['otel_tracer'] ?? null;
     }
     
-    public function createTrace($name, $attributes = []) {
+    public static function getInstance() {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+    
+    // Optimized method for creating spans with proper lifecycle management
+    public function createSpan($name, $attributes = [], $spanKind = null) {
         if (!$this->tracer) {
-            return;
+            return new \OpenTelemetry\API\Trace\NoopSpan(\OpenTelemetry\API\Trace\SpanContext::getInvalid());
         }
         
-        // Get current span context for parent-child relationship
-        $currentSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
-        $spanContext = $currentSpan->getContext();
+        $spanBuilder = $this->tracer->spanBuilder($name);
         
-        $span = $this->tracer->spanBuilder($name)
-            ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_INTERNAL);
+        // Set span kind if provided, default to INTERNAL for manual instrumentation
+        if ($spanKind !== null) {
+            $spanBuilder->setSpanKind($spanKind);
+        } else {
+            $spanBuilder->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_INTERNAL);
+        }
         
-        // Add attributes
+        // Add attributes efficiently
         foreach ($attributes as $key => $value) {
-            $span->setAttribute($key, $value);
+            $spanBuilder->setAttribute($key, $value);
         }
         
-        // Set parent context if we have a current span
-        if ($spanContext->isValid()) {
-            $span->setParent(\OpenTelemetry\Context\Context::getCurrent());
-        }
-        
-        $span = $span->startSpan();
+        // Start span and return it for proper lifecycle management
+        return $spanBuilder->startSpan();
+    }
+    
+    // Legacy method for backward compatibility but optimized
+    public function createTrace($name, $attributes = []) {
+        $span = $this->createSpan($name, $attributes);
         $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
         $span->end();
     }
@@ -209,20 +230,27 @@ class SimpleTracer {
     }
 }
 
-// Initialize simple tracer for route usage
-    $GLOBALS['simple_tracer'] = new SimpleTracer();
+// Initialize optimized tracer for route usage
+$GLOBALS['simple_tracer'] = SimpleTracer::getInstance();
 
-// Helper function for easy access
-if (!function_exists('official_tracer')) {
-    function official_tracer() {
-        return $GLOBALS['official_tracer'] ?? null;
+// Helper function for easy access to main tracer
+if (!function_exists('otel_tracer')) {
+    function otel_tracer() {
+        return $GLOBALS['otel_tracer'] ?? null;
     }
 }
 
-// Helper functions for traced operations using official SDK
+// Backward compatibility
+if (!function_exists('official_tracer')) {
+    function official_tracer() {
+        return $GLOBALS['otel_tracer'] ?? null;
+    }
+}
+
+// Helper functions for traced operations using optimized official SDK patterns
 if (!function_exists('traced_pdo_query')) {
 function traced_pdo_query($pdo, $query, $params = []) {
-        if (!isset($GLOBALS['official_tracer'])) {
+        if (!isset($GLOBALS['otel_tracer'])) {
             $stmt = $pdo->prepare($query);
             $stmt->execute($params);
             return $stmt;
@@ -267,7 +295,7 @@ function traced_pdo_query($pdo, $query, $params = []) {
         $currentSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
         $spanContext = $currentSpan->getContext();
         
-        $span = $GLOBALS['official_tracer']->spanBuilder($spanName)
+        $span = $GLOBALS['otel_tracer']->spanBuilder($spanName)
             ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
             ->setAttribute('db.system', 'mysql')
             ->setAttribute('db.statement', $query)
@@ -313,7 +341,7 @@ function traced_pdo_query($pdo, $query, $params = []) {
 
 if (!function_exists('traced_curl_exec')) {
 function traced_curl_exec($ch) {
-        if (!isset($GLOBALS['official_tracer'])) {
+        if (!isset($GLOBALS['otel_tracer'])) {
             return curl_exec($ch);
         }
         
@@ -323,7 +351,7 @@ function traced_curl_exec($ch) {
         $currentSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
         $spanContext = $currentSpan->getContext();
         
-        $span = $GLOBALS['official_tracer']->spanBuilder('http.client.curl')
+        $span = $GLOBALS['otel_tracer']->spanBuilder('http.client.curl')
             ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
             ->setAttribute('http.url', $url)
             ->setAttribute('http.method', 'GET');
@@ -364,7 +392,7 @@ function traced_curl_exec($ch) {
 
 if (!function_exists('traced_guzzle_request')) {
 function traced_guzzle_request($client, $method, $url, $options = []) {
-        if (!isset($GLOBALS['official_tracer'])) {
+        if (!isset($GLOBALS['otel_tracer'])) {
             return $client->request($method, $url, $options);
         }
         
@@ -372,7 +400,7 @@ function traced_guzzle_request($client, $method, $url, $options = []) {
         $currentSpan = \OpenTelemetry\API\Trace\Span::getCurrent();
         $spanContext = $currentSpan->getContext();
         
-        $span = $GLOBALS['official_tracer']->spanBuilder('http.client.guzzle')
+        $span = $GLOBALS['otel_tracer']->spanBuilder('http.client.guzzle')
             ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
             ->setAttribute('http.url', $url)
             ->setAttribute('http.method', $method);
