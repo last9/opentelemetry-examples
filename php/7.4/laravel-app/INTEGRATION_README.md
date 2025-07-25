@@ -44,12 +44,15 @@ public function boot()
         }
         
         try {
+            $connectionName = $query->connectionName ?? config('database.default');
+            $connection = config("database.connections.{$connectionName}");
+            
             $span = $tracer->spanBuilder('db.query')
                 ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
-                ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, 'mysql')
-                ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, $query->connectionName ?? 'laravel')
-                ->setAttribute('server.address', 'localhost')
-                ->setAttribute('server.port', 3306)
+                ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, $connection['driver'] ?? 'unknown')
+                ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, $connection['database'] ?? $connectionName)
+                ->setAttribute('server.address', $connection['host'] ?? 'localhost')
+                ->setAttribute('server.port', $connection['port'] ?? 3306)
                 ->setAttribute('db.statement', $query->sql)
                 ->setAttribute('db.query.duration_ms', $query->time)
                 ->startSpan();
