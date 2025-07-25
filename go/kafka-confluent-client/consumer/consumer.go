@@ -72,6 +72,7 @@ func main() {
 
 			// Start a new span
 			ctx, span := tracer.Start(ctx, "consume_message",
+				trace.WithSpanKind(trace.SpanKindConsumer),
 				trace.WithAttributes(
 					attribute.String("messaging.system", "kafka"),
 					attribute.String("messaging.operation", "receive"),
