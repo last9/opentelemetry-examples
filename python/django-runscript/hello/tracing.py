@@ -279,7 +279,7 @@ class NoOpSpan:
     def record_exception(self, exception):
         pass
 
-def traced_function(span_kind=SpanKind.INTERNAL, include_args=False, include_result=False):
+def traced_function(span_kind=SpanKind.INTERNAL, include_args=False, include_result=False, create_root=True):
     """
     Enhanced tracing decorator with error handling
     
@@ -287,6 +287,7 @@ def traced_function(span_kind=SpanKind.INTERNAL, include_args=False, include_res
         span_kind: OpenTelemetry span kind
         include_args: Whether to include function arguments as span attributes
         include_result: Whether to include return value as span attribute
+        create_root: Whether to auto-create root span if none exists
     """
     def decorator(func):
         @functools.wraps(func)
@@ -302,67 +303,87 @@ def traced_function(span_kind=SpanKind.INTERNAL, include_args=False, include_res
                 # Fallback naming
                 span_name = f"{func.__module__}:{func.__name__}"
             
-            # Create span with error handling
-            with tracer.start_as_current_span(span_name, kind=span_kind) as span:
-                try:
-                    # Add OpenTelemetry semantic convention attributes for code
-                    span.set_attribute("code.function", func.__name__)
-                    span.set_attribute("code.namespace", func.__module__)
-                    span.set_attribute("code.filepath", file_name)
-                    
-                    # Add optional code attributes if available
-                    if hasattr(func, '__qualname__'):
-                        span.set_attribute("code.qualified_name", func.__qualname__)
-                    
-                    # Add line number if available from stack inspection
+            # Check if we need to create a root span
+            current_span = trace.get_current_span()
+            needs_root = create_root and (not current_span or not current_span.is_recording())
+            
+            def execute_traced_function():
+                # Create span with error handling
+                with tracer.start_as_current_span(span_name, kind=span_kind) as span:
                     try:
-                        frame = inspect.currentframe()
-                        if frame and frame.f_back:
-                            span.set_attribute("code.lineno", frame.f_back.f_lineno)
-                    except Exception:
-                        pass  # Skip if line number unavailable
-                    
-                    # Add arguments if requested (using custom attributes, not OTel standard)
-                    if include_args and (args or kwargs):
-                        span.set_attribute("function.args.count", len(args))
-                        span.set_attribute("function.kwargs.count", len(kwargs))
-                        # Add first few args (be careful with sensitive data)
-                        for i, arg in enumerate(args[:3]):  # Limit to first 3 args
-                            if isinstance(arg, (str, int, float, bool)):
-                                span.set_attribute(f"function.arg.{i}", str(arg)[:100])
-                    
-                    # Execute function
-                    result = func(*args, **kwargs)
-                    
-                    # Add result info if requested (using custom attributes)
-                    if include_result and result is not None:
-                        span.set_attribute("function.result.type", type(result).__name__)
-                        if isinstance(result, (str, int, float, bool)):
-                            span.set_attribute("function.result.value", str(result)[:100])
-                    
-                    # Set span status to OK on success
-                    from opentelemetry.trace import Status, StatusCode
-                    span.set_status(Status(StatusCode.OK))
-                    
-                    span.set_attribute("function.success", True)
-                    return result
-                    
-                except Exception as e:
-                    # Record the exception following OTel semantic conventions
-                    span.set_attribute("function.success", False)
-                    
-                    # Use OTel semantic conventions for exceptions
-                    span.set_attribute("exception.type", type(e).__name__)
-                    span.set_attribute("exception.message", str(e))
-                    
-                    # Record the full exception with stack trace
-                    span.record_exception(e)
-                    
-                    # Set span status to error
-                    from opentelemetry.trace import Status, StatusCode
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    
-                    raise
+                        # Add OpenTelemetry semantic convention attributes for code
+                        span.set_attribute("code.function", func.__name__)
+                        span.set_attribute("code.namespace", func.__module__)
+                        span.set_attribute("code.filepath", file_name)
+                        
+                        # Add optional code attributes if available
+                        if hasattr(func, '__qualname__'):
+                            span.set_attribute("code.qualified_name", func.__qualname__)
+                        
+                        # Add line number if available from stack inspection
+                        try:
+                            frame = inspect.currentframe()
+                            if frame and frame.f_back:
+                                span.set_attribute("code.lineno", frame.f_back.f_lineno)
+                        except Exception:
+                            pass  # Skip if line number unavailable
+                        
+                        # Add arguments if requested (using custom attributes, not OTel standard)
+                        if include_args and (args or kwargs):
+                            span.set_attribute("function.args.count", len(args))
+                            span.set_attribute("function.kwargs.count", len(kwargs))
+                            # Add first few args (be careful with sensitive data)
+                            for i, arg in enumerate(args[:3]):  # Limit to first 3 args
+                                if isinstance(arg, (str, int, float, bool)):
+                                    span.set_attribute(f"function.arg.{i}", str(arg)[:100])
+                        
+                        # Execute function
+                        result = func(*args, **kwargs)
+                        
+                        # Add result info if requested (using custom attributes)
+                        if include_result and result is not None:
+                            span.set_attribute("function.result.type", type(result).__name__)
+                            if isinstance(result, (str, int, float, bool)):
+                                span.set_attribute("function.result.value", str(result)[:100])
+                        
+                        # Set span status to OK on success
+                        from opentelemetry.trace import Status, StatusCode
+                        span.set_status(Status(StatusCode.OK))
+                        
+                        span.set_attribute("function.success", True)
+                        return result
+                        
+                    except Exception as e:
+                        # Record the exception following OTel semantic conventions
+                        span.set_attribute("function.success", False)
+                        
+                        # Use OTel semantic conventions for exceptions
+                        span.set_attribute("exception.type", type(e).__name__)
+                        span.set_attribute("exception.message", str(e))
+                        
+                        # Record the full exception with stack trace
+                        span.record_exception(e)
+                        
+                        # Set span status to error
+                        from opentelemetry.trace import Status, StatusCode
+                        span.set_status(Status(StatusCode.ERROR, str(e)))
+                        
+                        raise
+            
+            # Execute with or without root span
+            if needs_root:
+                # Create root span for this execution context
+                root_tracer = trace.get_tracer("root-context")
+                with root_tracer.start_as_current_span(
+                    f"root.{func.__name__}", 
+                    kind=SpanKind.INTERNAL
+                ) as root_span:
+                    root_span.set_attribute("root.auto_created", True)
+                    root_span.set_attribute("root.function", func.__name__)
+                    logger.debug(f"Auto-created root span for {func.__name__}")
+                    return execute_traced_function()
+            else:
+                return execute_traced_function()
                     
         return wrapper
     return decorator
