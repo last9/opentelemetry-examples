@@ -54,6 +54,12 @@ class AppServiceProvider extends ServiceProvider
                     ->setAttribute('db.statement', $query->sql)
                     ->setAttribute('db.query.duration_ms', $query->time);
                 
+                // Add SQL parameter bindings if they exist
+                if (!empty($query->bindings)) {
+                    $spanBuilder->setAttribute('db.statement.parameters', json_encode($query->bindings));
+                    $spanBuilder->setAttribute('db.statement.parameters.count', count($query->bindings));
+                }
+                
                 // Add table name if extracted
                 if ($tableName) {
                     $spanBuilder->setAttribute('db.sql.table', $tableName);

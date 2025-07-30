@@ -35,6 +35,9 @@ Route::get('/api/eloquent-example', function () {
     // Count total users (will generate a database span)
     $totalUsers = User::count();
     
+    // Fetch specific user by ID (will generate database span with parameter binding)
+    $specificUser = User::find(1);
+    
     // Fetch paginated users using Eloquent ORM (will generate database spans)
     $users = User::where('email', 'like', '%@%')->paginate(5);
     
@@ -42,6 +45,11 @@ Route::get('/api/eloquent-example', function () {
     return response()->json([
         'message' => 'Eloquent ORM paginated users',
         'total_users' => $totalUsers,
+        'specific_user' => $specificUser ? [
+            'id' => $specificUser->id,
+            'name' => $specificUser->name,
+            'email' => $specificUser->email
+        ] : null,
         'users' => $users->items(),
         'pagination' => [
             'current_page' => $users->currentPage(),
@@ -299,4 +307,52 @@ Route::get('/test-tracing-config', function () {
         ],
         'config_file' => 'config/otel.php'
     ]);
+});
+
+// Test endpoint to verify SQL parameter binding in traces
+Route::get('/api/test-sql-bindings', function () {
+    try {
+        // Test 1: Simple parameterized query with Eloquent
+        $users = \App\User::where('id', '>=', 1)
+                         ->where('email', 'like', '%@%')
+                         ->limit(3)
+                         ->get();
+        
+        // Test 2: Raw query with bindings
+        $userCount = \Illuminate\Support\Facades\DB::select(
+            'SELECT COUNT(*) as count FROM users WHERE id > ? AND email LIKE ?', 
+            [0, '%@%']
+        );
+        
+        // Test 3: Query Builder with multiple bindings
+        $recentUsers = \Illuminate\Support\Facades\DB::table('users')
+            ->where('id', '>', 1)
+            ->where('email', '!=', 'test@example.com')
+            ->whereIn('id', [1, 2, 3, 4, 5])
+            ->select('id', 'name', 'email')
+            ->take(2)
+            ->get();
+        
+        return response()->json([
+            'message' => 'SQL parameter binding test completed',
+            'note' => 'Check traces for db.statement.parameters attributes',
+            'results' => [
+                'eloquent_users' => $users->count(),
+                'raw_query_count' => $userCount[0]->count ?? 0,
+                'query_builder_users' => $recentUsers->count()
+            ],
+            'traced_queries' => [
+                'eloquent_where_clause' => 'Should have bindings: [1, "%@%"]',
+                'raw_select_query' => 'Should have bindings: [0, "%@%"]', 
+                'query_builder' => 'Should have bindings: [1, "test@example.com", 1, 2, 3, 4, 5]'
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'message' => 'SQL parameter binding test failed',
+            'error' => $e->getMessage(),
+            'traced' => 'Error span should appear in traces'
+        ], 500);
+    }
 });
