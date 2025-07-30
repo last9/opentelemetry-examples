@@ -81,15 +81,22 @@ public function boot()
             $connectionName = $query->connectionName ?? config('database.default');
             $connection = config("database.connections.{$connectionName}");
             
-            $span = $tracer->spanBuilder('db.query')
+            $spanBuilder = $tracer->spanBuilder('db.query')
                 ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
                 ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, $connection['driver'] ?? 'unknown')
                 ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_NAME, $connection['database'] ?? $connectionName)
                 ->setAttribute('server.address', $connection['host'] ?? 'localhost')
                 ->setAttribute('server.port', $connection['port'] ?? 3306)
                 ->setAttribute('db.statement', $query->sql)
-                ->setAttribute('db.query.duration_ms', $query->time)
-                ->startSpan();
+                ->setAttribute('db.query.duration_ms', $query->time);
+            
+            // Add SQL parameter bindings if they exist
+            if (!empty($query->bindings)) {
+                $spanBuilder->setAttribute('db.statement.parameters', json_encode($query->bindings));
+                $spanBuilder->setAttribute('db.statement.parameters.count', count($query->bindings));
+            }
+            
+            $span = $spanBuilder->startSpan();
             
             $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
             $span->end();
@@ -128,7 +135,8 @@ Add to your `composer.json` and run `composer install`:
 ## 🎯 What You'll Get
 
 - ✅ **HTTP Request Spans** - Configurable route-based tracing (only `/api` routes by default)
-- ✅ **Database Spans** - All Eloquent ORM and raw DB queries traced  
+- ✅ **Database Spans** - All Eloquent ORM and raw DB queries traced with SQL parameter binding
+- ✅ **SQL Parameter Binding** - Capture actual parameter values in `db.statement.parameters` attribute
 - ✅ **External HTTP Call Tracing** - Use helper functions `traced_curl_exec()` and `traced_guzzle_request()`
 - ✅ **Proper Span Relationships** - Database spans are children of HTTP request spans
 - ✅ **Performance Optimized** - Zero regex parsing, minimal overhead, non-traced routes skip all instrumentation
@@ -154,11 +162,14 @@ You can add these test routes to verify everything is working:
 
 ```php
 // Test basic functionality
-Route::get('/test-otel', function () {
+Route::get('/api/test-otel', function () {
     // This will create HTTP span automatically via middleware
     
-    // Test database span
-    $users = \Illuminate\Support\Facades\DB::select('SELECT COUNT(*) as count FROM users');
+    // Test database span with parameter binding
+    $users = \Illuminate\Support\Facades\DB::select('SELECT COUNT(*) as count FROM users WHERE id > ?', [0]);
+    
+    // Test Eloquent with parameter binding
+    $user = \App\User::find(1);
     
     // Test external HTTP call (if needed)
     $ch = curl_init();
@@ -170,6 +181,7 @@ Route::get('/test-otel', function () {
     return response()->json([
         'message' => 'OpenTelemetry test completed',
         'user_count' => $users[0]->count ?? 0,
+        'specific_user' => $user ? $user->name : null,
         'external_call' => 'success'
     ]);
 });
@@ -178,9 +190,24 @@ Route::get('/test-otel', function () {
 ### Verification Checklist
 - [ ] HTTP request span appears in your tracing backend
 - [ ] Database query spans appear as children of HTTP span
+- [ ] SQL parameter binding values appear in `db.statement.parameters` attribute
+- [ ] Parameter count appears in `db.statement.parameters.count` attribute
 - [ ] External HTTP call spans appear (if using helper functions)
 - [ ] All spans contain proper semantic attributes
 - [ ] No application errors or performance degradation
+
+### Example Database Span Attributes
+```json
+{
+  "db.statement": "select * from users where id = ? limit 1",
+  "db.statement.parameters": "[1]",
+  "db.statement.parameters.count": 1,
+  "db.sql.table": "users",
+  "db.system": "mysql",
+  "db.name": "laravel_app",
+  "db.query.duration_ms": 2.5
+}
+```
 
 ## 🐛 Troubleshooting
 
