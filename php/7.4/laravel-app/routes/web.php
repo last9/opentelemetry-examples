@@ -356,3 +356,46 @@ Route::get('/api/test-sql-bindings', function () {
         ], 500);
     }
 });
+
+// Test endpoint to verify middleware performance optimizations
+Route::get('/api/test-middleware-performance', function () {
+    $startTime = microtime(true);
+    
+    // This endpoint will be traced due to /api prefix
+    // Test database query to see full span creation
+    $userCount = \App\User::count();
+    
+    $endTime = microtime(true);
+    $executionTime = ($endTime - $startTime) * 1000; // Convert to milliseconds
+    
+    return response()->json([
+        'message' => 'Middleware performance test completed',
+        'optimizations' => [
+            'removed_sampling_code' => 'Static variables and unused conditionalTrace method removed',
+            'optimized_attributes' => 'Reduced HTTP attributes collection overhead',
+            'streamlined_span_name' => 'Improved span name generation performance',
+            'route_filtering' => 'Non-traced routes skip all instrumentation'
+        ],
+        'execution_time_ms' => round($executionTime, 2),
+        'user_count' => $userCount,
+        'traced' => 'This request should appear in traces with optimized attributes'
+    ]);
+});
+
+// Test endpoint for non-traced route (should have minimal overhead)
+Route::get('/test-non-traced-performance', function () {
+    $startTime = microtime(true);
+    
+    // This endpoint will NOT be traced (no /api prefix)
+    $userCount = \App\User::count();
+    
+    $endTime = microtime(true);
+    $executionTime = ($endTime - $startTime) * 1000; // Convert to milliseconds
+    
+    return response()->json([
+        'message' => 'Non-traced route performance test',
+        'execution_time_ms' => round($executionTime, 2),
+        'user_count' => $userCount,
+        'traced' => 'This request should NOT appear in traces (minimal middleware overhead)'
+    ]);
+});

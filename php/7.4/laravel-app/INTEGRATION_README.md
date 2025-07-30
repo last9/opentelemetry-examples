@@ -2,12 +2,13 @@
 
 ## 📁 Files to Copy
 
-Copy these 3 essential files from this project to your Laravel app:
+Copy these 4 essential files from this project to your Laravel app:
 
 ```
 bootstrap/otel.php                           # Core OpenTelemetry SDK setup
 app/Http/Middleware/OpenTelemetryMiddleware.php  # HTTP request/response tracing  
 app/Providers/AppServiceProvider.php            # Database tracing (copy the boot() method)
+config/otel.php                              # OpenTelemetry configuration (route filtering)
 ```
 
 ## 🔧 Integration Steps
@@ -30,8 +31,8 @@ protected $middleware = [
 ];
 ```
 
-### 2.1. **Configure Route Filtering (Optional)**
-Create `config/otel.php` to control which routes are traced:
+### 2.1. **Configure Route Filtering**
+Copy the `config/otel.php` file to your `config/` directory to control which routes are traced:
 
 ```php
 <?php
@@ -60,9 +61,11 @@ return [
 
 **Configuration Examples:**
 - `['api']` - Only trace `/api/*` routes (default)
-- `['api', 'admin']` - Trace `/api/*` and `/admin/*` routes
+- `['api', 'admin']` - Trace `/api/*` and `/admin/*` routes  
 - `['']` - Trace all routes (empty string matches all)
 - `[]` - Disable all tracing
+
+**Note:** The `config/otel.php` file is required for the middleware to function properly. Make sure to copy it to your Laravel app's `config/` directory.
 
 ### 3. **Add Database Tracing**
 In your existing `AppServiceProvider.php` `boot()` method, add this code:
@@ -225,6 +228,12 @@ Route::get('/api/test-otel', function () {
 3. **HTTP spans missing**
    - Confirm middleware is registered in `Kernel.php`
    - Check middleware order (should be early in the stack)
+   - Ensure `config/otel.php` exists and contains proper route patterns
+
+4. **Route filtering not working**
+   - Verify `config/otel.php` is copied to your Laravel app
+   - Check that `traced_routes` array matches your desired route patterns
+   - Run `php artisan config:cache` after modifying the config file
 
 4. **Performance issues**
    - This implementation is optimized for minimal overhead
