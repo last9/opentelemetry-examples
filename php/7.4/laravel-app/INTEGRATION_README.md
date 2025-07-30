@@ -30,6 +30,40 @@ protected $middleware = [
 ];
 ```
 
+### 2.1. **Configure Route Filtering (Optional)**
+Create `config/otel.php` to control which routes are traced:
+
+```php
+<?php
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | OpenTelemetry Route Tracing Configuration
+    |--------------------------------------------------------------------------
+    |
+    | This array defines which route patterns should be traced by the
+    | OpenTelemetry middleware. Routes starting with these patterns
+    | will have tracing enabled.
+    |
+    | Examples:
+    | - ['api'] - Only trace routes starting with /api
+    | - ['api', 'admin'] - Trace routes starting with /api or /admin
+    | - [''] - Trace all routes (empty string matches all)
+    |
+    */
+    'traced_routes' => [
+        'api'  // Only trace /api routes by default
+    ],
+];
+```
+
+**Configuration Examples:**
+- `['api']` - Only trace `/api/*` routes (default)
+- `['api', 'admin']` - Trace `/api/*` and `/admin/*` routes
+- `['']` - Trace all routes (empty string matches all)
+- `[]` - Disable all tracing
+
 ### 3. **Add Database Tracing**
 In your existing `AppServiceProvider.php` `boot()` method, add this code:
 
@@ -93,11 +127,11 @@ Add to your `composer.json` and run `composer install`:
 
 ## 🎯 What You'll Get
 
-- ✅ **HTTP Request Spans** - All incoming requests traced automatically
+- ✅ **HTTP Request Spans** - Configurable route-based tracing (only `/api` routes by default)
 - ✅ **Database Spans** - All Eloquent ORM and raw DB queries traced  
 - ✅ **External HTTP Call Tracing** - Use helper functions `traced_curl_exec()` and `traced_guzzle_request()`
 - ✅ **Proper Span Relationships** - Database spans are children of HTTP request spans
-- ✅ **Performance Optimized** - Zero regex parsing, minimal overhead
+- ✅ **Performance Optimized** - Zero regex parsing, minimal overhead, non-traced routes skip all instrumentation
 
 ## 🚀 Optional: External HTTP Calls
 

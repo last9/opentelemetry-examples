@@ -16,8 +16,22 @@ class OpenTelemetryMiddleware
     private static $requestCount = 0;
     private static $lastResetTime = 0;
     
+    // Configurable route patterns to trace
+    private $tracedRoutePatterns;
+    
+    public function __construct()
+    {
+        // Load traced route patterns from config
+        $this->tracedRoutePatterns = config('otel.traced_routes');
+    }
+    
     public function handle($request, Closure $next)
     {
+        // Only trace configured routes
+        if (!$this->shouldTrace($request)) {
+            return $next($request);
+        }
+
         $tracer = $GLOBALS['otel_tracer'] ?? null;
         if (!$tracer) {
             return $next($request);
@@ -85,6 +99,21 @@ class OpenTelemetryMiddleware
         }
         
         return $request->method() . ' ' . $request->path();
+    }
+
+    // Check if request should be traced based on configured patterns
+    private function shouldTrace($request)
+    {
+        $path = $request->path();
+        
+        // Check if path matches any of the configured patterns
+        foreach ($this->tracedRoutePatterns as $pattern) {
+            if (strpos($path, $pattern) === 0) {
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     // Conditional tracing logic to reduce overhead (not currently used)

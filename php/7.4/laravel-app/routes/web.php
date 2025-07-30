@@ -282,3 +282,21 @@ Route::get('/api/joke-guzzle', function () {
         ], 500);
     }
 });
+
+// Test endpoint to verify route filtering configuration
+Route::get('/test-tracing-config', function () {
+    $config = config('otel.traced_routes');
+    
+    return response()->json([
+        'message' => 'OpenTelemetry Route Filtering Configuration',
+        'traced_routes' => $config,
+        'note' => 'This endpoint itself should NOT be traced (not in /api)',
+        'test_urls' => [
+            '/api/health' => 'Should be traced',
+            '/api/users' => 'Should be traced', 
+            '/test-tracing-config' => 'Should NOT be traced',
+            '/' => 'Should NOT be traced'
+        ],
+        'config_file' => 'config/otel.php'
+    ]);
+});
