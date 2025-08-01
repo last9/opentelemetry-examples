@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm:*)",
+      "Bash(pip install:*)",
+      "Bash(chmod:*)",
+      "Bash(./start.sh:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(OTEL_EXPORTER_OTLP_TRACES_EXPORTER=console OTEL_SERVICE_NAME=fastapi-uvicorn-app opentelemetry-instrument uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}
