@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-service
+  namespace: last9
+spec:
+  selector:
+    app.kubernetes.io/instance: last9-opentelemetry-collector
+    app.kubernetes.io/name: last9-otel-collector
+    component: agent-collector
+  ports:
+  - appProtocol: grpc
+    name: otlp-grpc
+    port: 4317
+    protocol: TCP
+    targetPort: 4317
+  - appProtocol: http
+    name: otlp-http
+    port: 4318
+    protocol: TCP
+    targetPort: 4318
+  type: ClusterIP
