@@ -6,6 +6,7 @@ This guide shows you how to deploy OpenTelemetry Operator, Collector, and Cluste
 
 Before running the script, ensure you have:
 
+
 - ✅ **Kubernetes Cluster**: A running Kubernetes cluster
 - ✅ **kubectl**: Configured and connected to your cluster
 - ✅ **helm**: Installed (v3.9+)
@@ -16,6 +17,8 @@ Before running the script, ensure you have:
 
 
 ## 🚀 Quick Start - Single Command Deployment
+
+## 🔧 Step 1: Deploy the OTEL Operator
 
 ### Step 1: Deploy Operator, Collector & Monitoring
 
@@ -37,8 +40,33 @@ chmod +x setup-otel.sh
 
 Execute the script to install everything:
 
+
 ```bash
 ./setup-otel.sh token="your-token-here" monitoring=true cluster="your-cluster-name" username="your-username" password="your-password"
+=======
+#### Option1: You want to integrate k8s logs & traces
+
+1. [Use this helm chart mentioned here](https://app.last9.io/integrations?cluster=c20e0367-3a14-4a14-9a30-3e8598cdb9f7&category=all&search_term=logs&integration=Last9+Otel+Collector+Setup+for+Kubernetes)
+2. Apply the helm chart
+```
+helm repo update
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+helm upgrade --install last9-opentelemetry-collector open-telemetry/opentelemetry-collector --version 0.125.0 -n last9 --create-namespace -f last9-otel-collector-values.yaml 
+```
+
+#### Option2: You want to only integrate traces and you have an otel collector running
+
+You can skip this and move to the next step.
+
+#### Option3: You want to only integrate traces 
+
+1. Copy [this](https://github.com/last9/opentelemetry-examples/blob/otel-operator/otel-collector/otel-operator/java/k8s/OpenTelemetryCollector.yaml) and save as `OpenTelemetryCollector.yaml`
+2. Replace the placeholder token with your actual Last9 auth
+3. Apply the configuration to your namespace where the Java app is running:
+
+
+```sh
+kubectl apply -f OpenTelemetryCollector.yaml -n <your-namespace>
 ```
 
 **What this script installs:**
