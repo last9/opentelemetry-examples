@@ -1,170 +1,125 @@
-# 🚀 OpenTelemetry Operator Example for Java Apps
+# OpenTelemetry Operator & Collector Setup
 
-This example demonstrates how to use the OpenTelemetry (OTEL) Operator to enable **auto-instrumentation** for a Java application running in Kubernetes.
+This guide shows you how to deploy OpenTelemetry Operator and Collector in a single step using our automated setup script.
 
 ## 📋 Prerequisites
 
-- Kubernetes cluster running
-- `kubectl` configured and connected to your cluster
-- `helm` installed on your system
-- Java application ready for deployment
+Before running the script, ensure you have:
 
-## 📁 Repository Setup
+- ✅ **Kubernetes Cluster**: A running Kubernetes cluster
+- ✅ **kubectl**: Configured and connected to your cluster
+- ✅ **helm**: Installed (v3.9+)
+- ✅ **git**: Installed
+- ✅ **Last9 Token**: get authentication token for Last9 (To generate the token, login to last9 platform then --> integration --> Search Opentelemetary --> Connect --> You will see Auth header in the doc just copy Token alone)
 
-> **💡 Tip**: Clone this repository to your local machine for easy access to YAML files and reference during setup.
 
-```sh
-git clone <repository-url>
-cd opentelemetry-examples/otel-collector/otel-operator/java/k8s
+## 🚀 Quick Start - Single Command Deployment
+
+### Step 1: Deploy Operator & Collector
+
+Run this single command to install everything:
+
+```bash
+./setup-otel.sh token="your-token-here"
 ```
 
-## 🔧 Step 1: Deploy the OTEL Operator
+**What this script installs:**
+- ✅ OpenTelemetry Operator (Helm chart: `opentelemetry-operator`)
+- ✅ OpenTelemetry Collector (Helm chart: `last9-opentelemetry-collector`)
+- ✅ Collector Service (Kubernetes service)
+- ✅ Common Instrumentation (Auto-instrumentation configuration)
+- ✅ Helm repositories setup
+- ✅ Namespace creation (`last9`)
 
-Install the OpenTelemetry Operator using Helm:
 
-```sh
-# Add the OpenTelemetry Helm repository
-helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-helm repo update
 
-# Install the operator with optimized settings
-helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
---set "manager.collectorImage.repository=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s" \
---set admissionWebhooks.certManager.enabled=false \
---set admissionWebhooks.autoGenerateCert.enabled=true
+### Step 2: Verify Installation
+
+Check that all pods are up and running:
+
+```bash
+# Check pods
+kubectl get pods -n last9
+
 ```
 
-> **✅ Verification**: Check if the operator is running:
-> ```sh
-> kubectl get pods -n <your-namespace> | grep opentelemetry-operator
-> ```
+### Step 3: Annotate Your Application
 
-<details>
-<summary>🗑️ Uninstall Instructions</summary>
-
-To remove the operator:
-
-```sh
-helm uninstall opentelemetry-operator
-```
-</details>
-
----
-
-## 📊 Step 2: Deploy the OpenTelemetry Collector
-
-The OpenTelemetry Collector acts as a central hub for receiving, processing, and exporting telemetry data.
-
-### Configuration
-
-1. **Open** the `OpenTelemetryCollector.yaml` file in this directory
-2. **Replace** the placeholder token with your actual Last9 token or configuration
-3. **Apply** the configuration to your namespace where the Java app is running:
-
-```sh
-kubectl apply -f OpenTelemetryCollector.yaml -n <your-namespace>
-```
-
-> **✅ Verification**: Check if the collector is running:
-> ```sh
-> kubectl get pods -n <your-namespace> | grep otel-collector
-> ```
-
----
-
-## 🎯 Step 3: Create the Instrumentation Object
-
-The Instrumentation object defines how your Java application should be automatically instrumented.
-
-### Setup
-
-1. **Use** the provided `instrumentation.yaml` file (no changes needed)
-2. **Apply** it to your namespace where the Java app is running:
-
-```sh
-kubectl apply -f instrumentation.yaml -n <your-namespace>
-```
-
-> **✅ Verification**: Check if the instrumentation is created:
-> ```sh
-> kubectl get instrumentation -n <your-namespace>
-> ```
-
----
-
-## 🏷️ Step 4: Annotate Your Application Deployment
-
-This is the **key step** that enables auto-instrumentation for your Java application.
-
-### Add Annotation
-
-Add this annotation to your deployment's pod template metadata:
-
-```yaml
-annotations:
-  instrumentation.opentelemetry.io/inject-java: "true"
-```
-
-### Example Reference
-
-See the example in `deploy.yaml` file (lines 16-17):
+Add this annotation to your application deployment to enable auto-instrumentation:
 
 ```yaml
 metadata:
-  labels:
-    app: spring-boot-app
   annotations:
-    instrumentation.opentelemetry.io/inject-java: "true"  # ← This line enables auto-instrumentation
+    instrumentation.opentelemetry.io/inject-java: "last9/l9-instrumentation"
 ```
 
-### Apply Your Deployment
-
-```sh
-kubectl apply -f deploy.yaml -n <your-namespace>
+**Example deployment:**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-java-app
+spec:
+  template:
+    metadata:
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "last9/l9-instrumentation"  # ← Enable auto-instrumentation
+    spec:
+      containers:
+      - name: my-app
+        image: my-java-app:latest
 ```
 
-> **💡 Pro Tip**: The annotation tells the OpenTelemetry Operator to automatically inject the Java agent into your application pods.
 
----
 
-## ✅ Validation & Verification
+## 🔧 Advanced Usage
 
-### Check All Components
+### Individual Function Execution
 
-Verify that all components are running correctly:
+You can also run specific components individually:
 
-```sh
-# Check operator status
-kubectl get pods -n de <your-namespace> | grep opentelemetry-operator
+```bash
+# Install operator only
+./setup-otel.sh function="install_operator" 
 
-# Check collector status
-kubectl get pods -n <your-namespace> | grep otel-collector
+# Install collector with custom values
+./setup-otel.sh function="install_collector" token="your-token" values="custom-values.yaml"
 
-# Check instrumentation object
-kubectl get instrumentation -n <your-namespace>
-
-# Check your application deployment
-kubectl get pods -n <your-namespace> | grep <your-app-name>
+# Verify installation
+./setup-otel.sh function="verify_installation"
 ```
 
-### Expected Behavior
+### Custom Values File
 
-✅ **Success Indicators:**
-- All pods are in `Running` state
-- No error messages in pod logs
-- Your Java application should be automatically instrumented
-- Telemetry data flows through the OTEL Collector to Last9
+Use your own values file instead of the default:
 
-### Troubleshooting
+```bash
+./setup-otel.sh function="install_collector" token="your-token" values="my-custom-values.yaml"
+```
 
-If you encounter issues:
+**Note:** The values file should be in your current directory. When using a custom values file, no token replacement is performed - use the file as-is.
 
-1. **Check pod logs**: `kubectl logs <pod-name> -n <namespace>`
-2. **Verify annotations**: Ensure the annotation is correctly applied
-3. **Check operator logs**: `kubectl logs -l app.kubernetes.io/name=opentelemetry-operator -n default`
+### Uninstall Everything
 
----
+To remove all OpenTelemetry components:
 
-## 🎉 Success!
+```bash
+./setup-otel.sh uninstall
+```
 
-Once all steps are completed successfully, your Java application will be automatically instrumented and sending telemetry data to Last9 via the OpenTelemetry Collector.
+
+## 📝 Configuration Files
+
+The script uses these configuration files from the repository:
+
+- `last9-otel-collector-values.yaml` - Collector configuration
+- `collector-svc.yaml` - Collector service definition
+- `instrumentation.yaml` - Auto-instrumentation configuration
+
+
+## 📚 Additional Resources
+
+- [OpenTelemetry Operator Documentation](https://opentelemetry.io/docs/kubernetes/operator/)
+- [Last9 Documentation](https://docs.last9.io/)
+- [Individual Functions Usage Guide](INDIVIDUAL_FUNCTIONS_USAGE.md)
+

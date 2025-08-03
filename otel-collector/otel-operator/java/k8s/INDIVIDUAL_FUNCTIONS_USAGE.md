@@ -92,7 +92,7 @@ Some functions have dependencies that are automatically handled:
 
 1. **Token Requirement**: Functions that need authentication (like `install_collector`, `create_collector_service`, `create_instrumentation`) require the `token` parameter.
 
-2. **Values File**: When using the `values` parameter, make sure your custom values file is in your current directory and contains the necessary configuration for the OpenTelemetry Collector. The script will automatically replace `{{AUTH_TOKEN}}` placeholder with your provided token.
+2. **Values File**: When using the `values` parameter, make sure your custom values file is in your current directory and contains the necessary configuration for the OpenTelemetry Collector. For individual function calls with custom values files, no token replacement is performed - the file should contain the complete configuration including the token.
 
 3. **Namespace**: All operations use the `last9` namespace by default.
 

@@ -539,35 +539,15 @@ main() {
                         exit 1
                     fi
                     
-                    # Create a temporary copy of the values file for token replacement
-                    local temp_values_file="${VALUES_FILE}.tmp"
-                    cp "$VALUES_FILE" "$temp_values_file"
-                    
-                    # Replace token placeholder in the temporary file
-                    log_info "Replacing auth token placeholder in values file..."
-                    if grep -q '{{AUTH_TOKEN}}' "$temp_values_file"; then
-                        sed -i.tmp "s/{{AUTH_TOKEN}}/$AUTH_TOKEN/g" "$temp_values_file"
-                    elif grep -q '\${AUTH_TOKEN}' "$temp_values_file"; then
-                        sed -i.tmp "s/\${AUTH_TOKEN}/$AUTH_TOKEN/g" "$temp_values_file"
-                    elif grep -q '{{ \.Values\.authToken }}' "$temp_values_file"; then
-                        sed -i.tmp "s/{{ \.Values\.authToken }}/$AUTH_TOKEN/g" "$temp_values_file"
-                    else
-                        log_warn "No supported placeholder found in the values file. Using as-is."
-                    fi
-                    
-                    # Remove the temporary file created by sed -i
-                    rm -f "${temp_values_file}.tmp"
-                    
+                    # For individual function calls with custom values, use as-is (no token replacement)
+                    log_info "Using values file as-is for individual function call"
                     helm upgrade --install last9-opentelemetry-collector open-telemetry/opentelemetry-collector \
                         --version "$COLLECTOR_VERSION" \
                         -n "$NAMESPACE" \
                         --create-namespace \
-                        -f "$temp_values_file"
-                    
-                    # Clean up temporary file
-                    rm -f "$temp_values_file"
+                        -f "$VALUES_FILE"
                 else
-                    # Use default behavior - clone repo and use default values file
+                    # Use default behavior - clone repo and use default values file with token replacement
                     setup_repository
                     install_collector
                 fi
