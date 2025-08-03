@@ -2,10 +2,10 @@
 
 # OpenTelemetry Setup Automation Script
 # Usage: 
-#   Install: ./setup-otel.sh token="your-token-here" [repo="repository-url"]
+#   Install: ./setup-otel.sh token="your-token-here"
 #   Uninstall: ./setup-otel.sh uninstall
 # Example: 
-#   ./setup-otel.sh token="bXl1c2VyOm15cGFzcw==" repo="https://github.com/repo.git"
+#   ./setup-otel.sh token="your-token-here"
 #   ./setup-otel.sh uninstall
 
 set -e  # Exit on any error
@@ -15,7 +15,7 @@ NAMESPACE="last9"
 OPERATOR_VERSION="0.129.1"
 COLLECTOR_VERSION="0.126.0"
 WORK_DIR="otel-setup-$(date +%s)"
-DEFAULT_REPO="https://github.com/open-telemetry/opentelemetry-examples.git"
+DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#opentelemetary-operator"
 
 # Initialize variables
 AUTH_TOKEN=""
