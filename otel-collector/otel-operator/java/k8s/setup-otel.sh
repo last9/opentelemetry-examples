@@ -25,6 +25,8 @@ FUNCTION_TO_EXECUTE=""
 VALUES_FILE=""
 SETUP_MONITORING=false
 CLUSTER_NAME=""
+LAST9_USERNAME=""
+LAST9_PASSWORD=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -82,6 +84,14 @@ parse_arguments() {
                 CLUSTER_NAME="${arg#*=}"
                 shift
                 ;;
+            username=*)
+                LAST9_USERNAME="${arg#*=}"
+                shift
+                ;;
+            password=*)
+                LAST9_PASSWORD="${arg#*=}"
+                shift
+                ;;
             --help|-h)
                 show_help
                 exit 0
@@ -110,6 +120,8 @@ show_help() {
     echo "  repo=<value>     Optional. Git repository URL (default: OpenTelemetry examples)"
     echo "  monitoring=true  Optional. Also install Last9 monitoring stack"
     echo "  cluster=<name>   Optional. Cluster name for monitoring (auto-detected if not provided)"
+    echo "  username=<value> Required for monitoring. Last9 username (replaces {{ username}} placeholder)"
+    echo "  password=<value> Required for monitoring. Last9 password (replaces {{ password }} placeholder)"
     echo ""
     echo "Uninstall Arguments:"
     echo "  uninstall        Remove all OpenTelemetry components and resources"
@@ -131,6 +143,7 @@ show_help() {
     echo "  $0 token=\"Y2xpZW50QTpwYXNz\" repo=\"https://github.com/my-repo.git\""
     echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true  # Install OTEL + monitoring"
     echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true cluster=\"prod-cluster\""
+    echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true username=\"my-user\" password=\"my-pass\""
     echo "  $0 uninstall"
     echo "  $0 uninstall-all  # Remove everything"
     echo "  $0 function=\"install_collector\" token=\"bXl1c2VyOm15cGFzcw==\" values=\"custom-values.yaml\""
@@ -403,12 +416,24 @@ setup_last9_monitoring() {
     
     log_info "Using cluster name: $cluster_name"
     
+    # Use provided credentials
+    if [ -z "$LAST9_USERNAME" ] || [ -z "$LAST9_PASSWORD" ]; then
+        log_error "Last9 credentials are required for monitoring setup."
+        log_error "Please provide username=<value> and password=<value> parameters."
+        exit 1
+    fi
+    
+    local username="$LAST9_USERNAME"
+    local password="$LAST9_PASSWORD"
+    
+    log_info "Using Last9 credentials: username=${username:0:8}... password=${password:0:8}..."
+    
     # Create the secret for Last9 remote write
     log_info "Creating Last9 remote write secret..."
     kubectl create secret generic last9-remote-write-secret \
         -n last9 \
-        --from-literal=username="bf853555-4dc3-4f30-82da-bfcdae575c7b" \
-        --from-literal=password="6d44868cc919918ea70e9da76697dd78" \
+        --from-literal=username="$username" \
+        --from-literal=password="$password" \
         --dry-run=client -o yaml | kubectl apply -f -
     
     log_info "✓ Last9 remote write secret created"
