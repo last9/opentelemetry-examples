@@ -97,7 +97,7 @@ Use your own values file instead of the default:
 ./setup-otel.sh function="install_collector" token="your-token" values="my-custom-values.yaml"
 ```
 
-**Note:** The values file should be in your current directory. When using a custom values file, no token replacement is performed - use the file as-is.
+**Note:** The values file should be in your current directory and can contain `{{AUTH_TOKEN}}` placeholder which will be automatically replaced.
 
 ### Uninstall Everything
 

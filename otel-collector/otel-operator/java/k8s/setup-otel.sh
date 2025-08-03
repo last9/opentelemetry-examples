@@ -23,6 +23,8 @@ REPO_URL="$DEFAULT_REPO"
 UNINSTALL_MODE=false
 FUNCTION_TO_EXECUTE=""
 VALUES_FILE=""
+SETUP_MONITORING=false
+CLUSTER_NAME=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -50,6 +52,11 @@ parse_arguments() {
                 UNINSTALL_MODE=true
                 shift
                 ;;
+            uninstall-all)
+                UNINSTALL_MODE=true
+                FUNCTION_TO_EXECUTE="uninstall_all"
+                shift
+                ;;
             token=*)
                 AUTH_TOKEN="${arg#*=}"
                 shift
@@ -64,6 +71,15 @@ parse_arguments() {
                 ;;
             values=*)
                 VALUES_FILE="${arg#*=}"
+                shift
+                ;;
+            monitoring=*)
+                SETUP_MONITORING=true
+                CLUSTER_NAME="${arg#*=}"
+                shift
+                ;;
+            cluster=*)
+                CLUSTER_NAME="${arg#*=}"
                 shift
                 ;;
             --help|-h)
@@ -87,20 +103,25 @@ show_help() {
     echo "  Install:   $0 token=\"your-token-here\" [repo=\"repository-url\"]"
     echo "  Uninstall: $0 uninstall"
     echo "  Individual: $0 function=\"function_name\" [token=\"your-token\"] [values=\"values-file\"]"
+    echo "  Monitoring: $0 function=\"setup_last9_monitoring\" [cluster=\"cluster-name\"]"
     echo ""
     echo "Install Arguments:"
     echo "  token=<value>    Required. The auth token for authentication"
     echo "  repo=<value>     Optional. Git repository URL (default: OpenTelemetry examples)"
+    echo "  monitoring=true  Optional. Also install Last9 monitoring stack"
+    echo "  cluster=<name>   Optional. Cluster name for monitoring (auto-detected if not provided)"
     echo ""
     echo "Uninstall Arguments:"
     echo "  uninstall        Remove all OpenTelemetry components and resources"
+    echo "  uninstall-all    Remove all components (OpenTelemetry + Monitoring)"
     echo ""
     echo "Individual Function Arguments:"
     echo "  function=<name>  Execute specific function: setup_helm_repos, install_operator,"
     echo "                   install_collector, create_collector_service, create_instrumentation,"
-    echo "                   verify_installation"
+    echo "                   verify_installation, setup_last9_monitoring, uninstall_last9_monitoring"
     echo "  token=<value>    Required for functions that need authentication"
     echo "  values=<file>    Custom values file for install_collector function (looks in current directory)"
+    echo "  cluster=<name>   Cluster name for setup_last9_monitoring function (auto-detected if not provided)"
     echo ""
     echo "Other:"
     echo "  --help, -h       Show this help message"
@@ -108,9 +129,15 @@ show_help() {
     echo "Examples:"
     echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\""
     echo "  $0 token=\"Y2xpZW50QTpwYXNz\" repo=\"https://github.com/my-repo.git\""
+    echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true  # Install OTEL + monitoring"
+    echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true cluster=\"prod-cluster\""
     echo "  $0 uninstall"
+    echo "  $0 uninstall-all  # Remove everything"
     echo "  $0 function=\"install_collector\" token=\"bXl1c2VyOm15cGFzcw==\" values=\"custom-values.yaml\""
     echo "  $0 function=\"setup_helm_repos\""
+    echo "  $0 function=\"setup_last9_monitoring\" cluster=\"my-production-cluster\""
+    echo "  $0 function=\"setup_last9_monitoring\"  # Auto-detects cluster name"
+    echo "  $0 function=\"uninstall_last9_monitoring\"  # Remove monitoring stack"
     echo ""
 }
 
@@ -245,6 +272,7 @@ setup_helm_repos() {
     log_info "Setting up Helm repositories..."
     
     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
     
     log_info "Helm repositories updated!"
@@ -343,6 +371,172 @@ verify_installation() {
     # Show services
     log_info "Services in $NAMESPACE namespace:"
     kubectl get svc -n "$NAMESPACE"
+}
+
+# Function to setup Last9 monitoring stack
+setup_last9_monitoring() {
+    log_info "Setting up Last9 monitoring stack..."
+    
+    local cluster_name=""
+    
+    # Parse cluster name from arguments
+    for arg in "$@"; do
+        case $arg in
+            cluster=*)
+                cluster_name="${arg#*=}"
+                shift
+                ;;
+        esac
+    done
+    
+    # If cluster name not provided, try to get it from kubectl
+    if [ -z "$cluster_name" ]; then
+        log_info "Cluster name not provided, attempting to detect from kubectl..."
+        cluster_name=$(kubectl config current-context 2>/dev/null || echo "unknown-cluster")
+        log_info "Detected cluster name: $cluster_name"
+    fi
+    
+    if [ -z "$cluster_name" ]; then
+        log_error "Cluster name is required. Please provide cluster=<cluster-name>"
+        exit 1
+    fi
+    
+    log_info "Using cluster name: $cluster_name"
+    
+    # Create the secret for Last9 remote write
+    log_info "Creating Last9 remote write secret..."
+    kubectl create secret generic last9-remote-write-secret \
+        -n last9 \
+        --from-literal=username="bf853555-4dc3-4f30-82da-bfcdae575c7b" \
+        --from-literal=password="6d44868cc919918ea70e9da76697dd78" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    
+    log_info "✓ Last9 remote write secret created"
+    
+    # Check if k8s-monitoring-values.yaml exists
+    if [ ! -f "k8s-monitoring-values.yaml" ]; then
+        log_error "k8s-monitoring-values.yaml not found in current directory"
+        exit 1
+    fi
+    
+    # Create backup of original file
+    cp k8s-monitoring-values.yaml k8s-monitoring-values.yaml.backup
+    log_info "Created backup: k8s-monitoring-values.yaml.backup"
+    
+    # Replace cluster name placeholder in the values file
+    log_info "Updating cluster name in k8s-monitoring-values.yaml..."
+    sed -i.tmp "s/my-cluster-name/$cluster_name/g" k8s-monitoring-values.yaml
+    
+    # Remove the temporary file created by sed -i
+    rm -f k8s-monitoring-values.yaml.tmp
+    
+    # Verify the change was made
+    if grep -q "cluster: $cluster_name" k8s-monitoring-values.yaml; then
+        log_info "✓ Cluster name placeholder replaced successfully!"
+    else
+        log_warn "⚠ Could not verify cluster name replacement. Please check the file manually."
+    fi
+    
+    # Add prometheus-community repo if not already added
+    log_info "Adding prometheus-community Helm repository..."
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm repo update
+    
+    # Install/upgrade the monitoring stack
+    log_info "Installing/upgrading Last9 K8s monitoring stack..."
+    helm upgrade --install last9-k8s-monitoring prometheus-community/kube-prometheus-stack \
+        -n last9 \
+        -f k8s-monitoring-values.yaml \
+        --create-namespace
+    
+    log_info "✓ Last9 K8s monitoring stack deployed successfully!"
+    
+    # Show the deployed resources
+    log_info "Monitoring stack resources in last9 namespace:"
+    kubectl get pods -n last9 -l "app.kubernetes.io/name=prometheus" 2>/dev/null || true
+    kubectl get pods -n last9 -l "app.kubernetes.io/name=kube-state-metrics" 2>/dev/null || true
+    kubectl get pods -n last9 -l "app.kubernetes.io/name=node-exporter" 2>/dev/null || true
+    
+    log_info "🎉 Last9 monitoring stack setup completed!"
+    echo ""
+    echo "Summary:"
+    echo "  ✓ Created secret: last9-remote-write-secret"
+    echo "  ✓ Updated cluster name in k8s-monitoring-values.yaml"
+    echo "  ✓ Deployed kube-prometheus-stack with Last9 configuration"
+    echo ""
+    echo "To verify the deployment:"
+    echo "  kubectl get pods -n last9"
+    echo "  kubectl get secrets -n last9 last9-remote-write-secret"
+    echo "  kubectl get prometheus -n last9"
+}
+
+# Function to uninstall Last9 monitoring stack
+uninstall_last9_monitoring() {
+    log_info "🗑️  Starting Last9 monitoring stack uninstallation..."
+    
+    # Ask for confirmation
+    echo ""
+    log_warn "This will remove the Last9 monitoring stack components"
+    echo "Components to be removed:"
+    echo "  - Helm chart: last9-k8s-monitoring (kube-prometheus-stack)"
+    echo "  - Secret: last9-remote-write-secret"
+    echo "  - Namespace 'last9' (only if empty after cleanup)"
+    echo ""
+    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Uninstall cancelled."
+        exit 0
+    fi
+    
+    log_info "Proceeding with uninstallation..."
+    
+    # Remove the Helm chart
+    if helm list -n last9 2>/dev/null | grep -q "last9-k8s-monitoring"; then
+        log_info "Uninstalling Last9 K8s monitoring stack..."
+        helm uninstall last9-k8s-monitoring -n last9 || log_warn "Failed to uninstall monitoring chart"
+    else
+        log_info "Last9 K8s monitoring stack chart not found"
+    fi
+    
+    # Remove the secret
+    log_info "Removing Last9 remote write secret..."
+    kubectl delete secret last9-remote-write-secret -n last9 --ignore-not-found=true 2>/dev/null || true
+    
+    # Wait for Helm resources to be cleaned up
+    log_info "Waiting for Helm resources to be cleaned up..."
+    sleep 10
+    
+    # Check if namespace is empty and offer to delete it
+    log_info "Checking if namespace 'last9' is empty..."
+    remaining_resources=$(kubectl get all -n last9 --no-headers 2>/dev/null | wc -l || echo "0")
+    
+    if [ "$remaining_resources" -eq 0 ]; then
+        log_info "Namespace 'last9' appears to be empty."
+        read -p "Do you want to delete the empty namespace 'last9'? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            kubectl delete namespace last9 --ignore-not-found=true
+            log_info "✓ Namespace 'last9' deleted"
+        else
+            log_info "Keeping namespace 'last9'"
+        fi
+    else
+        log_info "Namespace 'last9' contains other resources. Keeping namespace."
+        echo "Remaining resources in namespace:"
+        kubectl get all -n last9 2>/dev/null || true
+    fi
+    
+    log_info "🎉 Last9 monitoring stack uninstallation completed!"
+    echo ""
+    echo "Summary of actions taken:"
+    echo "  ✓ Removed Helm chart: last9-k8s-monitoring"
+    echo "  ✓ Removed secret: last9-remote-write-secret"
+    echo "  ✓ Preserved other resources in namespace (if any)"
+    echo ""
+    echo "To verify cleanup, run:"
+    echo "  helm list -n last9 | grep last9-k8s-monitoring  # Should return nothing"
+    echo "  kubectl get secrets -n last9 last9-remote-write-secret  # Should return nothing"
 }
 
 # Function to uninstall OpenTelemetry components
@@ -492,6 +686,41 @@ uninstall_opentelemetry() {
     echo "  kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=opentelemetry-collector"
 }
 
+# Function to uninstall everything (OpenTelemetry + Monitoring)
+uninstall_all() {
+    log_info "🗑️  Starting complete uninstallation (OpenTelemetry + Monitoring)..."
+    
+    # Ask for confirmation
+    echo ""
+    log_warn "This will remove ALL components installed by this script"
+    echo "Components to be removed:"
+    echo "  - OpenTelemetry components (operator, collector, instrumentation)"
+    echo "  - Last9 monitoring stack (kube-prometheus-stack)"
+    echo "  - Last9 remote write secret"
+    echo "  - Namespaces (if empty after cleanup)"
+    echo ""
+    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Uninstall cancelled."
+        exit 0
+    fi
+    
+    log_info "Proceeding with complete uninstallation..."
+    
+    # First uninstall monitoring stack
+    log_info "Step 1: Uninstalling Last9 monitoring stack..."
+    uninstall_last9_monitoring
+    
+    # Then uninstall OpenTelemetry components
+    log_info "Step 2: Uninstalling OpenTelemetry components..."
+    uninstall_opentelemetry
+    
+    log_info "🎉 Complete uninstallation finished!"
+    echo ""
+    echo "All components have been removed successfully!"
+}
+
 # Function to cleanup temporary files
 cleanup() {
     if [ "$UNINSTALL_MODE" = false ]; then
@@ -563,9 +792,18 @@ main() {
             verify_installation)
                 verify_installation
                 ;;
+            setup_last9_monitoring)
+                setup_last9_monitoring "$@"
+                ;;
+            uninstall_last9_monitoring)
+                uninstall_last9_monitoring
+                ;;
+            uninstall_all)
+                uninstall_all
+                ;;
             *)
                 log_error "Unknown function: $FUNCTION_TO_EXECUTE"
-                echo "Available functions: setup_helm_repos, install_operator, install_collector, create_collector_service, create_instrumentation, verify_installation"
+                echo "Available functions: setup_helm_repos, install_operator, install_collector, create_collector_service, create_instrumentation, verify_installation, setup_last9_monitoring, uninstall_last9_monitoring, uninstall_all"
                 exit 1
                 ;;
         esac
@@ -582,6 +820,13 @@ main() {
         create_collector_service
         create_instrumentation
         verify_installation
+        
+        # Install monitoring stack if requested
+        if [ "$SETUP_MONITORING" = true ]; then
+            log_info "Installing Last9 monitoring stack..."
+            setup_last9_monitoring cluster="$CLUSTER_NAME"
+        fi
+        
         cleanup
         
         log_info "🎉 OpenTelemetry setup completed successfully!"
