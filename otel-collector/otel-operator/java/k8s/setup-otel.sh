@@ -2,20 +2,29 @@
 
 # OpenTelemetry Setup Automation Script
 # Usage: 
-#   Install: ./setup-otel.sh token="your-token-here"
-#   Uninstall: ./setup-otel.sh uninstall
-# Example: 
-#   ./setup-otel.sh token="your-token-here"
-#   ./setup-otel.sh uninstall
+#    Install everything
+#    ./setup-otel.sh token="token" monitoring=true cluster="cluster" username="user" password="pass"
+
+#    Install only OpenTelemetry (no monitoring)
+#    ./setup-otel.sh token="token"
+
+#    Remove only monitoring
+#    ./setup-otel.sh uninstall function="uninstall_last9_monitoring"
+
+#    Remove All components
+#    ./setup-otel.sh uninstall-all
+
 
 set -e  # Exit on any error
 
 # Configuration defaults
 NAMESPACE="last9"
-OPERATOR_VERSION="0.129.1"
+OPERATOR_VERSION="0.92.1"
 COLLECTOR_VERSION="0.126.0"
+MONITORING_VERSION="75.15.1"
+
 WORK_DIR="otel-setup-$(date +%s)"
-DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#opentelemetary-operator"
+DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#otel-k8s-monitoring"
 
 # Initialize variables
 AUTH_TOKEN=""
@@ -126,6 +135,7 @@ show_help() {
     echo "Uninstall Arguments:"
     echo "  uninstall        Remove all OpenTelemetry components and resources"
     echo "  uninstall-all    Remove all components (OpenTelemetry + Monitoring)"
+    echo "  uninstall function=\"uninstall_last9_monitoring\"  Remove only monitoring stack"
     echo ""
     echo "Individual Function Arguments:"
     echo "  function=<name>  Execute specific function: setup_helm_repos, install_operator,"
@@ -146,6 +156,7 @@ show_help() {
     echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true username=\"my-user\" password=\"my-pass\""
     echo "  $0 uninstall"
     echo "  $0 uninstall-all  # Remove everything"
+    echo "  $0 uninstall function=\"uninstall_last9_monitoring\"  # Remove only monitoring"
     echo "  $0 function=\"install_collector\" token=\"bXl1c2VyOm15cGFzcw==\" values=\"custom-values.yaml\""
     echo "  $0 function=\"setup_helm_repos\""
     echo "  $0 function=\"setup_last9_monitoring\" cluster=\"my-production-cluster\""
@@ -296,6 +307,7 @@ install_operator() {
     log_info "Installing OpenTelemetry Operator..."
     
     helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+        --version "$OPERATOR_VERSION" \
         -n "$NAMESPACE" \
         --create-namespace \
         --set "manager.collectorImage.repository=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s" \
@@ -470,7 +482,8 @@ setup_last9_monitoring() {
     # Install/upgrade the monitoring stack
     log_info "Installing/upgrading Last9 K8s monitoring stack..."
     helm upgrade --install last9-k8s-monitoring prometheus-community/kube-prometheus-stack \
-        -n last9 \
+        --version "$MONITORING_VERSION" \
+        -n "$NAMESPACE" \
         -f k8s-monitoring-values.yaml \
         --create-namespace
     
@@ -574,8 +587,10 @@ uninstall_opentelemetry() {
     echo "Components to be removed:"
     echo "  - Helm chart: last9-opentelemetry-collector"
     echo "  - Helm chart: opentelemetry-operator"
+    echo "  - Helm chart: last9-k8s-monitoring (if exists)"
     echo "  - Service: collector-svc (from collector-svc.yaml)"
     echo "  - Instrumentation: from instrumentation.yaml"
+    echo "  - Secret: last9-remote-write-secret (if exists)"
     echo "  - Namespace '$NAMESPACE' (only if empty after cleanup)"
     echo ""
     read -p "Are you sure you want to continue? (y/N): " -n 1 -r
@@ -604,6 +619,14 @@ uninstall_opentelemetry() {
         helm uninstall opentelemetry-operator -n "$NAMESPACE" || log_warn "Failed to uninstall operator chart"
     else
         log_info "OpenTelemetry Operator chart (opentelemetry-operator) not found"
+    fi
+    
+    # Remove Last9 K8s monitoring stack (if exists)
+    if helm list -n "last9" 2>/dev/null | grep -q "last9-k8s-monitoring"; then
+        log_info "Uninstalling Last9 K8s monitoring stack (last9-k8s-monitoring)..."
+        helm uninstall last9-k8s-monitoring -n "last9" || log_warn "Failed to uninstall monitoring chart"
+    else
+        log_info "Last9 K8s monitoring stack chart (last9-k8s-monitoring) not found"
     fi
     
     # Wait for Helm resources to be cleaned up
@@ -646,6 +669,10 @@ uninstall_opentelemetry() {
     kubectl delete serviceaccounts -l "app.kubernetes.io/name=opentelemetry-operator" -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null || true
     kubectl delete roles -l "app.kubernetes.io/name=opentelemetry-operator" -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null || true
     kubectl delete rolebindings -l "app.kubernetes.io/name=opentelemetry-operator" -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null || true
+    
+    # Remove Last9 monitoring secret (if exists)
+    log_info "Removing Last9 monitoring secret..."
+    kubectl delete secret last9-remote-write-secret -n "last9" --ignore-not-found=true 2>/dev/null || true
     
     # Step 4: Check if namespace is empty and offer to delete it
     log_info "Checking if namespace '$NAMESPACE' is empty..."
@@ -748,11 +775,13 @@ uninstall_all() {
 
 # Function to cleanup temporary files
 cleanup() {
-    if [ "$UNINSTALL_MODE" = false ]; then
+    # Always cleanup temporary files unless it's an uninstall operation
+    if [ "$UNINSTALL_MODE" = false ] && [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
         log_info "Cleaning up temporary files..."
-        cd ..
+        # Go back to the original directory and remove the work directory
+        cd "$(dirname "$0")" 2>/dev/null || cd /tmp
         rm -rf "$WORK_DIR"
-        log_info "Cleanup completed!"
+        log_info "✓ Temporary directory '$WORK_DIR' removed"
     fi
 }
 
@@ -764,8 +793,25 @@ main() {
     # Check prerequisites
     check_prerequisites
     
-    if [ "$UNINSTALL_MODE" = true ]; then
-        # Run uninstall process
+    if [ "$UNINSTALL_MODE" = true ] && [ -n "$FUNCTION_TO_EXECUTE" ]; then
+        # Handle special uninstall functions
+        case "$FUNCTION_TO_EXECUTE" in
+            uninstall_last9_monitoring)
+                log_info "Running monitoring-specific uninstall..."
+                uninstall_last9_monitoring
+                ;;
+            uninstall_all)
+                log_info "Running complete uninstall..."
+                uninstall_all
+                ;;
+            *)
+                log_warn "Unknown uninstall function: $FUNCTION_TO_EXECUTE"
+                log_info "Running standard OpenTelemetry uninstall..."
+                uninstall_opentelemetry
+                ;;
+        esac
+    elif [ "$UNINSTALL_MODE" = true ]; then
+        # Run standard uninstall process
         uninstall_opentelemetry
     elif [ -n "$FUNCTION_TO_EXECUTE" ]; then
         # Execute individual function
@@ -832,6 +878,9 @@ main() {
                 exit 1
                 ;;
         esac
+        
+        # Cleanup for individual functions
+        cleanup
         
         log_info "✅ Function '$FUNCTION_TO_EXECUTE' completed successfully!"
     else
