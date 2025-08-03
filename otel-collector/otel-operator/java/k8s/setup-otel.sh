@@ -21,6 +21,8 @@ DEFAULT_REPO="https://github.com/open-telemetry/opentelemetry-examples.git"
 AUTH_TOKEN=""
 REPO_URL="$DEFAULT_REPO"
 UNINSTALL_MODE=false
+FUNCTION_TO_EXECUTE=""
+VALUES_FILE=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -56,6 +58,14 @@ parse_arguments() {
                 REPO_URL="${arg#*=}"
                 shift
                 ;;
+            function=*)
+                FUNCTION_TO_EXECUTE="${arg#*=}"
+                shift
+                ;;
+            values=*)
+                VALUES_FILE="${arg#*=}"
+                shift
+                ;;
             --help|-h)
                 show_help
                 exit 0
@@ -76,6 +86,7 @@ show_help() {
     echo "Usage:"
     echo "  Install:   $0 token=\"your-token-here\" [repo=\"repository-url\"]"
     echo "  Uninstall: $0 uninstall"
+    echo "  Individual: $0 function=\"function_name\" [token=\"your-token\"] [values=\"values-file\"]"
     echo ""
     echo "Install Arguments:"
     echo "  token=<value>    Required. The auth token for authentication"
@@ -84,6 +95,13 @@ show_help() {
     echo "Uninstall Arguments:"
     echo "  uninstall        Remove all OpenTelemetry components and resources"
     echo ""
+    echo "Individual Function Arguments:"
+    echo "  function=<name>  Execute specific function: setup_helm_repos, install_operator,"
+    echo "                   install_collector, create_collector_service, create_instrumentation,"
+    echo "                   verify_installation"
+    echo "  token=<value>    Required for functions that need authentication"
+    echo "  values=<file>    Custom values file for install_collector function (looks in current directory)"
+    echo ""
     echo "Other:"
     echo "  --help, -h       Show this help message"
     echo ""
@@ -91,6 +109,8 @@ show_help() {
     echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\""
     echo "  $0 token=\"Y2xpZW50QTpwYXNz\" repo=\"https://github.com/my-repo.git\""
     echo "  $0 uninstall"
+    echo "  $0 function=\"install_collector\" token=\"bXl1c2VyOm15cGFzcw==\" values=\"custom-values.yaml\""
+    echo "  $0 function=\"setup_helm_repos\""
     echo ""
 }
 
@@ -136,7 +156,21 @@ setup_repository() {
     
     # Clone repository
     log_info "Cloning repository: $REPO_URL"
-    git clone "$REPO_URL" .
+    #git clone "$REPO_URL" .
+
+     
+    # Check if URL contains branch specification (format: url#branch)
+    if [[ "$REPO_URL" == *"#"* ]]; then
+       # Split URL and branch
+       ACTUAL_URL="${REPO_URL%#*}"
+       BRANCH="${REPO_URL#*#}"
+       log_info "Cloning branch '$BRANCH' from: $ACTUAL_URL"
+       git clone -b "$BRANCH" "$ACTUAL_URL" .
+    else
+      # Clone default branch
+      git clone "$REPO_URL" .
+    fi
+
     
     # Navigate to the correct directory
     if [ -d "otel-collector/otel-operator/java/k8s" ]; then
@@ -220,26 +254,35 @@ setup_helm_repos() {
 install_operator() {
     log_info "Installing OpenTelemetry Operator..."
     
-    helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
+    helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
         -n "$NAMESPACE" \
-        --version "$OPERATOR_VERSION" \
         --create-namespace \
         --set "manager.collectorImage.repository=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s" \
         --set admissionWebhooks.certManager.enabled=false \
         --set admissionWebhooks.autoGenerateCert.enabled=true
     
     log_info "OpenTelemetry Operator installed!"
+    
+    # Additional wait for webhook service to be available
+    log_info "Waiting for webhook service to be available..."
+    sleep 30
 }
 
 # Function to install OpenTelemetry Collector
 install_collector() {
     log_info "Installing OpenTelemetry Collector..."
     
+    local values_file="last9-otel-collector-values.yaml"
+    if [ -n "$VALUES_FILE" ]; then
+        values_file="$VALUES_FILE"
+        log_info "Using custom values file: $values_file"
+    fi
+    
     helm upgrade --install last9-opentelemetry-collector open-telemetry/opentelemetry-collector \
         --version "$COLLECTOR_VERSION" \
         -n "$NAMESPACE" \
         --create-namespace \
-        -f last9-otel-collector-values.yaml
+        -f "$values_file"
     
     log_info "OpenTelemetry Collector installed!"
 }
@@ -257,9 +300,26 @@ create_collector_service() {
 create_instrumentation() {
     log_info "Creating Common instrumentation..."
     
-    kubectl apply -f instrumentation.yaml -n "$NAMESPACE"
+    # Retry logic for webhook issues
+    local max_attempts=5
+    local attempt=1
     
-    log_info "Common instrumentation created!"
+    while [ $attempt -le $max_attempts ]; do
+        log_info "Attempt $attempt of $max_attempts to create instrumentation..."
+        
+        if kubectl apply -f instrumentation.yaml -n "$NAMESPACE" 2>/dev/null; then
+            log_info "✓ Common instrumentation created successfully!"
+            return 0
+        else
+            log_warn "Attempt $attempt failed. Waiting before retry..."
+            sleep 30
+            attempt=$((attempt + 1))
+        fi
+    done
+    
+    log_error "Failed to create instrumentation after $max_attempts attempts."
+    log_info "You can try manually: kubectl apply -f instrumentation.yaml -n $NAMESPACE"
+    return 1
 }
 
 # Function to verify installation
@@ -453,6 +513,84 @@ main() {
     if [ "$UNINSTALL_MODE" = true ]; then
         # Run uninstall process
         uninstall_opentelemetry
+    elif [ -n "$FUNCTION_TO_EXECUTE" ]; then
+        # Execute individual function
+        log_info "Executing individual function: $FUNCTION_TO_EXECUTE"
+        
+        case "$FUNCTION_TO_EXECUTE" in
+            setup_helm_repos)
+                setup_helm_repos
+                ;;
+            install_operator)
+                setup_helm_repos
+                install_operator
+                ;;
+            install_collector)
+                if [ -z "$AUTH_TOKEN" ]; then
+                    log_error "Token is required for install_collector function"
+                    exit 1
+                fi
+                setup_helm_repos
+                if [ -n "$VALUES_FILE" ]; then
+                    log_info "Using custom values file from current directory: $VALUES_FILE"
+                    # Check if values file exists in current directory
+                    if [ ! -f "$VALUES_FILE" ]; then
+                        log_error "Values file '$VALUES_FILE' not found in current directory"
+                        exit 1
+                    fi
+                    
+                    # Create a temporary copy of the values file for token replacement
+                    local temp_values_file="${VALUES_FILE}.tmp"
+                    cp "$VALUES_FILE" "$temp_values_file"
+                    
+                    # Replace token placeholder in the temporary file
+                    log_info "Replacing auth token placeholder in values file..."
+                    if grep -q '{{AUTH_TOKEN}}' "$temp_values_file"; then
+                        sed -i.tmp "s/{{AUTH_TOKEN}}/$AUTH_TOKEN/g" "$temp_values_file"
+                    elif grep -q '\${AUTH_TOKEN}' "$temp_values_file"; then
+                        sed -i.tmp "s/\${AUTH_TOKEN}/$AUTH_TOKEN/g" "$temp_values_file"
+                    elif grep -q '{{ \.Values\.authToken }}' "$temp_values_file"; then
+                        sed -i.tmp "s/{{ \.Values\.authToken }}/$AUTH_TOKEN/g" "$temp_values_file"
+                    else
+                        log_warn "No supported placeholder found in the values file. Using as-is."
+                    fi
+                    
+                    # Remove the temporary file created by sed -i
+                    rm -f "${temp_values_file}.tmp"
+                    
+                    helm upgrade --install last9-opentelemetry-collector open-telemetry/opentelemetry-collector \
+                        --version "$COLLECTOR_VERSION" \
+                        -n "$NAMESPACE" \
+                        --create-namespace \
+                        -f "$temp_values_file"
+                    
+                    # Clean up temporary file
+                    rm -f "$temp_values_file"
+                else
+                    # Use default behavior - clone repo and use default values file
+                    setup_repository
+                    install_collector
+                fi
+                ;;
+            create_collector_service)
+                setup_repository
+                create_collector_service
+                ;;
+            create_instrumentation)
+                setup_repository
+                create_instrumentation
+                ;;
+            verify_installation)
+                verify_installation
+                ;;
+            *)
+                log_error "Unknown function: $FUNCTION_TO_EXECUTE"
+                echo "Available functions: setup_helm_repos, install_operator, install_collector, create_collector_service, create_instrumentation, verify_installation"
+                exit 1
+                ;;
+        esac
+        
+        log_info "✅ Function '$FUNCTION_TO_EXECUTE' completed successfully!"
     else
         # Run installation process
         log_info "Starting OpenTelemetry setup automation..."
@@ -483,3 +621,4 @@ trap cleanup EXIT
 
 # Run main function
 main "$@"
+
