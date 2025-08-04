@@ -50,7 +50,7 @@ The OpenTelemetry Collector acts as a central hub for receiving, processing, and
 
 #### Option1: You want to integrate k8s logs & traces
 
-1. [Use this helm chart mentioned here](https://app.last9.io/integrations?cluster=c20e0367-3a14-4a14-9a30-3e8598cdb9f7&category=all&search_term=logs&integration=Last9+Otel+Collector+Setup+for+Kubernetes)
+1. [Use this helm chart mentioned here](https://app.last9.io/integrations?category=all&search_term=logs&integration=Last9+Otel+Collector+Setup+for+Kubernetes)
 2. Apply the helm chart
 ```
 helm repo update
