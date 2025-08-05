@@ -42,16 +42,16 @@ Execute the script to install everything:
 =======
 
 **What this script installs:**
+- ✅ Namespace creation (`last9`)
+- ✅ Helm repositories setup (open-telemetry + prometheus-community)
+- ✅ Last9 remote write secret
+- ✅ kube-state-metrics and node-exporter
+- ✅ Last9 Monitoring Stack (Helm chart: `last9-k8s-monitoring`)
 - ✅ OpenTelemetry Operator (Helm chart: `opentelemetry-operator`)
 - ✅ OpenTelemetry Collector (Helm chart: `last9-opentelemetry-collector`)
 - ✅ Collector Service (Kubernetes service)
 - ✅ Common Instrumentation (Auto-instrumentation configuration)
-- ✅ Last9 Monitoring Stack (Helm chart: `last9-k8s-monitoring`)
-- ✅ Prometheus with Last9 remote write configuration
-- ✅ kube-state-metrics and node-exporter
-- ✅ Last9 remote write secret
-- ✅ Helm repositories setup (open-telemetry + prometheus-community)
-- ✅ Namespace creation (`last9`)
+
 
 ### Installation Options
 
