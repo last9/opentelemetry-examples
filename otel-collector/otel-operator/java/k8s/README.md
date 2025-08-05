@@ -27,12 +27,8 @@ Before running the script, ensure you have:
 First, copy the shell script from the GitHub repository to your local machine:
 
 ```bash
-# Option 1: Clone the repository
-git clone -b otel-k8s-monitoring https://github.com/last9/opentelemetry-examples.git
-cd opentelemetry-examples/otel-collector/otel-operator/java/k8s
-
-# Option 2: Download directly from GitHub
-curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh
+# Download shell script directly from below link
+curl -O [https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh](https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh)
 chmod +x setup-otel.sh
 ```
 
