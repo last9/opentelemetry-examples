@@ -14,7 +14,7 @@ spec:
       labels:
         app: spring-boot-app
       annotations:
-        instrumentation.opentelemetry.io/inject-java: "true"
+        instrumentation.opentelemetry.io/inject-java: "last9/l9-instrumentation"
     spec:
       containers:
       - name: spring-boot-app

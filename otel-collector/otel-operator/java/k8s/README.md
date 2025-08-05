@@ -1,53 +1,45 @@
-# 🚀 OpenTelemetry Operator Example for Java Apps
+# OpenTelemetry Operator, Collector and Cluster monitoring Setup for kubernetes cluster
 
-This example demonstrates how to use the OpenTelemetry (OTEL) Operator to enable **auto-instrumentation** for a Java application running in Kubernetes.
+This guide shows you how to deploy OpenTelemetry Operator, Collector, and Cluster Monitoring in a single step using our automated setup script.
 
 ## 📋 Prerequisites
 
-- Kubernetes cluster running
-- `kubectl` configured and connected to your cluster
-- `helm` installed on your system
-- Java application ready for deployment
+Before running the script, ensure you have:
+
+
+- ✅ **Kubernetes Cluster**: A running Kubernetes cluster
+- ✅ **kubectl**: Configured and connected to your cluster
+- ✅ **helm**: Installed (v3.9+)
+- ✅ **git**: Installed
+- ✅ **Last9 Token**: Get authentication token for Last9 (Login to Last9 platform → Integration → Search OpenTelemetry → Connect → Copy the Auth header token)
+- ✅ **Last9 Username**: Get from Last9 platform (Integration → Search Prometheus → Connect → Copy the username value)
+- ✅ **Last9 Password**: Get from Last9 platform (Integration → Search Prometheus → Connect → Copy the password value)
+
+
+## 🚀 Quick Start - Single Command Deployment
 
 ## 🔧 Step 1: Deploy the OTEL Operator
 
-Install the OpenTelemetry Operator using Helm:
+### Step 1: Deploy Operator, Collector & Monitoring
 
-```sh
-# Add the OpenTelemetry Helm repository
-helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-helm repo update
+#### 1.1: Download the Setup Script
 
-# Install the operator with optimized settings
-helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
---set "manager.collectorImage.repository=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s" \
---set admissionWebhooks.certManager.enabled=false \
---set admissionWebhooks.autoGenerateCert.enabled=true
+First, copy the shell script from the GitHub repository to your local machine:
+
+```bash
+# Download shell script directly from below link
+curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh
+chmod +x setup-otel.sh
 ```
 
-> **✅ Verification**: Check if the operator is running:
-> ```sh
-> kubectl get pods -n <your-namespace> | grep opentelemetry-operator
-> ```
+#### 1.2: Run the Installation
 
-<details>
-<summary>🗑️ Uninstall Instructions</summary>
+Execute the script to install everything:
 
-To remove the operator:
 
-```sh
-helm uninstall opentelemetry-operator
-```
-</details>
-
----
-
-## 📊 Step 2: Deploy the OpenTelemetry Collector
-
-The OpenTelemetry Collector acts as a central hub for receiving, processing, and exporting telemetry data.
-
-### Configuration
-
+```bash
+./setup-otel.sh token="your-token-here" monitoring=true cluster="your-cluster-name" username="your-username" password="your-password"
+=======
 #### Option1: You want to integrate k8s logs & traces
 
 1. [Use this helm chart mentioned here](https://app.last9.io/integrations?category=all&search_term=logs&integration=Last9+Otel+Collector+Setup+for+Kubernetes)
@@ -73,106 +65,84 @@ You can skip this and move to the next step.
 kubectl apply -f OpenTelemetryCollector.yaml -n <your-namespace>
 ```
 
-> **✅ Verification**: Check if the collector is running:
-> ```sh
-> kubectl get pods -n <your-namespace> | grep otel-collector
-> ```
+**What this script installs:**
+- ✅ OpenTelemetry Operator (Helm chart: `opentelemetry-operator`)
+- ✅ OpenTelemetry Collector (Helm chart: `last9-opentelemetry-collector`)
+- ✅ Collector Service (Kubernetes service)
+- ✅ Common Instrumentation (Auto-instrumentation configuration)
+- ✅ Last9 Monitoring Stack (Helm chart: `last9-k8s-monitoring`)
+- ✅ Prometheus with Last9 remote write configuration
+- ✅ kube-state-metrics and node-exporter
+- ✅ Last9 remote write secret
+- ✅ Helm repositories setup (open-telemetry + prometheus-community)
+- ✅ Namespace creation (`last9`)
 
----
+### Installation Options
 
-## 🎯 Step 3: Create the Instrumentation Object
-
-The Instrumentation object defines how your Java application should be automatically instrumented.
-
-### Setup
-
-1. **Use** the provided `instrumentation.yaml` file (no changes needed)
-2. **Apply** it to your namespace where the Java app is running:
-
-```sh
-kubectl apply -f instrumentation.yaml -n <your-namespace>
+#### Option 1: Install Everything (Recommended)
+```bash
+./setup-otel.sh token="your-token-here" monitoring=true cluster="your-cluster-name" username="your-username" password="your-password"
 ```
 
-> **✅ Verification**: Check if the instrumentation is created:
-> ```sh
-> kubectl get instrumentation -n <your-namespace>
-> ```
-
----
-
-## 🏷️ Step 4: Annotate Your Application Deployment
-
-This is the **key step** that enables auto-instrumentation for your Java application.
-
-### Add Annotation
-
-Add this annotation to your deployment's pod template metadata:
-
-```yaml
-annotations:
-  instrumentation.opentelemetry.io/inject-java: "true"
+#### Option 2: Install Only OpenTelemetry Operator and Collector (No Monitoring)
+```bash
+./setup-otel.sh token="your-token-here"
 ```
 
-### Example Reference
+### Step 2: Verify Installation
 
-See the example in `deploy.yaml` file (lines 16-17):
+Check that all pods are up and running:
+
+```bash
+# Check all pods in last9 namespace should be up and running
+kubectl get pods -n last9
+```
+
+### Step 3: Annotate Your Application
+
+Add this annotation to your application deployment to enable auto-instrumentation:
 
 ```yaml
 metadata:
-  labels:
-    app: spring-boot-app
   annotations:
-    instrumentation.opentelemetry.io/inject-java: "true"  # ← This line enables auto-instrumentation
+    instrumentation.opentelemetry.io/inject-java: "last9/l9-instrumentation"
 ```
 
-### Apply Your Deployment
-
-```sh
-kubectl apply -f deploy.yaml -n <your-namespace>
+**Example deployment:**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-java-app
+spec:
+  template:
+    metadata:
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "last9/l9-instrumentation"  # ← Enable auto-instrumentation
+    spec:
+      containers:
+      - name: my-app
+        image: my-java-app:latest
 ```
 
-> **💡 Pro Tip**: The annotation tells the OpenTelemetry Operator to automatically inject the Java agent into your application pods.
 
----
+### Uninstall Options
 
-## ✅ Validation & Verification
+To remove all components (OpenTelemetry + Monitoring):
 
-### Check All Components
-
-Verify that all components are running correctly:
-
-```sh
-# Check operator status
-kubectl get pods -n de <your-namespace> | grep opentelemetry-operator
-
-# Check collector status
-kubectl get pods -n <your-namespace> | grep otel-collector
-
-# Check instrumentation object
-kubectl get instrumentation -n <your-namespace>
-
-# Check your application deployment
-kubectl get pods -n <your-namespace> | grep <your-app-name>
+```bash
+./setup-otel.sh uninstall-all
 ```
 
-### Expected Behavior
+To remove only monitoring components:
 
-✅ **Success Indicators:**
-- All pods are in `Running` state
-- No error messages in pod logs
-- Your Java application should be automatically instrumented
-- Telemetry data flows through the OTEL Collector to Last9
+```bash
+./setup-otel.sh uninstall function="uninstall_last9_monitoring"
+```
 
-### Troubleshooting
+## 📚 Additional Resources
 
-If you encounter issues:
+- [OpenTelemetry Operator Documentation](https://opentelemetry.io/docs/kubernetes/operator/)
+- [Last9 Documentation](https://docs.last9.io/)
+- [Individual Functions Usage Guide](INDIVIDUAL_FUNCTIONS_USAGE.md)
 
-1. **Check pod logs**: `kubectl logs <pod-name> -n <namespace>`
-2. **Verify annotations**: Ensure the annotation is correctly applied
-3. **Check operator logs**: `kubectl logs -l app.kubernetes.io/name=opentelemetry-operator -n default`
-
----
-
-## 🎉 Success!
-
-Once all steps are completed successfully, your Java application will be automatically instrumented and sending telemetry data to Last9 via the OpenTelemetry Collector.
