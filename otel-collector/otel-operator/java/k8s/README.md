@@ -28,7 +28,7 @@ First, copy the shell script from the GitHub repository to your local machine:
 
 ```bash
 # Download shell script directly from below link
-curl -O [https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh](https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh)
+curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh
 chmod +x setup-otel.sh
 ```
 
