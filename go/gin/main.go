@@ -3,16 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"gin_example/common"
 	"gin_example/users"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptrace"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -42,6 +45,53 @@ func initGormDB() (*gorm.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// Enhanced Tracing Middleware with Exception Handling
+func TracingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tracer := otel.Tracer("gin-server")
+		spanName := fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path)
+		
+		ctx, span := tracer.Start(c.Request.Context(), spanName)
+		defer span.End()
+		
+		// Store span in Gin context
+		c.Set("span", span)
+		c.Set("traceContext", ctx)
+		
+		// Update request context
+		c.Request = c.Request.WithContext(ctx)
+		
+		// Add request attributes to span
+		span.SetAttributes(
+			attribute.String("http.method", c.Request.Method),
+			attribute.String("http.url", c.Request.URL.String()),
+			attribute.String("http.user_agent", c.Request.UserAgent()),
+			attribute.String("http.remote_addr", c.ClientIP()),
+		)
+		
+		// Capture start time for duration calculation
+		startTime := time.Now()
+		
+		// Use defer to ensure we capture the final status and duration
+		defer func() {
+			duration := time.Since(startTime)
+			span.SetAttributes(
+				attribute.Int("http.status_code", c.Writer.Status()),
+				attribute.Int64("http.duration_ms", duration.Milliseconds()),
+			)
+			
+			// Set span status based on response
+			if c.Writer.Status() >= 400 {
+				span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", c.Writer.Status()))
+			} else {
+				span.SetStatus(codes.Ok, "")
+			}
+		}()
+		
+		c.Next()
+	}
 }
 
 // This example demonstrates BOTH:
@@ -84,7 +134,8 @@ func main() {
 	c := users.NewUsersController(redisClient)
 	h := users.NewUsersHandler(c, i.Tracer)
 
-	r.Use(otelgin.Middleware("gin-server"))
+	// Use enhanced tracing middleware with detailed exception handling
+	r.Use(TracingMiddleware())
 
 	// --- otelsql example: /users endpoints use raw SQL with otelsql instrumentation ---
 	// See users/controller.go for otelsql setup and usage
@@ -118,14 +169,50 @@ func main() {
 	r.POST("/posts", func(c *gin.Context) {
 		var post Post
 		if err := c.ShouldBindJSON(&post); err != nil {
+			// Record exception with detailed information
+			common.RecordExceptionInSpan(c, "Invalid JSON input", 
+				"error_type", "validation_error",
+				"field", "request_body",
+				"details", err.Error())
 			c.JSON(400, gin.H{"error": "Invalid input"})
 			return
 		}
 		if err := db.WithContext(c.Request.Context()).Create(&post).Error; err != nil {
+			// Record database exception with stack trace
+			common.RecordExceptionWithStack(c, err, 
+				"operation", "create_post",
+				"table", "posts",
+				"post_title", post.Title)
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(201, post)
+	})
+
+	// Example endpoints demonstrating exception handling
+	r.GET("/test-exception", func(c *gin.Context) {
+		// Simulate a panic
+		defer func() {
+			if r := recover(); r != nil {
+				common.RecordExceptionInSpan(c, "Panic occurred", 
+					"panic_value", fmt.Sprintf("%v", r),
+					"endpoint", "/test-exception")
+				c.JSON(500, gin.H{"error": "Internal server error"})
+			}
+		}()
+		
+		// This will cause a panic
+		panic("Test panic for exception handling")
+	})
+
+	r.GET("/test-error", func(c *gin.Context) {
+		// Simulate an error
+		err := fmt.Errorf("simulated database connection error")
+		common.RecordExceptionWithStack(c, err,
+			"component", "database",
+			"operation", "connection",
+			"endpoint", "/test-error")
+		c.JSON(500, gin.H{"error": "Database error"})
 	})
 
 	r.Run()
