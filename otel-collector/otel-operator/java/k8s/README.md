@@ -1,11 +1,10 @@
-# OpenTelemetry Operator, Collector and Cluster monitoring Setup for kubernetes cluster
+# OpenTelemetry Operator, Collector and Cluster Monitoring Setup for Kubernetes
 
 This guide shows you how to deploy OpenTelemetry Operator, Collector, and Cluster Monitoring in a single step using our automated setup script.
 
 ## 📋 Prerequisites
 
 Before running the script, ensure you have:
-
 
 - ✅ **Kubernetes Cluster**: A running Kubernetes cluster
 - ✅ **kubectl**: Configured and connected to your cluster
@@ -16,54 +15,40 @@ Before running the script, ensure you have:
 - ✅ **Last9 Password**: https://app.last9.io/v2/organizations/last9/integrations?cluster=bf853555-4dc3-4f30-82da-bfcdae575c7b&category=all&search_term=prome&integration=Prometheus  --> Copy the password value
 
 
-## 🚀 Quick Start - Single Command Deployment
+### Step 1 Quick Start - Installation Options
 
-## 🔧 Step 1: Deploy the OTEL Operator
+### Download the Setup Script
 
-### Step 1: Deploy Operator, Collector & Monitoring
-
-#### 1.1: Download the Setup Script
-
-First, copy the shell script from the GitHub repository to your local machine:
+First, download the shell script from the GitHub repository:
 
 ```bash
 # Download shell script directly from below link
-curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/setup-otel.sh
-chmod +x setup-otel.sh
+curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/last9-otel-setup.sh
+chmod +x last9-otel-setup.sh
 ```
-
-#### 1.2: Run the Installation
-
-Execute the script to install everything:
-
-
-```bash
-./setup-otel.sh token="your-token-here" monitoring=true cluster="your-cluster-name" username="your-username" password="your-password"
-=======
-
-**What this script installs:**
-- ✅ Namespace creation (`last9`)
-- ✅ Helm repositories setup (open-telemetry + prometheus-community)
-- ✅ Last9 remote write secret
-- ✅ kube-state-metrics and node-exporter
-- ✅ Last9 Monitoring Stack (Helm chart: `last9-k8s-monitoring`)
-- ✅ OpenTelemetry Operator (Helm chart: `opentelemetry-operator`)
-- ✅ OpenTelemetry Collector (Helm chart: `last9-opentelemetry-collector`)
-- ✅ Collector Service (Kubernetes service)
-- ✅ Common Instrumentation (Auto-instrumentation configuration)
-
 
 ### Installation Options
 
 #### Option 1: Install Everything (Recommended)
 ```bash
-./setup-otel.sh token="your-token-here" monitoring=true cluster="your-cluster-name" username="your-username" password="your-password"
+./last9-otel-setup.sh token="your-token-here" username="your-username" password="your-password"
 ```
 
-#### Option 2: Install Only OpenTelemetry Operator and Collector (No Monitoring)
+#### Option 2: For Traces alone --> Install OpenTelemetry Operator and collector
 ```bash
-./setup-otel.sh token="your-token-here"
+./last9-otel-setup.sh operator-only token="your-token-here"
 ```
+
+#### Option 3: For Logs use case --> Install Only Collector for Logs (No Operator)
+```bash
+./last9-otel-setup.sh logs-only token="your-token-here"
+```
+
+#### Option 4: Install Only Cluster Monitoring (Using Metrics)
+```bash
+./last9-otel-setup.sh monitoring-only username="your-username" password="your-password"
+```
+
 
 ### Step 2: Verify Installation
 
@@ -101,19 +86,12 @@ spec:
         image: my-java-app:latest
 ```
 
-
 ### Uninstall Options
 
 To remove all components (OpenTelemetry + Monitoring):
 
 ```bash
-./setup-otel.sh uninstall-all
-```
-
-To remove only monitoring components:
-
-```bash
-./setup-otel.sh uninstall function="uninstall_last9_monitoring"
+./last9-otel-setup.sh uninstall-all
 ```
 
 ## 📚 Additional Resources

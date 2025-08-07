@@ -2,11 +2,23 @@
 
 # OpenTelemetry Setup Automation Script
 # Usage: 
+#    Show all options
+#    ./setup-otel.sh
+
 #    Install everything
-#    ./setup-otel.sh token="token" monitoring=true cluster="cluster" username="user" password="pass"
+#    ./setup-otel.sh token="token" cluster="cluster" username="user" password="pass"
 
 #    Install only OpenTelemetry (no monitoring)
 #    ./setup-otel.sh token="token"
+
+#    Install OpenTelemetry Operator and Collector
+#    ./setup-otel.sh operator-only token="token"
+
+#    Install only Collector for logs (no operator)
+#    ./setup-otel.sh logs-only token="token"
+
+#    Install only Cluster Monitoring (Prometheus stack)
+#    ./setup-otel.sh monitoring-only cluster="cluster" username="user" password="pass"
 
 #    Remove only monitoring
 #    ./setup-otel.sh uninstall function="uninstall_last9_monitoring"
@@ -32,10 +44,13 @@ REPO_URL="$DEFAULT_REPO"
 UNINSTALL_MODE=false
 FUNCTION_TO_EXECUTE=""
 VALUES_FILE=""
-SETUP_MONITORING=false
+SETUP_MONITORING=true
 CLUSTER_NAME=""
 LAST9_USERNAME=""
 LAST9_PASSWORD=""
+OPERATOR_ONLY=false
+LOGS_ONLY=false
+MONITORING_ONLY=false
 
 # Colors for output
 RED='\033[0;31m'
@@ -59,6 +74,18 @@ log_error() {
 parse_arguments() {
     for arg in "$@"; do
         case $arg in
+            monitoring-only)
+                MONITORING_ONLY=true
+                shift
+                ;;
+            logs-only)
+                LOGS_ONLY=true
+                shift
+                ;;
+            operator-only)
+                OPERATOR_ONLY=true
+                shift
+                ;;
             uninstall)
                 UNINSTALL_MODE=true
                 shift
@@ -85,8 +112,12 @@ parse_arguments() {
                 shift
                 ;;
             monitoring=*)
-                SETUP_MONITORING=true
-                CLUSTER_NAME="${arg#*=}"
+                if [ "${arg#*=}" = "false" ]; then
+                    SETUP_MONITORING=false
+                else
+                    SETUP_MONITORING=true
+                    CLUSTER_NAME="${arg#*=}"
+                fi
                 shift
                 ;;
             cluster=*)
@@ -114,12 +145,35 @@ parse_arguments() {
     done
 }
 
+# Show examples function (for no-args case)
+show_examples() {
+    echo "OpenTelemetry Setup Automation Script"
+    echo ""
+    echo "Quick Examples:"
+    echo "  $0  # Show all available options"
+    echo "  $0 operator-only token=\"your-token-here\"  # Install OpenTelemetry Operator and Collector"
+    echo "  $0 logs-only token=\"your-token-here\"  # Install only Collector for logs (no operator)"
+    echo "  $0 monitoring-only cluster=\"my-cluster\" username=\"user\" password=\"pass\"  # Install only monitoring"
+    echo "  $0 token=\"your-token-here\"  # Install OTEL + monitoring (default)"
+    echo "  $0 token=\"your-token-here\" cluster=\"prod-cluster\"  # Install with cluster name"
+    echo "  $0 token=\"your-token-here\" username=\"my-user\" password=\"my-pass\"  # Install with credentials"
+    echo "  $0 token=\"your-token-here\" monitoring=false  # Install OTEL without monitoring"
+    echo "  $0 uninstall-all  # Remove everything"
+    echo ""
+    echo "For detailed help, run: $0 --help"
+    echo ""
+}
+
 # Show help function
 show_help() {
     echo "OpenTelemetry Setup Automation Script"
     echo ""
     echo "Usage:"
+    echo "  Show options: $0"
     echo "  Install:   $0 token=\"your-token-here\" [repo=\"repository-url\"]"
+    echo "  Operator:  $0 operator-only token=\"your-token-here\""
+    echo "  Logs:      $0 logs-only token=\"your-token-here\""
+    echo "  Monitoring: $0 monitoring-only cluster=\"cluster\" username=\"user\" password=\"pass\""
     echo "  Uninstall: $0 uninstall"
     echo "  Individual: $0 function=\"function_name\" [token=\"your-token\"] [values=\"values-file\"]"
     echo "  Monitoring: $0 function=\"setup_last9_monitoring\" [cluster=\"cluster-name\"]"
@@ -127,7 +181,7 @@ show_help() {
     echo "Install Arguments:"
     echo "  token=<value>    Required. The auth token for authentication"
     echo "  repo=<value>     Optional. Git repository URL (default: OpenTelemetry examples)"
-    echo "  monitoring=true  Optional. Also install Last9 monitoring stack"
+    echo "  monitoring=false Optional. Disable Last9 monitoring stack (enabled by default)"
     echo "  cluster=<name>   Optional. Cluster name for monitoring (auto-detected if not provided)"
     echo "  username=<value> Required for monitoring. Last9 username (replaces {{ username}} placeholder)"
     echo "  password=<value> Required for monitoring. Last9 password (replaces {{ password }} placeholder)"
@@ -135,7 +189,7 @@ show_help() {
     echo "Uninstall Arguments:"
     echo "  uninstall        Remove all OpenTelemetry components and resources"
     echo "  uninstall-all    Remove all components (OpenTelemetry + Monitoring)"
-    echo "  uninstall function=\"uninstall_last9_monitoring\"  Remove only monitoring stack"
+    echo "  uninstall function=\"uninstall_last9_monitoring\"  # Remove only monitoring stack"
     echo ""
     echo "Individual Function Arguments:"
     echo "  function=<name>  Execute specific function: setup_helm_repos, install_operator,"
@@ -149,15 +203,20 @@ show_help() {
     echo "  --help, -h       Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\""
-    echo "  $0 token=\"Y2xpZW50QTpwYXNz\" repo=\"https://github.com/my-repo.git\""
-    echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true  # Install OTEL + monitoring"
-    echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true cluster=\"prod-cluster\""
-    echo "  $0 token=\"bXl1c2VyOm15cGFzcw==\" monitoring=true username=\"my-user\" password=\"my-pass\""
+    echo "  $0  # Show all available options"
+    echo "  $0 operator-only token=\"your-token-here\"  # Install OpenTelemetry Operator and Collector"
+    echo "  $0 logs-only token=\"your-token-here\"  # Install only Collector for logs (no operator)"
+    echo "  $0 monitoring-only cluster=\"my-cluster\" username=\"user\" password=\"pass\"  # Install only monitoring"
+    echo "  $0 token=\"your-token-here\""
+    echo "  $0 token=\"your-token-here\" repo=\"https://github.com/my-repo.git\""
+    echo "  $0 token=\"your-token-here\"  # Install OTEL + monitoring (default)"
+    echo "  $0 token=\"your-token-here\" cluster=\"prod-cluster\"  # Install with cluster name"
+    echo "  $0 token=\"your-token-here\" username=\"my-user\" password=\"my-pass\"  # Install with credentials"
+    echo "  $0 token=\"your-token-here\" monitoring=false  # Install OTEL without monitoring"
     echo "  $0 uninstall"
     echo "  $0 uninstall-all  # Remove everything"
     echo "  $0 uninstall function=\"uninstall_last9_monitoring\"  # Remove only monitoring"
-    echo "  $0 function=\"install_collector\" token=\"bXl1c2VyOm15cGFzcw==\" values=\"custom-values.yaml\""
+    echo "  $0 function=\"install_collector\" token=\"your-token-here\" values=\"custom-values.yaml\""
     echo "  $0 function=\"setup_helm_repos\""
     echo "  $0 function=\"setup_last9_monitoring\" cluster=\"my-production-cluster\""
     echo "  $0 function=\"setup_last9_monitoring\"  # Auto-detects cluster name"
@@ -169,8 +228,9 @@ show_help() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
-    # Skip token check for uninstall mode
-    if [ "$UNINSTALL_MODE" = false ] && [ -z "$AUTH_TOKEN" ]; then
+    # Skip token check for uninstall mode, logs-only mode, and monitoring-only mode
+    # Note: operator-only mode will check for token later in its specific section
+    if [ "$UNINSTALL_MODE" = false ] && [ "$LOGS_ONLY" = false ] && [ "$MONITORING_ONLY" = false ] && [ "$OPERATOR_ONLY" = false ] && [ -z "$AUTH_TOKEN" ]; then
         log_error "Auth token is required for installation."
         echo ""
         show_help
@@ -190,8 +250,18 @@ check_prerequisites() {
     log_info "Prerequisites check passed!"
     
     if [ "$UNINSTALL_MODE" = false ]; then
-        log_info "Using auth token: ${AUTH_TOKEN:0:10}..."  # Show only first 10 chars for security
-        log_info "Using repository: $REPO_URL"
+        if [ "$OPERATOR_ONLY" = true ]; then
+            log_info "Running in operator-only mode"
+        elif [ "$LOGS_ONLY" = true ]; then
+            log_info "Running in logs-only mode"
+            log_info "Using auth token: ${AUTH_TOKEN:0:10}..."  # Show only first 10 chars for security
+            log_info "Using repository: $REPO_URL"
+        elif [ "$MONITORING_ONLY" = true ]; then
+            log_info "Running in monitoring-only mode"
+        else
+            log_info "Using auth token: ${AUTH_TOKEN:0:10}..."  # Show only first 10 chars for security
+            log_info "Using repository: $REPO_URL"
+        fi
     else
         log_info "Running in uninstall mode"
     fi
@@ -321,6 +391,59 @@ install_operator() {
     sleep 30
 }
 
+# Function to update deployment mode in values file
+update_deployment_mode() {
+    log_info "Updating deployment mode from daemonset to deployment..."
+    
+    # Check if the values file exists
+    if [ ! -f "last9-otel-collector-values.yaml" ]; then
+        log_error "last9-otel-collector-values.yaml not found!"
+        exit 1
+    fi
+    
+    # Create backup of original file
+    cp last9-otel-collector-values.yaml last9-otel-collector-values.yaml.backup
+    log_info "Created backup: last9-otel-collector-values.yaml.backup"
+    
+    # Replace daemonset with deployment
+    sed -i.tmp 's/mode: "daemonset"/mode: "deployment"/' last9-otel-collector-values.yaml
+    
+    # Disable logsCollection preset for operator-only case (this disables filelog receiver)
+    log_info "Disabling logsCollection preset to remove filelog receiver..."
+    # Find the logsCollection section and change enabled: true to enabled: false
+    awk '/^  logsCollection:/ {in_section=1; print; next} 
+         in_section && /^    enabled: true/ {print "    enabled: false"; in_section=0; next}
+         in_section && /^  [^ ]/ {in_section=0}
+         {print}' last9-otel-collector-values.yaml > last9-otel-collector-values.yaml.tmp2
+    mv last9-otel-collector-values.yaml.tmp2 last9-otel-collector-values.yaml
+    
+    # Comment out filelog receiver in logs pipeline for operator-only case (backup approach)
+    log_info "Commenting out filelog receiver in logs pipeline..."
+    sed -i.tmp 's/          - filelog/          # - filelog/' last9-otel-collector-values.yaml
+    
+    # Remove the temporary file created by sed -i
+    rm -f last9-otel-collector-values.yaml.tmp
+    
+    # Verify the changes were made
+    if grep -q 'mode: "deployment"' last9-otel-collector-values.yaml; then
+        log_info "✓ Deployment mode updated successfully!"
+    else
+        log_warn "⚠ Could not verify deployment mode update. Please check the file manually."
+    fi
+    
+    if grep -A 1 'logsCollection:' last9-otel-collector-values.yaml | grep -q 'enabled: false'; then
+        log_info "✓ LogsCollection preset disabled successfully!"
+    else
+        log_warn "⚠ Could not verify logsCollection preset disable. Please check the file manually."
+    fi
+    
+    if grep -q '          # - filelog' last9-otel-collector-values.yaml; then
+        log_info "✓ Filelog receiver commented out successfully!"
+    else
+        log_warn "⚠ Could not verify filelog receiver comment. Please check the file manually."
+    fi
+}
+
 # Function to install OpenTelemetry Collector
 install_collector() {
     log_info "Installing OpenTelemetry Collector..."
@@ -344,7 +467,31 @@ install_collector() {
 create_collector_service() {
     log_info "Creating Collector service..."
     
-    kubectl apply -f collector-svc.yaml -n "$NAMESPACE"
+    # For operator-only mode, update the component selector to standalone-collector
+    if [ "$OPERATOR_ONLY" = true ]; then
+        log_info "Updating service selector for operator-only mode (component: standalone-collector)..."
+        
+        # Create a temporary copy of the service file
+        cp collector-svc.yaml collector-svc-temp.yaml
+        
+        # Update the component selector
+        sed -i.tmp 's/component: agent-collector/component: standalone-collector/' collector-svc-temp.yaml
+        
+        # Remove the temporary file created by sed -i
+        rm -f collector-svc-temp.yaml.tmp
+        
+        # Apply the modified service file
+        kubectl apply -f collector-svc-temp.yaml -n "$NAMESPACE"
+        
+        # Clean up temporary file
+        rm -f collector-svc-temp.yaml
+        
+        log_info "✓ Service created with component: standalone-collector"
+    else
+        # Use the original service file for other modes
+        kubectl apply -f collector-svc.yaml -n "$NAMESPACE"
+        log_info "✓ Service created with component: agent-collector"
+    fi
     
     log_info "Collector service created!"
 }
@@ -398,6 +545,32 @@ verify_installation() {
     kubectl get svc -n "$NAMESPACE"
 }
 
+# Function to create logs-only configuration
+create_logs_only_config() {
+    log_info "Creating logs-only configuration..."
+    
+    local base_values="last9-otel-collector-values.yaml"
+    local logs_values="last9-otel-collector-logs-only.yaml"
+    
+    # Create a copy of the base values file
+    cp "$base_values" "$logs_values"
+    
+    # Disable metrics collection
+    log_info "Disabling metrics collection for logs-only setup..."
+    sed -i.tmp 's/hostMetrics:/hostMetrics:\n    enabled: false/' "$logs_values"
+    sed -i.tmp 's/kubeletMetrics:/kubeletMetrics:\n    enabled: false/' "$logs_values"
+    sed -i.tmp 's/clusterMetrics:/clusterMetrics:\n    enabled: false/' "$logs_values"
+    
+    # Keep logs collection enabled (already enabled by default)
+    log_info "Keeping logs collection enabled..."
+    
+    # Remove temporary files
+    rm -f "$logs_values.tmp"
+    
+    VALUES_FILE="$logs_values"
+    log_info "Logs-only values file created: $VALUES_FILE"
+}
+
 # Function to setup Last9 monitoring stack
 setup_last9_monitoring() {
     log_info "Setting up Last9 monitoring stack..."
@@ -440,10 +613,15 @@ setup_last9_monitoring() {
     
     log_info "Using Last9 credentials: username=${username:0:8}... password=${password:0:8}..."
     
+    # Create the namespace first
+    log_info "Creating namespace: $NAMESPACE"
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    log_info "✓ Namespace $NAMESPACE created/verified"
+    
     # Create the secret for Last9 remote write
     log_info "Creating Last9 remote write secret..."
     kubectl create secret generic last9-remote-write-secret \
-        -n last9 \
+        -n "$NAMESPACE" \
         --from-literal=username="$username" \
         --from-literal=password="$password" \
         --dry-run=client -o yaml | kubectl apply -f -
@@ -787,6 +965,15 @@ cleanup() {
 
 # Main execution function
 main() {
+    # Check if no arguments provided
+    if [ $# -eq 0 ]; then
+        echo ""
+        log_info "No arguments provided. Showing available examples:"
+        echo ""
+        show_examples
+        exit 0
+    fi
+    
     # Parse command line arguments
     parse_arguments "$@"
     
@@ -883,6 +1070,103 @@ main() {
         cleanup
         
         log_info "✅ Function '$FUNCTION_TO_EXECUTE' completed successfully!"
+    elif [ "$MONITORING_ONLY" = true ]; then
+        # Install only Cluster Monitoring (Prometheus stack)
+        log_info "Starting Cluster Monitoring installation..."
+        
+        # Check if credentials are provided
+        if [ -z "$LAST9_USERNAME" ] || [ -z "$LAST9_PASSWORD" ]; then
+            log_error "Last9 credentials are required for monitoring setup."
+            log_error "Please provide username=<value> and password=<value> parameters."
+            exit 1
+        fi
+        
+        # Check if cluster name is provided
+        if [ -z "$CLUSTER_NAME" ]; then
+            log_info "Cluster name not provided, attempting to detect from kubectl..."
+            CLUSTER_NAME=$(kubectl config current-context 2>/dev/null || echo "unknown-cluster")
+            log_info "Detected cluster name: $CLUSTER_NAME"
+        fi
+        
+        setup_repository
+        setup_helm_repos
+        setup_last9_monitoring cluster="$CLUSTER_NAME"
+        
+        cleanup
+        
+        log_info "🎉 Cluster Monitoring installation completed successfully!"
+        log_info "Next steps:"
+        echo "  1. Wait for monitoring pods to be in Running state: kubectl get pods -n $NAMESPACE"
+        echo "  2. Check Prometheus logs: kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=prometheus"
+        echo "  3. Verify monitoring services: kubectl get svc -n $NAMESPACE"
+        echo ""
+        echo "📝 Note: Monitoring stack deployed with cluster name: $CLUSTER_NAME"
+        echo ""
+        echo "To add OpenTelemetry later, run: $0 token=\"your-token\""
+        echo "To uninstall later, run: $0 uninstall function=\"uninstall_last9_monitoring\""
+    elif [ "$LOGS_ONLY" = true ]; then
+        # Install only Collector for logs
+        log_info "Starting OpenTelemetry Collector for logs installation..."
+        
+        setup_repository
+        setup_helm_repos
+        create_logs_only_config
+        install_collector
+        create_collector_service
+        verify_installation
+        
+        cleanup
+        
+        log_info "🎉 OpenTelemetry Collector for logs installation completed successfully!"
+        log_info "Next steps:"
+        echo "  1. Wait for collector pod to be in Running state: kubectl get pods -n $NAMESPACE"
+        echo "  2. Check collector logs if needed: kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=opentelemetry-collector"
+        echo "  3. Verify collector service: kubectl get svc -n $NAMESPACE"
+        echo ""
+        echo "📝 Note: Logs-only configuration file created: last9-otel-collector-logs-only.yaml"
+        echo ""
+        echo "To add operator later, run: $0 operator-only"
+        echo "To add monitoring later, run: $0 token=\"your-token\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
+        echo "To uninstall later, run: $0 uninstall"
+    elif [ "$OPERATOR_ONLY" = true ]; then
+        # Install OpenTelemetry Operator and Collector
+        log_info "Starting OpenTelemetry Operator and Collector installation..."
+        
+        # Check if token is provided for collector installation
+        if [ -z "$AUTH_TOKEN" ]; then
+            log_error "Auth token is required for collector installation."
+            log_error "Please provide token=<value> parameter for operator-only installation."
+            exit 1
+        fi
+        
+        setup_repository
+        setup_helm_repos
+        update_deployment_mode
+        install_operator
+        install_collector
+        create_collector_service
+        create_instrumentation
+        verify_installation
+        
+        cleanup
+        
+        log_info "🎉 OpenTelemetry Operator and Collector installation completed successfully!"
+        log_info "Next steps:"
+        echo "  1. Wait for operator pod to be in Running state: kubectl get pods -n $NAMESPACE"
+        echo "  2. Wait for collector pod to be in Running state: kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=opentelemetry-collector"
+        echo "  3. Check operator logs if needed: kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=opentelemetry-operator"
+        echo "  4. Check collector logs if needed: kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=opentelemetry-collector"
+        echo "  5. Verify services: kubectl get svc -n $NAMESPACE"
+        echo "  6. Check instrumentation: kubectl get instrumentation -n $NAMESPACE"
+        echo ""
+        echo "📝 Note: Deployment mode changed from daemonset to deployment"
+        echo "📝 Note: LogsCollection preset disabled (removes filelog receiver)"
+        echo "📝 Note: Filelog receiver commented out in logs pipeline (backup approach)"
+        echo "📝 Note: Service selector updated to component: standalone-collector"
+        echo "📝 Note: Original values file backed up as last9-otel-collector-values.yaml.backup"
+        echo ""
+        echo "To add monitoring later, run: $0 token=\"your-token\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
+        echo "To uninstall later, run: $0 uninstall"
     else
         # Run installation process
         log_info "Starting OpenTelemetry setup automation..."
