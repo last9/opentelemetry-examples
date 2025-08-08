@@ -8,6 +8,7 @@ import (
     "strings"
     "time"
 
+    "github.com/gin-gonic/gin"
     "github.com/aws/aws-sdk-go-v2/aws"
     "github.com/aws/aws-sdk-go-v2/config"
     "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -179,22 +180,119 @@ func demo(ctx context.Context, bucket, key, queueURL string, tracer trace.Tracer
     return nil
 }
 
+// TracingMiddleware creates a span for each inbound HTTP request and attaches it to the Gin context.
+func TracingMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        tracer := otel.Tracer("aws-sqs-s3-demo")
+        spanName := fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path)
+
+        ctx, span := tracer.Start(
+            c.Request.Context(),
+            spanName,
+            trace.WithSpanKind(trace.SpanKindServer),
+        )
+        defer span.End()
+
+        // Update request context so downstream handlers/clients inherit the span
+        c.Request = c.Request.WithContext(ctx)
+
+        start := time.Now()
+        c.Next()
+
+        // Basic attributes
+        span.SetAttributes(
+            semconv.HTTPRequestMethodKey.String(c.Request.Method),
+            semconv.URLFull(c.Request.URL.String()),
+            semconv.UserAgentOriginal(c.Request.UserAgent()),
+        )
+        span.SetAttributes(semconv.HTTPResponseStatusCodeKey.Int(c.Writer.Status()))
+        _ = start // reserved for future duration metrics if needed
+    }
+}
+
+type demoRequest struct {
+    Bucket   string `json:"bucket"`
+    Key      string `json:"key"`
+    QueueURL string `json:"queue_url"`
+}
+
+func startServer(ctx context.Context, tp *sdktrace.TracerProvider) error {
+    r := gin.Default()
+    r.Use(TracingMiddleware())
+
+    // Health endpoint
+    r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
+
+    // POST /demo triggers S3 PutObject -> SQS Send -> SQS Receive -> process
+    r.POST("/demo", func(c *gin.Context) {
+        var req demoRequest
+        _ = c.ShouldBindJSON(&req)
+
+        bucket := req.Bucket
+        if bucket == "" {
+            bucket = os.Getenv("S3_BUCKET")
+        }
+        if bucket == "" {
+            c.JSON(400, gin.H{"error": "missing bucket (json bucket or env S3_BUCKET)"})
+            return
+        }
+
+        key := req.Key
+        if key == "" {
+            key = os.Getenv("S3_KEY")
+            if key == "" {
+                key = "otel.txt"
+            }
+        }
+
+        queueURL := req.QueueURL
+        if queueURL == "" {
+            queueURL = os.Getenv("SQS_QUEUE_URL")
+        }
+        if queueURL == "" {
+            c.JSON(400, gin.H{"error": "missing queue_url (json queue_url or env SQS_QUEUE_URL)"})
+            return
+        }
+
+        tracer := tp.Tracer("aws-sqs-s3-demo")
+        if err := demo(c.Request.Context(), bucket, key, queueURL, tracer); err != nil {
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
+        }
+        c.JSON(200, gin.H{"status": "ok", "bucket": bucket, "key": key, "queue_url": queueURL})
+    })
+
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
+    return r.Run(":" + port)
+}
+
 func main() {
     ctx := context.Background()
-
-    // Required env
-    bucket := mustGetenv("S3_BUCKET")
-    key := os.Getenv("S3_KEY")
-    if key == "" {
-        key = "otel.txt"
-    }
-    queueURL := mustGetenv("SQS_QUEUE_URL")
 
     tp := initTracerProvider(ctx, "aws-sqs-s3-demo")
     defer func() {
         // give exporter a moment to flush
         _ = tp.Shutdown(context.Background())
     }()
+
+    // If RUN_SERVER=true, start the Gin server. Otherwise, run one-shot CLI demo.
+    if os.Getenv("RUN_SERVER") == "true" {
+        if err := startServer(ctx, tp); err != nil {
+            log.Fatalf("server error: %v", err)
+        }
+        return
+    }
+
+    // One-shot CLI demo mode
+    bucket := mustGetenv("S3_BUCKET")
+    key := os.Getenv("S3_KEY")
+    if key == "" {
+        key = "otel.txt"
+    }
+    queueURL := mustGetenv("SQS_QUEUE_URL")
 
     tracer := tp.Tracer("aws-sqs-s3-demo")
     rootCtx, span := tracer.Start(ctx, "aws sdk v2 demo")
