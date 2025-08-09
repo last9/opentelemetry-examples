@@ -29,7 +29,7 @@ chmod +x last9-otel-setup.sh
 
 ### Installation Options
 
-#### Option 1: Install Everything (Recommended)
+#### Option 1: Install Everything (Recommended - This will cover integration of Logs, Traces and Cluster Monitoring)
 ```bash
 ./last9-otel-setup.sh token="your-token-here" username="your-username" password="your-password"
 ```
@@ -86,9 +86,7 @@ spec:
         image: my-java-app:latest
 ```
 
-### Uninstall Options
-
-To remove all components (OpenTelemetry + Monitoring):
+### In case, you want to Uninstall any or all of components, use below
 
 ```bash
 ./last9-otel-setup.sh uninstall-all
