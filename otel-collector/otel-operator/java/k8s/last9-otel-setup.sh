@@ -8,20 +8,14 @@
 #    Install everything
 #    ./setup-otel.sh token="token" cluster="cluster" username="user" password="pass"
 
-#    Install only OpenTelemetry (no monitoring)
-#    ./setup-otel.sh token="token"
-
-#    Install OpenTelemetry Operator and Collector
+#    Install OpenTelemetry Operator and Collector - Used only for traces
 #    ./setup-otel.sh operator-only token="token"
 
-#    Install only Collector for logs (no operator)
+#    Install only Collector for logs 
 #    ./setup-otel.sh logs-only token="token"
 
 #    Install only Cluster Monitoring (Prometheus stack)
 #    ./setup-otel.sh monitoring-only cluster="cluster" username="user" password="pass"
-
-#    Remove only monitoring
-#    ./setup-otel.sh uninstall function="uninstall_last9_monitoring"
 
 #    Remove All components
 #    ./setup-otel.sh uninstall-all
@@ -330,7 +324,9 @@ update_auth_token() {
     cp last9-otel-collector-values.yaml last9-otel-collector-values.yaml.backup
     log_info "Created backup: last9-otel-collector-values.yaml.backup"
     
-    # Replace placeholder with actual token
+    # Replace placeholder with actual token (expects complete authorization header)
+    log_info "Using auth token: ${AUTH_TOKEN:0:20}..."
+    
     # Handle multiple placeholder formats
     if grep -q '{{AUTH_TOKEN}}' last9-otel-collector-values.yaml; then
         log_info "Found {{AUTH_TOKEN}} placeholder"

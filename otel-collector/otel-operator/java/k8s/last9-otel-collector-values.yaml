@@ -132,7 +132,7 @@ config:
     otlp/last9:
       endpoint: "https://otlp-aps1.last9.io:443"
       headers:
-        "Authorization": "Basic {{AUTH_TOKEN}}"
+        "Authorization": "{{AUTH_TOKEN}}"
 
   extensions:
     # The health_check extension is mandatory for this chart.
