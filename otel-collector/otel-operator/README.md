@@ -23,7 +23,7 @@ First, download the shell script from the GitHub repository:
 
 ```bash
 # Download shell script directly from below link
-curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/java/k8s/last9-otel-setup.sh
+curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/last9-otel-setup.sh
 chmod +x last9-otel-setup.sh
 ```
 

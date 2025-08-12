@@ -235,8 +235,8 @@ setup_repository() {
 
     
     # Navigate to the correct directory
-    if [ -d "otel-collector/otel-operator/java/k8s" ]; then
-        cd otel-collector/otel-operator/java/k8s
+    if [ -d "otel-collector/otel-operator" ]; then
+        cd otel-collector/otel-operator
     else
         log_error "Expected directory structure not found. Please check the repository."
         exit 1
