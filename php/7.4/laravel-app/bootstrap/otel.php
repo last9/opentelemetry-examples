@@ -429,3 +429,116 @@ function traced_laravel_route($routeName, $parameters = [], $absolute = true) {
     }
 }
 }
+
+if (!function_exists('traced_redis_command')) {
+function traced_redis_command($redis, $command, $args = []) {
+    if (!isset($GLOBALS['otel_tracer'])) {
+        return call_user_func_array([$redis, $command], $args);
+    }
+    
+    $span = $GLOBALS['otel_tracer']->spanBuilder('redis.' . strtolower($command))
+        ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
+        ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, 'redis')
+        ->setAttribute('db.operation', strtoupper($command))
+        ->setAttribute('redis.command', strtoupper($command))
+        ->startSpan();
+    
+    // Add key information for better observability
+    if (!empty($args) && is_string($args[0])) {
+        $span->setAttribute('redis.key', $args[0]);
+    }
+    
+    try {
+        $result = call_user_func_array([$redis, $command], $args);
+        
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+        $span->end();
+        
+        return $result;
+        
+    } catch (Exception $e) {
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
+        $span->recordException($e);
+        $span->end();
+        throw $e;
+    }
+}
+}
+
+if (!function_exists('traced_redis_get')) {
+function traced_redis_get($key) {
+    if (!extension_loaded('redis')) {
+        throw new Exception('Please make sure the PHP Redis extension is installed and enabled.');
+    }
+    $redis = app('redis')->connection();
+    return traced_redis_command($redis, 'get', [$key]);
+}
+}
+
+if (!function_exists('traced_redis_set')) {
+function traced_redis_set($key, $value, $expiry = null) {
+    if (!extension_loaded('redis')) {
+        throw new Exception('Please make sure the PHP Redis extension is installed and enabled.');
+    }
+    $redis = app('redis')->connection();
+    if ($expiry !== null) {
+        return traced_redis_command($redis, 'setex', [$key, $expiry, $value]);
+    } else {
+        return traced_redis_command($redis, 'set', [$key, $value]);
+    }
+}
+}
+
+if (!function_exists('traced_redis_del')) {
+function traced_redis_del($key) {
+    if (!extension_loaded('redis')) {
+        throw new Exception('Please make sure the PHP Redis extension is installed and enabled.');
+    }
+    $redis = app('redis')->connection();
+    return traced_redis_command($redis, 'del', [$key]);
+}
+}
+
+if (!function_exists('traced_queue_push')) {
+function traced_queue_push($job, $data = [], $queue = null) {
+    if (!isset($GLOBALS['otel_tracer'])) {
+        return app('queue')->push($job, $data, $queue);
+    }
+    
+    $queueDriver = config('queue.default', 'sync');
+    $messagingSystem = $queueDriver === 'redis' ? 'redis' : $queueDriver;
+    
+    $span = $GLOBALS['otel_tracer']->spanBuilder('queue.push')
+        ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_PRODUCER)
+        ->setAttribute('messaging.system', $messagingSystem)
+        ->setAttribute('messaging.destination.name', $queue ?? 'default')
+        ->setAttribute('messaging.operation', 'publish')
+        ->setAttribute('queue.job.class', is_string($job) ? $job : get_class($job))
+        ->setAttribute('queue.driver', $queueDriver)
+        ->startSpan();
+    
+    try {
+        // Inject trace context into job payload for propagation
+        $traceContext = [];
+        \OpenTelemetry\API\Trace\Propagation\TraceContextPropagator::getInstance()->inject($traceContext);
+        
+        // Add trace context to job data
+        if (is_object($job) && method_exists($job, 'setTraceContext')) {
+            $job->setTraceContext($traceContext);
+        }
+        
+        $result = app('queue')->push($job, $data, $queue);
+        
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+        $span->end();
+        
+        return $result;
+        
+    } catch (Exception $e) {
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
+        $span->recordException($e);
+        $span->end();
+        throw $e;
+    }
+}
+}

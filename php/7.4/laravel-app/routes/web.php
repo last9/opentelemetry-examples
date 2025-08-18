@@ -652,3 +652,6 @@ Route::get('/api/mixed/{type}/{id}/{action}', function ($type, $id, $action) {
         'route_info' => 'This should fold to GET /api/mixed/{type}/{id}/{action} in traces (mixed types)'
     ]);
 });
+
+// Include Redis and Queue test routes
+require __DIR__ . '/redis_queue.php';
