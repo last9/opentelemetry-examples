@@ -655,3 +655,5 @@ Route::get('/api/mixed/{type}/{id}/{action}', function ($type, $id, $action) {
 
 // Include Redis and Queue test routes
 require __DIR__ . '/redis_queue.php';
+require __DIR__ . '/auto_redis.php';
+require __DIR__ . '/transparent_redis.php';

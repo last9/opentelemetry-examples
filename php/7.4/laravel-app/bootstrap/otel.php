@@ -542,3 +542,55 @@ function traced_queue_push($job, $data = [], $queue = null) {
     }
 }
 }
+
+if (!function_exists("auto_redis")) {
+function auto_redis($connection = null) {
+    $redis = app("redis")->connection($connection);
+    
+    if (!isset($GLOBALS["otel_tracer"])) {
+        return $redis;
+    }
+    
+    return new class($redis) {
+        private $redis;
+        private $tracer;
+
+        public function __construct($redis) {
+            $this->redis = $redis;
+            $this->tracer = $GLOBALS["otel_tracer"] ?? null;
+        }
+
+        public function __call($method, $args) {
+            if (!$this->tracer) {
+                return call_user_func_array([$this->redis, $method], $args);
+            }
+
+            $span = $this->tracer->spanBuilder("redis." . strtolower($method))
+                ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
+                ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::DB_SYSTEM, "redis")
+                ->setAttribute("db.operation", strtoupper($method))
+                ->setAttribute("redis.command", strtoupper($method))
+                ->startSpan();
+
+            if (!empty($args) && is_string($args[0])) {
+                $span->setAttribute("redis.key", $args[0]);
+            }
+
+            try {
+                $result = call_user_func_array([$this->redis, $method], $args);
+                
+                $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+                $span->end();
+                
+                return $result;
+                
+            } catch (Exception $e) {
+                $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
+                $span->recordException($e);
+                $span->end();
+                throw $e;
+            }
+        }
+    };
+}
+}
