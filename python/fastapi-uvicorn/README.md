@@ -122,10 +122,6 @@ daemon = False
 pidfile = "/tmp/gunicorn.pid"
 preload_app = False
 
-def post_fork(server, worker):
-    """Called just after a worker has been forked."""
-    # OpenTelemetry auto-instrumentation will handle this automatically
-    pass
 ```
 
 3. **Create circus.ini** configuration:
