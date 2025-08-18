@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI
 
 # Create a FastAPI application
