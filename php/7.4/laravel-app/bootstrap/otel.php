@@ -242,3 +242,190 @@ function traced_guzzle_request($client, $method, $url, $options = []) {
     }
 }
 }
+
+if (!function_exists('fold_url')) {
+function fold_url($url, $method = 'GET') {
+    // Always enabled by default - no environment variable needed
+    
+    // Use Laravel route-based folding only
+    $routeBasedFolding = fold_url_by_laravel_route($url, $method);
+    if ($routeBasedFolding !== null) {
+        return $routeBasedFolding;
+    }
+    
+    // Fallback to simple method + path if no route found
+    $parsedUrl = parse_url($url);
+    $path = $parsedUrl['path'] ?? '/';
+    return strtoupper($method) . " " . $path;
+}
+}
+
+if (!function_exists('fold_url_by_laravel_route')) {
+function fold_url_by_laravel_route($url, $method = 'GET') {
+    // Only work if Laravel is available and routes are loaded
+    if (!function_exists('app') || !app()->bound('router')) {
+        return null;
+    }
+    
+    try {
+        $router = app('router');
+        $parsedUrl = parse_url($url);
+        $path = $parsedUrl['path'] ?? '/';
+        
+        // Remove leading slash to match Laravel route patterns
+        $path = ltrim($path, '/');
+        
+        // Get all registered routes
+        $routes = $router->getRoutes();
+        if (empty($routes)) {
+            return null;
+        }
+        
+        // Find matching route by path and method
+        foreach ($routes as $route) {
+            $routePath = $route->uri();
+            $routeMethods = $route->methods();
+            
+            // Check if method matches
+            if (!in_array(strtoupper($method), $routeMethods)) {
+                continue;
+            }
+            
+            // Try to match the path to the route pattern
+            $pattern = $routePath;
+            
+            // Convert Laravel route parameters to regex pattern
+            $pattern = preg_replace('/\{([^}]+)\}/', '([^/]+)', $pattern);
+            $pattern = '#^' . $pattern . '$#';
+            
+            if (preg_match($pattern, $path)) {
+                // Found matching route, always use the route pattern with parameter placeholders
+                $foldedPath = "/" . $route->uri();
+                return strtoupper($method) . " " . $foldedPath;
+            }
+        }
+        
+        return null;
+        
+    } catch (Exception $e) {
+        // Silently fall back to pattern-based folding
+        return null;
+    }
+}
+}
+
+if (!function_exists('traced_http_request')) {
+function traced_http_request($method, $url, $options = [], $context = []) {
+    if (!isset($GLOBALS['otel_tracer'])) {
+        // Fallback to basic HTTP request if no tracer
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => $options['headers'] ?? [],
+            CURLOPT_POSTFIELDS => $options['data'] ?? null,
+            CURLOPT_TIMEOUT => $options['timeout'] ?? 30,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ['body' => $response, 'status' => $httpCode];
+    }
+    
+    // Fold URL for better trace grouping
+    $foldedUrl = fold_url($url, $method);
+    
+    $span = $GLOBALS['otel_tracer']->spanBuilder('http.client')
+        ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_CLIENT)
+        ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::HTTP_METHOD, $method)
+        ->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::HTTP_URL, $url)
+        ->setAttribute('http.folded_url', $foldedUrl)
+        ->setAttribute('http.route_pattern', $foldedUrl)
+        ->startSpan();
+    
+    // Add context attributes if provided
+    if (!empty($context['service'])) {
+        $span->setAttribute('http.service', $context['service']);
+    }
+    if (!empty($context['operation'])) {
+        $span->setAttribute('http.operation', $context['operation']);
+    }
+    
+    try {
+        // Execute the HTTP request
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => $options['headers'] ?? [],
+            CURLOPT_POSTFIELDS => $options['data'] ?? null,
+            CURLOPT_TIMEOUT => $options['timeout'] ?? 30,
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+        
+        if ($error) {
+            throw new Exception("cURL error: {$error}");
+        }
+        
+        // Set response attributes
+        $span->setAttribute(\OpenTelemetry\SemConv\TraceAttributes::HTTP_STATUS_CODE, $httpCode);
+        
+        if ($httpCode >= 400) {
+            $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, 'HTTP ' . $httpCode);
+        } else {
+            $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+        }
+        
+        $span->end();
+        return ['body' => $response, 'status' => $httpCode];
+        
+    } catch (Exception $e) {
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
+        $span->recordException($e);
+        $span->end();
+        throw $e;
+    }
+}
+}
+
+if (!function_exists('traced_laravel_route')) {
+function traced_laravel_route($routeName, $parameters = [], $absolute = true) {
+    if (!isset($GLOBALS['otel_tracer'])) {
+        // Fallback to basic route generation if no tracer
+        return route($routeName, $parameters, $absolute);
+    }
+    
+    $span = $GLOBALS['otel_tracer']->spanBuilder('route.generation')
+        ->setSpanKind(\OpenTelemetry\API\Trace\SpanKind::KIND_INTERNAL)
+        ->setAttribute('route.name', $routeName)
+        ->setAttribute('route.parameters', json_encode($parameters))
+        ->setAttribute('route.absolute', $absolute)
+        ->startSpan();
+    
+    try {
+        $url = route($routeName, $parameters, $absolute);
+        
+        // Fold the generated URL
+        $foldedUrl = fold_url($url);
+        
+        $span->setAttribute('route.generated_url', $url);
+        $span->setAttribute('route.folded_url', $foldedUrl);
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_OK);
+        $span->end();
+        
+        return $url;
+        
+    } catch (Exception $e) {
+        $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::STATUS_ERROR, $e->getMessage());
+        $span->recordException($e);
+        $span->end();
+        throw $e;
+    }
+}
+}

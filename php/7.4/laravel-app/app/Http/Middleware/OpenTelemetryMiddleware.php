@@ -117,13 +117,9 @@ class OpenTelemetryMiddleware
     // Generate span name with optimized performance
     private function generateSpanName($request)
     {
-        // Use route name if available, otherwise use method + path
-        $route = $request->route();
-        if ($route && ($name = $route->getName())) {
-            return $name;
-        }
-        
-        return $request->method() . ' ' . $request->path();
+        // Use folded URL for better trace grouping
+        $url = $request->url();
+        return fold_url($url, $request->method());
     }
 
     // Check if request should be traced based on configured patterns
