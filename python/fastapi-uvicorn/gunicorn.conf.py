@@ -1,16 +1,21 @@
 import os
+import platform
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 
+# Fix for macOS proxy-related crashes
+if platform.system() == "Darwin":
+    os.environ["NO_PROXY"] = "*"
+
 # Server socket
 bind = "0.0.0.0:8005"
 backlog = 2048
 
-# Worker processes
-workers = 2
+# Worker processes (set to 1 on macOS to avoid fork issues)
+workers = 1
 worker_class = "uvicorn.workers.UvicornWorker"
 worker_connections = 1000
 timeout = 60
@@ -35,8 +40,8 @@ user = None
 group = None
 tmp_upload_dir = None
 
-# Pre-load app for better performance
-preload_app = False
+# Pre-load app for better performance (required on macOS to avoid fork issues)
+preload_app = True
 
 def post_fork(server, worker):
     """Initialize OpenTelemetry tracing in each worker process after forking."""
@@ -45,7 +50,7 @@ def post_fork(server, worker):
     # Try to create resource with your specified detectors, fall back to manual resource if it fails
     try:
         # Set environment variables for resource detection
-        os.environ.setdefault("OTEL_EXPERIMENTAL_RESOURCE_DETECTORS", "process,aws_ec2,aws_ecs,container")
+        os.environ.setdefault("OTEL_EXPERIMENTAL_RESOURCE_DETECTORS", "process,aws_ec2,aws_ecs,containerid")
         
         # Let OpenTelemetry auto-detect resources
         resource = Resource.create()

@@ -28,6 +28,18 @@ opentelemetry-instrumentation-requests>=0.36b0
 opentelemetry-distro==0.48b0
 ```
 
+Additionally, install these optional packages for enhanced functionality:
+
+```bash
+# AWS SDK extension for better AWS resource detection
+pip install opentelemetry-sdk-extension-aws
+
+# Container ID resource detector for containerized environments
+pip install opentelemetry-resource-detector-containerid
+```
+
+For more details on the container ID resource detector, see: https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/resource/opentelemetry-resource-detector-containerid
+
 Copy these packages to your `requirements.txt` file and run the command again to install the packages.
 
 ```bash
@@ -223,6 +235,7 @@ chmod +x start.sh
 - ✅ **Load balancing** across multiple Gunicorn workers
 - ✅ **Production-grade** setup with proper resource management
 - ✅ **Easy scaling** by adjusting worker count in configuration
+- ✅ **macOS Compatibility** - Automatically sets `NO_PROXY=*` to prevent proxy-related crashes on macOS
 
 ### Testing
 
