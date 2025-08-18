@@ -56,6 +56,59 @@ In order to ensure that the Laravel community is welcoming to all, please review
 
 If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
 
+## Laravel Route-Based URL Folding for OpenTelemetry
+
+### Overview
+
+The Laravel route-based URL folding system provides intelligent URL grouping for OpenTelemetry traces by using your actual Laravel route definitions instead of pattern matching. This creates meaningful trace groupings that align with your application's architecture.
+
+### How It Works
+
+The system attempts to match incoming URLs against Laravel route definitions:
+
+```php
+// Route definition: Route::get('/users/{user}', 'UserController@show');
+// URL: https://example.com/api/users/123
+// Result: GET /api/users/{user}
+```
+
+### Benefits
+
+✅ **Uses Actual Route Definitions**: Groups by real Laravel routes  
+✅ **Semantic Parameter Names**: Preserves route parameter names like `{user}`, `{post}`  
+✅ **Consistent Grouping**: Same URLs always group together  
+✅ **Zero Configuration**: Always enabled by default  
+✅ **Automatic Fallback**: Works even when Laravel routing unavailable  
+
+### Route Folding Examples
+
+```php
+// Laravel route definitions
+Route::get('/users/{user}', 'UserController@show');
+Route::get('/users/{user}/posts/{post}', 'PostController@show');
+Route::get('/orders/{uuid}', 'OrderController@show');
+Route::get('/analytics/{date}', 'AnalyticsController@show');
+
+// URL folding results
+GET /api/users/123                    → GET /api/users/{user}
+GET /api/users/123/posts/456          → GET /api/users/{user}/posts/{post}
+GET /api/orders/{uuid}                → GET /api/orders/{uuid}
+GET /api/analytics/2024-12-25         → GET /api/analytics/{date}
+```
+
+### Usage
+
+```php
+// URL folding happens automatically in middleware
+// No manual configuration needed
+
+// Custom HTTP requests with folding
+$response = traced_http_request('GET', 'https://api.example.com/users/123');
+
+// Laravel route generation with tracing
+$url = traced_laravel_route('users.show', ['user' => 123]);
+```
+
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

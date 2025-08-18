@@ -399,3 +399,256 @@ Route::get('/test-non-traced-performance', function () {
         'traced' => 'This request should NOT appear in traces (minimal middleware overhead)'
     ]);
 });
+
+// ===== NEW TEST ROUTES FOR URL FOLDING AND TRACING =====
+
+// Test route with parameter - should fold to /api/users/{id}
+Route::get('/api/users/{id}', function ($id) {
+    $user = \App\User::find($id);
+    
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 404);
+    }
+    
+    return response()->json([
+        'message' => 'User details retrieved',
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email
+        ],
+        'route_info' => 'This should fold to GET /api/users/{id} in traces',
+        'actual_id' => $id
+    ]);
+})->name('api.users.show');
+
+// Test route with multiple parameters - should fold to /api/users/{user}/posts/{post}
+Route::get('/api/users/{user}/posts/{post}', function ($userId, $postId) {
+    return response()->json([
+        'message' => 'User post details',
+        'user_id' => $userId,
+        'post_id' => $postId,
+        'route_info' => 'This should fold to GET /api/users/{user}/posts/{post} in traces'
+    ]);
+})->name('api.users.posts.show');
+
+// Test POST route - should fold to POST /api/users
+Route::post('/api/users', function () {
+    return response()->json([
+        'message' => 'User creation endpoint',
+        'method' => 'POST',
+        'route_info' => 'This should fold to POST /api/users in traces'
+    ]);
+});
+
+// Test PUT route - should fold to PUT /api/users/{id}
+Route::put('/api/users/{id}', function ($id) {
+    return response()->json([
+        'message' => 'User update endpoint',
+        'method' => 'PUT',
+        'user_id' => $id,
+        'route_info' => 'This should fold to PUT /api/users/{id} in traces'
+    ]);
+});
+
+// Test DELETE route - should fold to DELETE /api/users/{id}
+Route::delete('/api/users/{id}', function ($id) {
+    return response()->json([
+        'message' => 'User deletion endpoint',
+        'method' => 'DELETE',
+        'user_id' => $id,
+        'route_info' => 'This should fold to DELETE /api/users/{id} in traces'
+    ]);
+});
+
+// Test route with UUID parameter - should fold to /api/orders/{uuid}
+Route::get('/api/orders/{uuid}', function ($uuid) {
+    return response()->json([
+        'message' => 'Order details',
+        'uuid' => $uuid,
+        'route_info' => 'This should fold to GET /api/orders/{uuid} in traces (UUID pattern)'
+    ]);
+});
+
+// Test route with date parameter - should fold to /api/analytics/{date}
+Route::get('/api/analytics/{date}', function ($date) {
+    return response()->json([
+        'message' => 'Analytics for date',
+        'date' => $date,
+        'route_info' => 'This should fold to GET /api/analytics/{date} in traces (date pattern)'
+    ]);
+});
+
+// Test route with search query - should fold to /api/search/{query}
+Route::get('/api/search/{query}', function ($query) {
+    return response()->json([
+        'message' => 'Search results',
+        'query' => $query,
+        'route_info' => 'This should fold to GET /api/search/{query} in traces (search pattern)'
+    ]);
+});
+
+// Test route with pagination - should fold to /api/articles/{page}/{per_page}
+Route::get('/api/articles/{page}/{per_page}', function ($page, $perPage) {
+    return response()->json([
+        'message' => 'Paginated articles',
+        'page' => $page,
+        'per_page' => $perPage,
+        'route_info' => 'This should fold to GET /api/articles/{page}/{per_page} in traces (pagination pattern)'
+    ]);
+});
+
+// Test route generation with tracing
+Route::get('/api/test-route-generation', function () {
+    try {
+        // Test route generation with tracing
+        $userRoute = traced_laravel_route('api.users.show', ['id' => 123]);
+        $postRoute = traced_laravel_route('api.users.posts.show', ['user' => 123, 'post' => 456]);
+        
+        return response()->json([
+            'message' => 'Route generation test completed',
+            'generated_routes' => [
+                'user_route' => $userRoute,
+                'post_route' => $postRoute
+            ],
+            'route_names' => [
+                'user_route_name' => 'api.users.show',
+                'post_route_name' => 'api.users.posts.show'
+            ],
+            'traced' => 'Route generation spans should appear in traces'
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'message' => 'Route generation test failed',
+            'error' => $e->getMessage(),
+            'note' => 'Make sure route names are defined in your routes file'
+        ], 500);
+    }
+});
+
+// Test URL folding with different patterns
+Route::get('/api/test-url-folding', function () {
+    $testUrls = [
+        'GET' => [
+            'https://example.com/api/users/123' => 'Should fold to GET /api/users/{id}',
+            'https://example.com/api/users/456/posts/789' => 'Should fold to GET /api/users/{id}/posts/{id}',
+            'https://example.com/api/orders/550e8400-e29b-41d4-a716-446655440000' => 'Should fold to GET /api/orders/{uuid}',
+            'https://example.com/api/analytics/2024-01-15' => 'Should fold to GET /api/analytics/{date}',
+            'https://example.com/api/search/laravel+tutorial' => 'Should fold to GET /api/search/{query}',
+            'https://example.com/api/articles/2/10' => 'Should fold to GET /api/articles/{page}/{per_page}'
+        ],
+        'POST' => [
+            'https://example.com/api/users' => 'Should fold to POST /api/users'
+        ],
+        'PUT' => [
+            'https://example.com/api/users/123' => 'Should fold to PUT /api/users/{id}'
+        ],
+        'DELETE' => [
+            'https://example.com/api/users/123' => 'Should fold to DELETE /api/users/{id}'
+        ]
+    ];
+    
+    $foldedResults = [];
+    
+    foreach ($testUrls as $method => $urls) {
+        foreach ($urls as $url => $description) {
+            $folded = fold_url($url, $method);
+            $foldedResults[] = [
+                'original_url' => $url,
+                'method' => $method,
+                'folded_url' => $folded,
+                'description' => $description
+            ];
+        }
+    }
+    
+    return response()->json([
+        'message' => 'URL folding test completed',
+        'test_results' => $foldedResults,
+        'note' => 'Check traces to see how these URLs are folded for better grouping'
+    ]);
+});
+
+// Test route with query parameters - should fold to /api/filter/{criteria}
+Route::get('/api/filter/{criteria}', function ($criteria) {
+    $query = request()->query();
+    
+    return response()->json([
+        'message' => 'Filter results',
+        'criteria' => $criteria,
+        'query_params' => $query,
+        'route_info' => 'This should fold to GET /api/filter/{criteria} in traces (query params removed)'
+    ]);
+});
+
+// Test route with action suffix - should fold to /api/users/{id}/{action}
+Route::get('/api/users/{id}/edit', function ($id) {
+    return response()->json([
+        'message' => 'Edit user form',
+        'user_id' => $id,
+        'action' => 'edit',
+        'route_info' => 'This should fold to GET /api/users/{id}/{action} in traces (action pattern)'
+    ]);
+});
+
+Route::get('/api/users/{id}/show', function ($id) {
+    return response()->json([
+        'message' => 'Show user details',
+        'user_id' => $id,
+        'action' => 'show',
+        'route_info' => 'This should fold to GET /api/users/{id}/{action} in traces (action pattern)'
+    ]);
+});
+
+// Test route with nested resources - should fold to /api/categories/{category}/products/{product}/reviews/{review}
+Route::get('/api/categories/{category}/products/{product}/reviews/{review}', function ($categoryId, $productId, $reviewId) {
+    return response()->json([
+        'message' => 'Nested resource details',
+        'category_id' => $categoryId,
+        'product_id' => $productId,
+        'review_id' => $reviewId,
+        'route_info' => 'This should fold to GET /api/categories/{category}/products/{product}/reviews/{review} in traces'
+    ]);
+});
+
+// Test route with numeric ID and text - should fold to /api/posts/{id}/{slug}
+Route::get('/api/posts/{id}/{slug}', function ($id, $slug) {
+    return response()->json([
+        'message' => 'Post details by ID and slug',
+        'post_id' => $id,
+        'slug' => $slug,
+        'route_info' => 'This should fold to GET /api/posts/{id}/{slug} in traces (mixed parameter types)'
+    ]);
+});
+
+// Test route with year/month pattern - should fold to /api/archive/{year}/{month}
+Route::get('/api/archive/{year}/{month}', function ($year, $month) {
+    return response()->json([
+        'message' => 'Archive for year/month',
+        'year' => $year,
+        'month' => $month,
+        'route_info' => 'This should fold to GET /api/archive/{year}/{month} in traces (date pattern)'
+    ]);
+});
+
+// Test route with multiple numeric IDs - should fold to /api/comparison/{id1}/{id2}
+Route::get('/api/comparison/{id1}/{id2}', function ($id1, $id2) {
+    return response()->json([
+        'message' => 'Comparison between two items',
+        'id1' => $id1,
+        'id2' => $id2,
+        'route_info' => 'This should fold to GET /api/comparison/{id1}/{id2} in traces (multiple numeric IDs)'
+    ]);
+});
+
+// Test route with mixed parameter types - should fold to /api/mixed/{type}/{id}/{action}
+Route::get('/api/mixed/{type}/{id}/{action}', function ($type, $id, $action) {
+    return response()->json([
+        'message' => 'Mixed parameter types test',
+        'type' => $type,
+        'id' => $id,
+        'action' => $action,
+        'route_info' => 'This should fold to GET /api/mixed/{type}/{id}/{action} in traces (mixed types)'
+    ]);
+});
