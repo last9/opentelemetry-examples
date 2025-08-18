@@ -73,5 +73,78 @@ class AppServiceProvider extends ServiceProvider
                 // Silently fail
             }
         });
+
+        // Add queue event listeners for Redis queue tracking
+        \Illuminate\Support\Facades\Queue::before(function (\Illuminate\Queue\Events\JobProcessing $event) use ($tracer) {
+            if (!$tracer) {
+                return;
+            }
+            
+            try {
+                $job = $event->job;
+                $payload = $job->payload();
+                $queueDriver = config('queue.default', 'sync');
+                
+                // Extract trace context from job payload if available
+                $parentContext = \OpenTelemetry\Context\Context::getCurrent();
+                if (isset($payload['data']['traceContext'])) {
+                    try {
+                        $parentContext = \OpenTelemetry\API\Trace\Propagation\TraceContextPropagator::getInstance()
+                            ->extract($payload['data']['traceContext']);
+                    } catch (\Throwable $e) {
+                        // Fall back to current context
+                    }
+                }
+                
+                $spanBuilder = $tracer->spanBuilder('queue.job.receive')
+                    ->setSpanKind(SpanKind::KIND_CONSUMER)
+                    ->setAttribute('messaging.system', $queueDriver === 'redis' ? 'redis' : $queueDriver)
+                    ->setAttribute('messaging.operation', 'receive')
+                    ->setAttribute('queue.job.class', $payload['displayName'] ?? 'unknown')
+                    ->setAttribute('queue.name', $event->job->getQueue() ?? 'default')
+                    ->setAttribute('queue.job.id', $job->getJobId())
+                    ->setAttribute('queue.job.attempts', $job->attempts());
+                
+                // Link to parent span
+                if ($parentContext !== \OpenTelemetry\Context\Context::getCurrent()) {
+                    $spanBuilder->setParent($parentContext);
+                }
+                
+                $span = $spanBuilder->startSpan();
+                
+                // Store span in job for later completion
+                $job->span = $span;
+                
+            } catch (\Throwable $e) {
+                // Silently fail
+            }
+        });
+
+        \Illuminate\Support\Facades\Queue::after(function (\Illuminate\Queue\Events\JobProcessed $event) {
+            try {
+                $job = $event->job;
+                if (isset($job->span)) {
+                    $job->span->setStatus(StatusCode::STATUS_OK);
+                    $job->span->end();
+                    unset($job->span);
+                }
+            } catch (\Throwable $e) {
+                // Silently fail
+            }
+        });
+
+        \Illuminate\Support\Facades\Queue::failing(function (\Illuminate\Queue\Events\JobFailed $event) {
+            try {
+                $job = $event->job;
+                if (isset($job->span)) {
+                    $job->span->setStatus(StatusCode::STATUS_ERROR, $event->exception->getMessage());
+                    $job->span->recordException($event->exception);
+                    $job->span->end();
+                    unset($job->span);
+                }
+            } catch (\Throwable $e) {
+                // Silently fail
+            }
+        });
     }
 }

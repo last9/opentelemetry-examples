@@ -56,58 +56,165 @@ In order to ensure that the Laravel community is welcoming to all, please review
 
 If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
 
-## Laravel Route-Based URL Folding for OpenTelemetry
+## Laravel OpenTelemetry Instrumentation
 
 ### Overview
 
-The Laravel route-based URL folding system provides intelligent URL grouping for OpenTelemetry traces by using your actual Laravel route definitions instead of pattern matching. This creates meaningful trace groupings that align with your application's architecture.
+This Laravel application provides comprehensive OpenTelemetry instrumentation for Redis operations, queue processing, HTTP requests, and database queries with automatic trace context propagation.
 
-### How It Works
+### Features
 
-The system attempts to match incoming URLs against Laravel route definitions:
+✅ **Automatic Redis Instrumentation**: All Redis operations traced transparently  
+✅ **Laravel Queue Tracking**: Complete job lifecycle tracing via Redis  
+✅ **Connected Traces**: Producer-consumer span linking with context propagation  
+✅ **Route-Based URL Folding**: Intelligent URL grouping using Laravel routes  
+✅ **Database Query Tracing**: Automatic SQL query instrumentation  
+✅ **HTTP Client Tracing**: cURL and Guzzle request instrumentation  
+
+### Redis Auto-Instrumentation
+
+**Zero Code Changes Required** - All Redis operations are automatically traced:
 
 ```php
-// Route definition: Route::get('/users/{user}', 'UserController@show');
-// URL: https://example.com/api/users/123
-// Result: GET /api/users/{user}
+// Standard Laravel Redis calls - automatically instrumented
+Redis::set('user:123', 'data');
+Redis::get('user:123');
+Redis::hset('session:abc', 'user_id', '123');
+Redis::lpush('queue:tasks', 'task1');
+
+// Works in controllers, jobs, services - everywhere
+class UserController extends Controller {
+    public function store() {
+        Redis::set("user:{$user->id}", $user->toJson()); // Automatically traced
+    }
+}
 ```
 
-### Benefits
+### Queue Job Tracking
 
-✅ **Uses Actual Route Definitions**: Groups by real Laravel routes  
-✅ **Semantic Parameter Names**: Preserves route parameter names like `{user}`, `{post}`  
-✅ **Consistent Grouping**: Same URLs always group together  
-✅ **Zero Configuration**: Always enabled by default  
-✅ **Automatic Fallback**: Works even when Laravel routing unavailable  
+Queue jobs are automatically instrumented with connected traces:
+
+```php
+// Job dispatch - automatically creates producer span
+dispatch(new ProcessUserData($user));
+
+// Job execution - automatically creates consumer span linked to producer
+class ProcessUserData extends Job {
+    public function handle() {
+        Redis::set('processing', 'user_data'); // Automatically traced
+        // All Redis ops connected to job execution span
+    }
+}
+```
+
+### Available Test Endpoints
+
+- `/transparent/redis/test` - Test automatic Redis tracing
+- `/transparent/redis/job-simulation` - Test job processing with Redis
+- `/redis/test` - Test manual Redis functions
+- `/redis/queue/dispatch/{count}` - Test queue dispatch
+- `/api/health` - Basic health check
 
 ### Route Folding Examples
 
 ```php
-// Laravel route definitions
+// Laravel route definitions automatically fold URLs
 Route::get('/users/{user}', 'UserController@show');
 Route::get('/users/{user}/posts/{post}', 'PostController@show');
-Route::get('/orders/{uuid}', 'OrderController@show');
-Route::get('/analytics/{date}', 'AnalyticsController@show');
 
-// URL folding results
+// URL folding results in traces
 GET /api/users/123                    → GET /api/users/{user}
 GET /api/users/123/posts/456          → GET /api/users/{user}/posts/{post}
-GET /api/orders/{uuid}                → GET /api/orders/{uuid}
-GET /api/analytics/2024-12-25         → GET /api/analytics/{date}
 ```
 
-### Usage
+### Manual Instrumentation Functions
+
+Optional helper functions for advanced use cases:
 
 ```php
-// URL folding happens automatically in middleware
-// No manual configuration needed
+// Redis operations
+traced_redis_get('key');
+traced_redis_set('key', 'value', 300);
+traced_queue_push(new MyJob($data));
 
-// Custom HTTP requests with folding
-$response = traced_http_request('GET', 'https://api.example.com/users/123');
-
-// Laravel route generation with tracing
-$url = traced_laravel_route('users.show', ['user' => 123]);
+// HTTP requests
+traced_http_request('GET', 'https://api.example.com/users');
+traced_curl_exec($ch);
+traced_guzzle_request($client, 'POST', $url, $options);
 ```
+
+## Adding to Your Existing Laravel App
+
+To add all instrumentations to your existing Laravel application:
+
+### Files to Copy
+
+1. **OpenTelemetry bootstrap:**
+   ```bash
+   cp bootstrap/otel.php your-app/bootstrap/
+   ```
+
+2. **Instrumentation classes:**
+   ```bash
+   cp app/Http/Middleware/OpenTelemetryMiddleware.php your-app/app/Http/Middleware/
+   cp app/Http/Middleware/RedisInstrumentationWrapper.php your-app/app/Http/Middleware/
+   cp app/Providers/RedisInstrumentationServiceProvider.php your-app/app/Providers/
+   cp app/Jobs/BaseTracedJob.php your-app/app/Jobs/
+   ```
+
+3. **Configuration:**
+   ```bash
+   cp config/otel.php your-app/config/
+   ```
+
+### Code Changes Required
+
+1. **Update `public/index.php`** - Add at the top:
+   ```php
+   require_once __DIR__.'/../bootstrap/otel.php';
+   ```
+
+2. **Update `config/app.php`** - Add to providers array:
+   ```php
+   App\Providers\RedisInstrumentationServiceProvider::class,
+   ```
+
+3. **Update `app/Http/Kernel.php`** - Add to middleware:
+   ```php
+   \App\Http\Middleware\OpenTelemetryMiddleware::class,
+   ```
+
+4. **Update `composer.json`** - Add dependencies:
+   ```json
+   "require": {
+       "open-telemetry/exporter-otlp": "0.0.17",
+       "nyholm/psr7": "^1.8",
+       "php-http/guzzle6-adapter": "^2.0"
+   }
+   ```
+
+5. **Environment variables:**
+   ```bash
+   OTEL_SERVICE_NAME=your-app-name
+   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=your-endpoint
+   OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer your-token
+   ```
+
+6. **Run composer install:**
+   ```bash
+   composer install
+   ```
+
+### What You Get
+
+- **Automatic Redis tracing** for all `Redis::` calls
+- **Queue job lifecycle tracking** with connected traces
+- **Database query instrumentation** via Eloquent and raw queries
+- **HTTP request tracing** for external API calls
+- **Route-based URL folding** for better trace grouping
+- **Zero performance impact** when tracing is disabled
+
+No changes to your existing business logic required!
 
 ## License
 

@@ -28,6 +28,18 @@ opentelemetry-instrumentation-requests>=0.36b0
 opentelemetry-distro==0.48b0
 ```
 
+Additionally, install these optional packages for enhanced functionality:
+
+```bash
+# AWS SDK extension for better AWS resource detection
+pip install opentelemetry-sdk-extension-aws
+
+# Container ID resource detector for containerized environments
+pip install opentelemetry-resource-detector-containerid
+```
+
+For more details on the container ID resource detector, see: https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/resource/opentelemetry-resource-detector-containerid
+
 Copy these packages to your `requirements.txt` file and run the command again to install the packages.
 
 ```bash
@@ -54,13 +66,22 @@ export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
 
 5. Run the FastAPI application:
 
+**Local Development (Simple Uvicorn):**
 ```bash
-opentelemetry-instrument python app.py
+./start.sh
 ```
 
+**Production (Gunicorn + Auto Instrumentation):**
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./start.sh
+```
+
+The start script automatically detects the presence of `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable:
+- **If set**: Uses gunicorn with uvicorn workers and full OpenTelemetry auto instrumentation
+- **If not set**: Uses simple uvicorn for local development
+
 6. Once the server is running, you can access the application at
-   `http://127.0.0.1:8000` by default. Where you can access the endpoint. The
-   API endpoints are:
+   `http://127.0.0.1:8000` by default. The API endpoints are:
 
 - GET `/` - Hello World
 - GET `/items/:id` - Get items by ID
@@ -69,6 +90,23 @@ opentelemetry-instrument python app.py
    dashboard to see the traces in action.
 
 ![Traces](./traces.png)
+
+## How the Conditional Startup Works
+
+The `app.py` file contains a simple FastAPI application with a main function:
+
+```python
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+**Important**: This main function only executes during local development when you run `python app.py` directly. In production:
+
+- Gunicorn imports the `app` object from `app.py` 
+- When imported, `__name__ == "app"` (not `"__main__"`)
+- The main function block is **never executed**
+- Gunicorn manages server startup using uvicorn workers
+- OpenTelemetry initialization happens via the `post_fork` hook in `gunicorn.conf.py`
 
 ## Running with Circus and Gunicorn for Production
 
@@ -197,6 +235,7 @@ chmod +x start.sh
 - ✅ **Load balancing** across multiple Gunicorn workers
 - ✅ **Production-grade** setup with proper resource management
 - ✅ **Easy scaling** by adjusting worker count in configuration
+- ✅ **macOS Compatibility** - Automatically sets `NO_PROXY=*` to prevent proxy-related crashes on macOS
 
 ### Testing
 
