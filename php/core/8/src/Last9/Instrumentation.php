@@ -19,51 +19,50 @@ use OpenTelemetry\Contrib\Instrumentation\MySqli\MysqliInstrumentation;
 
 class Instrumentation
 {
-    private ?TracerProvider $tracerProvider = null;
     private ?SpanInterface $rootSpan = null;
     private ?ScopeInterface $scope = null;
     private static ?self $instance = null;
 
-    public static function init(string $appName, ?string $endpoint = null): self
+    public static function init(string $appName): self
     {
         if (self::$instance === null) {
-            self::$instance = new self($appName, $endpoint);
+            self::$instance = new self($appName);
         }
         return self::$instance;
     }
 
-    private function __construct(string $appName, ?string $endpoint)
+    private function __construct(string $appName)
     {
-        $this->initializeTracerProvider($endpoint);
+        // Debug environment variables
+        $endpoint = getenv('OTEL_EXPORTER_OTLP_ENDPOINT');
+        $headers = getenv('OTEL_EXPORTER_OTLP_HEADERS');
+        $serviceName = getenv('OTEL_SERVICE_NAME');
+        
+        error_log("=== OTEL DEBUG INFO ===");
+        error_log("Endpoint: " . ($endpoint ?: 'NOT SET'));
+        error_log("Headers: " . ($headers ?: 'NOT SET'));
+        error_log("Service Name: " . ($serviceName ?: 'NOT SET'));
+        error_log("PHP Version: " . PHP_VERSION);
+        error_log("Using AUTO-INSTRUMENTATION approach");
+        error_log("========================");
+        
+        // Register MySQL instrumentation
+        try {
+            MysqliInstrumentation::register(new CachedInstrumentation('io.opentelemetry.contrib.php.mysqli'));
+            error_log("MySQL instrumentation registered successfully");
+        } catch (\Exception $e) {
+            error_log("Error registering MySQL instrumentation: " . $e->getMessage());
+        }
+        
         $this->initializeRootSpan($appName);
         $this->registerShutdownHandler();
     }
 
-    private function initializeTracerProvider(?string $endpoint): void
-    {
-        $endpoint = $endpoint ?? getenv('OTEL_EXPORTER_OTLP_ENDPOINT');
-        
-        $transport = (new OtlpHttpTransportFactory())->create($endpoint, 'application/json');
-        $exporter = new SpanExporter($transport);
-
-        $spanProcessor = new BatchSpanProcessor(
-            $exporter,
-            ClockFactory::getDefault()
-        );
-
-        $this->tracerProvider = new TracerProvider($spanProcessor);
-
-        MysqliInstrumentation::register(new CachedInstrumentation('io.opentelemetry.contrib.php.mysqli'));
-
-        // Register the TracerProvider with Globals
-        Globals::registerInitializer(function (Configurator $configurator) {
-            return $configurator->withTracerProvider($this->tracerProvider);
-        });
-    }
 
     private function initializeRootSpan(string $appName): void
     {
-        $tracer = $this->tracerProvider->getTracer('io.last9.php');
+        // Use global TracerProvider (configured via environment variables)
+        $tracer = Globals::tracerProvider()->getTracer('io.last9.php');
         
         // Get HTTP method and endpoint from server globals
         $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
@@ -75,6 +74,8 @@ class Instrumentation
             ->startSpan();
             
         $this->scope = $this->rootSpan->activate();
+        
+        error_log("Created root span: " . $spanName . " with ID: " . $this->rootSpan->getContext()->getSpanId());
     }
 
     public function setError(\Throwable $error): void
@@ -92,15 +93,31 @@ class Instrumentation
 
     private function end(): void
     {
+        error_log("Ending instrumentation...");
         if ($this->scope) {
             $this->scope->detach();
+            error_log("Scope detached");
         }
         if ($this->rootSpan) {
             $this->rootSpan->end();
+            error_log("Root span ended: " . $this->rootSpan->getContext()->getSpanId());
         }
-        if ($this->tracerProvider) {
-            $this->tracerProvider->shutdown();
+        
+        // Force flush spans to ensure they get exported before process ends
+        try {
+            error_log("Flushing TracerProvider...");
+            $tracerProvider = Globals::tracerProvider();
+            if ($tracerProvider && method_exists($tracerProvider, 'forceFlush')) {
+                $tracerProvider->forceFlush();
+                error_log("TracerProvider flushed successfully");
+            } else {
+                error_log("TracerProvider doesn't support forceFlush");
+            }
+        } catch (\Exception $e) {
+            error_log("Error flushing TracerProvider: " . $e->getMessage());
         }
+        
+        error_log("Instrumentation ended");
     }
 
     private function registerShutdownHandler(): void
