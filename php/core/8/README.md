@@ -90,13 +90,27 @@ try {
 
 3. Set the following environment variables:
 
-- `OTEL_EXPORTER_OTLP_ENDPOINT`: Your Last9 OpenTelemetry endpoint
+**Required variables:**
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: Your Last9 OpenTelemetry endpoint (must include `/v1/traces` path)
 - `OTEL_EXPORTER_OTLP_HEADERS`: Authentication header for Last9
 - `OTEL_SERVICE_NAME`: Your service name
-- `OTEL_PHP_AUTOLOAD_ENABLED`: Enable PHP auto-instrumentation, (set to - true)
-- `OTEL_EXPORTER_OTLP_PROTOCOL`: Protocol to use for the exporter (set to - http/json)
-- `OTEL_PROPAGATORS`: Propagators to use (set to - baggage,tracecontext)
-- `OTEL_RESOURCE_ATTRIBUTES`: Resource attributes to use (set to - deployment.environment=production/staging)
+
+**Optional variables:**
+- `OTEL_PHP_AUTOLOAD_ENABLED`: Enable PHP auto-instrumentation (set to `true`)
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: Protocol to use for the exporter (set to `http/json`)
+- `OTEL_PROPAGATORS`: Propagators to use (set to `baggage,tracecontext`)
+- `OTEL_RESOURCE_ATTRIBUTES`: Resource attributes (set to `deployment.environment=production`)
+
+**Example configuration:**
+```bash
+export OTEL_SERVICE_NAME="my-php-app"
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io/v1/traces"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic YOUR_BASE64_TOKEN"
+export OTEL_PHP_AUTOLOAD_ENABLED="true"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/json"
+export OTEL_PROPAGATORS="baggage,tracecontext"
+export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production"
+```
 
 4. Run your application and see the traces in Last9 [Trace Explorer](https://app.last9.io/traces).
 
