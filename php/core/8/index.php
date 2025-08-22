@@ -2,7 +2,7 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
-// Initialize auto-instrumentation before using custom classes
+// Enable exporting of traces to Last9 (as per Last9 docs)
 use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
 use OpenTelemetry\Contrib\Otlp\SpanExporter;
 use OpenTelemetry\SDK\Trace\SpanProcessor\BatchSpanProcessor;
@@ -11,8 +11,7 @@ use OpenTelemetry\SDK\Common\Time\ClockFactory;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Instrumentation\Configurator;
 
-// Auto-instrumentation setup (as per OpenTelemetry PHP docs)
-// Parse headers from environment variable
+// Parse headers from environment variable for Last9 authentication
 $headers = [];
 $otlpHeaders = getenv('OTEL_EXPORTER_OTLP_HEADERS');
 if ($otlpHeaders) {
@@ -25,22 +24,22 @@ if ($otlpHeaders) {
     }
 }
 
-error_log("Creating transport with headers: " . json_encode($headers));
-error_log("OTEL Endpoint: " . getenv('OTEL_EXPORTER_OTLP_ENDPOINT'));
-
-$transport = (new OtlpHttpTransportFactory())->create(getenv('OTEL_EXPORTER_OTLP_ENDPOINT'), 'application/json', $headers);
+// Create Last9-specific transport
+$transport = (new OtlpHttpTransportFactory())->create(
+    getenv('OTEL_EXPORTER_OTLP_ENDPOINT'), 
+    'application/json', 
+    $headers
+);
 $exporter = new SpanExporter($transport);
-$tracerProvider = new TracerProvider(new BatchSpanProcessor($exporter, ClockFactory::getDefault()));
 
-error_log("TracerProvider created successfully");
+$tracerProvider = new TracerProvider(
+    new BatchSpanProcessor($exporter, ClockFactory::getDefault())
+);
 
-// Register TracerProvider with Globals using the correct method
+// Register TracerProvider with Globals for auto-instrumentation
 Globals::registerInitializer(function (Configurator $configurator) use ($tracerProvider) {
-    error_log("Registering TracerProvider with Globals");
     return $configurator->withTracerProvider($tracerProvider);
 });
-
-error_log("OpenTelemetry initialization complete");
 
 use \Last9\Instrumentation;
 
