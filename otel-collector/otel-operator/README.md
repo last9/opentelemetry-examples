@@ -34,7 +34,7 @@ chmod +x last9-otel-setup.sh
 ./last9-otel-setup.sh token="your-token-here" username="your-username" password="your-password"
 ```
 
-#### Option 2: For Traces alone --> Install OpenTelemetry Operator and collector
+#### Option 2: For Traces alone --> Instal OpenTelemetry Operator and collector
 ```bash
 ./last9-otel-setup.sh operator-only token="your-token-here"
 ```
