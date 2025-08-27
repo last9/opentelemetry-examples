@@ -360,4 +360,149 @@ class TestController extends Controller
             return 'span-id-not-available';
         }
     }
+
+    /**
+     * Trigger division by zero error
+     */
+    public function divisionByZero(): JsonResponse
+    {
+        return $this->traceOperation('error.division_by_zero', function () {
+            $result = 10 / 0;
+            return response()->json(['result' => $result]);
+        }, [
+            'error_type' => 'division_by_zero',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger undefined variable error
+     */
+    public function undefinedVariable(): JsonResponse
+    {
+        return $this->traceOperation('error.undefined_variable', function () {
+            return response()->json(['undefined_var' => $undefinedVariable]);
+        }, [
+            'error_type' => 'undefined_variable',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger array access error
+     */
+    public function arrayAccessError(): JsonResponse
+    {
+        return $this->traceOperation('error.array_access', function () {
+            $array = [1, 2, 3];
+            return response()->json(['value' => $array[10]]);
+        }, [
+            'error_type' => 'array_access',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger file not found error
+     */
+    public function fileNotFound(): JsonResponse
+    {
+        return $this->traceOperation('error.file_not_found', function () {
+            $content = file_get_contents('/non/existent/file.txt');
+            return response()->json(['content' => $content]);
+        }, [
+            'error_type' => 'file_not_found',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger database connection error
+     */
+    public function databaseConnectionError(): JsonResponse
+    {
+        return $this->traceOperation('error.database_connection', function () {
+            throw new \Exception('Database connection failed: Connection refused');
+        }, [
+            'error_type' => 'database_connection',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger custom exception
+     */
+    public function customException(): JsonResponse
+    {
+        return $this->traceOperation('error.custom_exception', function () {
+            throw new \InvalidArgumentException('This is a custom invalid argument exception');
+        }, [
+            'error_type' => 'custom_exception',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger JSON decode error
+     */
+    public function jsonDecodeError(): JsonResponse
+    {
+        return $this->traceOperation('error.json_decode', function () {
+            $invalidJson = '{"invalid": json}';
+            $data = json_decode($invalidJson, true);
+            return response()->json(['data' => $data]);
+        }, [
+            'error_type' => 'json_decode',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger HTTP client error
+     */
+    public function httpClientError(): JsonResponse
+    {
+        return $this->traceOperation('error.http_client', function () {
+            $client = new \GuzzleHttp\Client();
+            $response = $client->get('http://invalid-domain-that-does-not-exist-12345.com');
+            return response()->json(['response' => $response->getBody()]);
+        }, [
+            'error_type' => 'http_client',
+            'controller' => 'TestController'
+        ]);
+    }
+
+    /**
+     * Trigger multiple errors in sequence
+     */
+    public function multipleErrors(): JsonResponse
+    {
+        return $this->traceOperation('error.multiple_errors', function () {
+            $errors = [];
+            
+            try {
+                $result = 10 / 0;
+            } catch (\Exception $e) {
+                $errors[] = 'Division by zero: ' . $e->getMessage();
+            }
+            
+            try {
+                $undefinedVar;
+            } catch (\Exception $e) {
+                $errors[] = 'Undefined variable: ' . $e->getMessage();
+            }
+            
+            try {
+                $array = [1, 2, 3];
+                $array[10];
+            } catch (\Exception $e) {
+                $errors[] = 'Array access: ' . $e->getMessage();
+            }
+            
+            return response()->json(['errors' => $errors]);
+        }, [
+            'error_type' => 'multiple_errors',
+            'controller' => 'TestController'
+        ]);
+    }
 }

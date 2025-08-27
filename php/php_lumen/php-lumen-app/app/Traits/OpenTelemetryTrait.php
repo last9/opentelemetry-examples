@@ -47,7 +47,7 @@ trait OpenTelemetryTrait
         // For now, we'll skip this functionality to avoid complexity
     }
 
-    protected function traceDatabaseQuery(string $query, array $params = [], callable $operation)
+    protected function traceDatabaseQuery(string $query, callable $operation, array $params = [])
     {
         return $this->traceOperation('database.query', $operation, [
             'db.statement' => $query,
