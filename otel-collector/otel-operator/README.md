@@ -10,9 +10,9 @@ Before running the script, ensure you have:
 - ✅ **kubectl**: Configured and connected to your cluster
 - ✅ **helm**: Installed (v3.9+)
 - ✅ **git**: Installed
-- ✅ **Last9 Token**: https://app.last9.io/integrations?category=all&search_term=op&integration=OpenTelemetry --> Copy the Auth header token
-- ✅ **Last9 Username**: https://app.last9.io/v2/organizations/last9/integrations?cluster=bf853555-4dc3-4f30-82da-bfcdae575c7b&category=all&search_term=prome&integration=Prometheus --> Copy the username value
-- ✅ **Last9 Password**: https://app.last9.io/v2/organizations/last9/integrations?cluster=bf853555-4dc3-4f30-82da-bfcdae575c7b&category=all&search_term=prome&integration=Prometheus  --> Copy the password value
+- ✅ **Last9 Token**: Go to Integration --> Search OpenTelemetry --> Copy the Auth header token
+- ✅ **Last9 Username**: Go to Integration --> Search Prometheus --> Copy the username value
+- ✅ **Last9 Password**: Go to Integration --> Search Prometheus --> Copy the password value
 
 
 ### Step 1 Quick Start - Installation Options
@@ -34,7 +34,7 @@ chmod +x last9-otel-setup.sh
 ./last9-otel-setup.sh token="your-token-here" username="your-username" password="your-password"
 ```
 
-#### Option 2: For Traces alone --> Instal OpenTelemetry Operator and collector
+#### Option 2: For Traces alone --> Install OpenTelemetry Operator and collector
 ```bash
 ./last9-otel-setup.sh operator-only token="your-token-here"
 ```
@@ -86,7 +86,7 @@ spec:
         image: my-java-app:latest
 ```
 
-### In case, you want to Uninstall any or all of components, use below
+### In case you want to uninstall any or all components, use the following:
 
 ```bash
 ./last9-otel-setup.sh uninstall-all
