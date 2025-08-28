@@ -1,0 +1,3 @@
+*.jar
+target/
+src/main/resources/last9.properties

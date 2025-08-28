@@ -1,0 +1,19 @@
+services:
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "14317:4317"   # OTLP gRPC (changed from 4317 to avoid conflicts)
+      - "14318:4318"   # OTLP HTTP (changed from 4318 to avoid conflicts)
+      - "18888:8888"   # Prometheus metrics (changed from 8888 to avoid conflicts)
+      - "18889:8889"   # Prometheus exporter metrics (changed from 8889 to avoid conflicts)
+      - "19464:9464"   # Prometheus receiver (changed from 9464 to avoid conflicts)
+    networks:
+      - otel-network
+
+networks:
+  otel-network:
+    driver: bridge 

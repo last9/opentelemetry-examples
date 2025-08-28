@@ -1,0 +1,42 @@
+{
+  "name": "koa-otel-app",
+  "version": "1.0.0",
+  "description": "Koa application with OpenTelemetry instrumentation",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+      "dev": "ts-node-dev --require ./src/instrumentation.ts --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["koa", "opentelemetry", "typescript"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.59.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.201.1",
+    "@opentelemetry/instrumentation": "^0.201.1",
+    "@opentelemetry/instrumentation-koa": "^0.44.0",
+    "@opentelemetry/resources": "^2.0.1",
+    "@opentelemetry/sdk-trace-base": "^2.0.1",
+    "@opentelemetry/sdk-trace-node": "^2.0.1",
+    "@opentelemetry/semantic-conventions": "^1.34.0",
+    "dotenv": "^16.0.3",
+    "koa": "^2.15.4",
+    "koa-bodyparser": "^4.4.0",
+    "koa-logger": "^3.2.1",
+    "koa-router": "^12.0.0",
+    "koa-static": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/koa": "^2.13.6",
+    "@types/koa-bodyparser": "^4.3.10",
+    "@types/koa-logger": "^3.1.2",
+    "@types/koa-router": "^7.4.4",
+    "@types/koa-static": "^4.0.2",
+    "@types/node": "^18.16.3",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.0.4"
+  }
+}

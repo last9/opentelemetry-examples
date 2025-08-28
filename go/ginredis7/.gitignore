@@ -1,0 +1,7 @@
+# skip go binaries
+*.bin
+*.exe
+*.out
+*.test
+*.testbin
+*.testexe

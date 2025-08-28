@@ -1,0 +1,62 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4318
+      http:
+        endpoint: 127.0.0.1:4319
+  apache:
+    endpoint: "http://localhost:80/server-status?auto"
+    collection_interval: 30s
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+  resourcedetection/ec2:
+    detectors: ["ec2"]
+    ec2:
+      # A list of regex's to match tag keys to add as resource attributes can be specified
+      tags:
+        # This means you have a tag `Name` associated with the EC2 Instance.
+        - ^Name$
+        # This means you have a tag `app` associated with the EC2 Instance.
+        - ^app$
+  transform/ec2:
+    error_mode: ignore
+    log_statements:
+      - context: resource
+        statements:
+          # Set Service name as the `Name` tag associated with the EC2 Instance. The format is `ec2.tag.<tag_name>`.
+          - set(attributes["service.name"], attributes["ec2.tag.Name"])
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+  transform/hostmetrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["host.name"], resource.attributes["host.name"])
+          - set(attributes["cloud.account.id"], resource.attributes["cloud.account.id"])
+          - set(attributes["cloud.availability_zone"], resource.attributes["cloud.availability_zone"])
+          - set(attributes["cloud.platform"], resource.attributes["cloud.platform"])
+          - set(attributes["cloud.provider"], resource.attributes["cloud.provider"])
+          - set(attributes["cloud.region"], resource.attributes["cloud.region"])
+          - set(attributes["host.type"], resource.attributes["host.type"])
+          - set(attributes["host.image.id"], resource.attributes["host.image.id"])
+exporters:
+  otlp/last9:
+    endpoint: "<LAST9_OTEL_ENDPOINT>"
+    headers:
+      "Authorization": "Basic <LAST9_OAUTH_TOKEN>"
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [apache]
+      processors: [batch, resourcedetection/system, transform/hostmetrics]
+      exporters: [otlp/last9]

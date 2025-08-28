@@ -1,0 +1,84 @@
+# Disable default deployments
+alertmanager:
+  enabled: false
+
+grafana:
+  enabled: false
+
+prometheus:
+  enabled: true
+  agentMode: true
+  prometheusSpec:
+    # Enable only necessary scrape configs
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    
+    # Configure remote write
+    # Global external labels to add to all metrics
+    externalLabels:
+      cluster: my-cluster-name # Replace with your cluster name
+
+    remoteWrite:
+      - url: "https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write"
+        remoteTimeout: 60s
+        queueConfig:
+          capacity: 10000
+          maxSamplesPerSend: 3000
+          batchSendDeadline: 20s
+          minShards: 4
+          maxShards: 200
+          minBackoff: 100ms
+          maxBackoff: 10s
+        basicAuth:
+          username:
+            name: last9-remote-write-secret
+            key: username
+          password:
+            name: last9-remote-write-secret
+            key: password
+        writeRelabelConfigs:
+          - sourceLabels: [__name__]
+            regex: "up|kube_.*|container_.*|node_.*"  # Keep relevant metrics
+            action: keep
+
+# Keep kube-state-metrics
+kubeStateMetrics:
+  enabled: true
+
+# Keep node-exporter
+nodeExporter:
+  enabled: true
+
+# Enable cadvisor via kubelet service monitor
+kubelet:
+  enabled: true
+  serviceMonitor:
+    resource: true  # Enables scraping of cadvisor metrics
+    cAdvisor: true
+
+# Disable unnecessary components
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+  tls:
+    enabled: false
+
+# Disable other exporters
+kubeApiServer:
+  enabled: true
+
+kubeControllerManager:
+  enabled: false
+
+kubeDns:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+

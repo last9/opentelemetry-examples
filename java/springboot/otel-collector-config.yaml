@@ -1,0 +1,68 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'springboot-app'
+          scrape_interval: 15s
+          metrics_path: '/actuator/prometheus'
+          static_configs:
+            - targets: ['host.docker.internal:8080']
+              labels:
+                service: 'springboot-otel-demo'
+                environment: 'development'
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1500
+  resource:
+    attributes:
+      - key: environment
+        value: "development"
+        action: upsert
+
+exporters:
+  # Debug exporter for debugging (replaces deprecated logging exporter)
+  debug:
+    verbosity: detailed
+    sampling_initial: 1
+    sampling_thereafter: 1
+  
+  # OTLP exporter (for sending to other backends)
+  otlp:
+    endpoint: "http://localhost:4317"
+    tls:
+      insecure: true
+  
+  # Last9 OTLP exporter
+  otlp/last9:
+    endpoint: "https://<your_last9_endpoint>"
+    headers:
+      "Authorization": "Basic <your-base64-encoded-credentials>"
+    tls:
+      insecure: false
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlp/last9]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlp/last9]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlp/last9] 

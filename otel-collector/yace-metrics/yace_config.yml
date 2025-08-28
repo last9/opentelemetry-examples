@@ -1,0 +1,99 @@
+apiVersion: v1alpha1
+discovery:
+  exportedTagsOnMetrics:
+    AWS/EC2:
+      - instance-id
+      - Name
+    AWS/ApplicationELB:
+      - LoadBalancer
+      - TargetGroup
+    AWS/NetworkELB:
+      - LoadBalancer
+      - TargetGroup
+
+  jobs:
+    - type: AWS/EC2
+      regions:
+        - ap-south-1  # Adjust this to your specific region
+      period: 300
+      length: 300
+      metrics:
+        - name: CPUUtilization
+          statistics: [Average, Maximum, Minimum]
+        - name: DiskReadOps
+          statistics: [Sum]
+        - name: DiskWriteOps
+          statistics: [Sum]
+        - name: DiskReadBytes
+          statistics: [Sum]
+        - name: DiskWriteBytes
+          statistics: [Sum]
+        - name: NetworkIn
+          statistics: [Sum]
+        - name: NetworkOut
+          statistics: [Sum]
+        - name: StatusCheckFailed
+          statistics: [Sum]
+        # Add more EC2 metrics as needed
+
+    - type: AWS/ELB  # Classic Load Balancer
+      regions:
+        - ap-south-1  # Adjust this to your specific region
+      period: 300
+      length: 300
+      metrics:
+        - name: RequestCount
+          statistics: [Sum]
+        - name: HealthyHostCount
+          statistics: [Average]
+        - name: UnHealthyHostCount
+          statistics: [Average]
+        - name: Latency
+          statistics: [Average]
+        - name: HTTPCode_Backend_2XX
+          statistics: [Sum]
+        - name: HTTPCode_Backend_4XX
+          statistics: [Sum]
+        - name: HTTPCode_Backend_5XX
+          statistics: [Sum]
+        # Add more ELB metrics as needed
+
+    - type: AWS/ApplicationELB  # Application Load Balancer
+      regions:
+        - ap-south-1  # Adjust this to your specific region
+      period: 300
+      length: 300
+      metrics:
+        - name: RequestCount
+          statistics: [Sum]
+        - name: TargetResponseTime
+          statistics: [Average]
+        - name: HealthyHostCount
+          statistics: [Average]
+        - name: UnHealthyHostCount
+          statistics: [Average]
+        - name: HTTPCode_Target_2XX_Count
+          statistics: [Sum]
+        - name: HTTPCode_Target_4XX_Count
+          statistics: [Sum]
+        - name: HTTPCode_Target_5XX_Count
+          statistics: [Sum]
+        # Add more ALB metrics as needed
+
+    - type: AWS/NetworkELB  # Network Load Balancer
+      regions:
+        - ap-south-1  # Adjust this to your specific region
+      period: 300
+      length: 300
+      metrics:
+        - name: ActiveFlowCount
+          statistics: [Average]
+        - name: ConsumedLCUs
+          statistics: [Sum]
+        - name: HealthyHostCount
+          statistics: [Average]
+        - name: UnHealthyHostCount
+          statistics: [Average]
+        - name: ProcessedBytes
+          statistics: [Sum]
+        # Add more NLB metrics as needed

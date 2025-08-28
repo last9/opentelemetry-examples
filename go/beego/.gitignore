@@ -1,0 +1,28 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+beegoapp
+
+# Output files
+*.out
+
+# Go build artifacts
+bin/
+
+# Dependency directories (if not vendoring)
+vendor/
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log 

@@ -1,0 +1,15 @@
+receivers:
+  tcplog/logstash:
+    listen_address: "0.0.0.0:2255"
+    resource:
+      service.name: "<your-service-name>"
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [tcplog/logstash]
+      processors: []
+      exporters: [debug] 

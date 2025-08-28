@@ -1,0 +1,21 @@
+{
+  "name": "itty-cf-workers",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240806.0",
+    "itty-router": "^5.0.17",
+    "typescript": "^5.5.2",
+    "wrangler": "^3.60.3"
+  },
+  "dependencies": {
+    "@microlabs/otel-cf-workers": "^1.0.0-rc.43",
+    "@opentelemetry/api": "^1.9.0"
+  }
+}

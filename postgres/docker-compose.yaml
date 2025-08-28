@@ -1,0 +1,20 @@
+services:
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter
+    environment:
+      - DATA_SOURCE_URI=<DB_HOST>/<DB_NAME>
+      - DATA_SOURCE_USER=<DB_USER>
+      - DATA_SOURCE_PASS=<DB_PASSWORD>
+    volumes:
+      - ./queries.yaml:/queries.yaml
+    command: --extend.query-path="/queries.yaml"
+    restart: unless-stopped
+    ports:
+      - "9187:9187"
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.118.0
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/collector/config.yaml
+    command: --config=/etc/otel/collector/config.yaml
+    depends_on:
+      - postgres-exporter
