@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  localstack:
+    container_name: localstack_aws
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External services port range
+    environment:
+      # LocalStack configuration
+      - DEBUG=${DEBUG:-0}
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LOCALSTACK_HOST=localhost:4566
+      
+      # Enable AWS services
+      - SERVICES=secretsmanager,mwaa,iam,sts
+      
+      # Persistence
+      - PERSISTENCE=${PERSISTENCE:-0}
+      
+      # Pro features (optional, requires LocalStack Pro)
+      # - LOCALSTACK_API_KEY=${LOCALSTACK_API_KEY}
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - localstack-net
+
+networks:
+  localstack-net:
+    driver: bridge
