@@ -5,9 +5,13 @@ namespace App\Traits;
 use OpenTelemetry\API\Trace\TracerInterface;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
+use OpenTelemetry\API\Trace\SpanInterface;
+use Illuminate\Http\Response;
 
 trait OpenTelemetryTrait
 {
+    protected ?SpanInterface $currentSpan = null;
+
     protected function traceOperation(string $operationName, callable $operation, array $attributes = [])
     {
         $tracer = app(TracerInterface::class);
@@ -18,36 +22,138 @@ trait OpenTelemetryTrait
             ->startSpan();
 
         $scope = $span->activate();
+        $this->currentSpan = $span;
 
         try {
             $result = $operation();
-            $span->setStatus(StatusCode::STATUS_OK);
+            
+            // Check if result is an HTTP response with error status
+            if ($result instanceof Response) {
+                $this->handleHttpResponse($span, $result);
+            } else {
+                $span->setStatus(StatusCode::STATUS_OK);
+            }
+            
             return $result;
         } catch (\Exception $e) {
-            $span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
-            $span->recordException($e);
+            $this->handleException($span, $e);
             throw $e;
         } finally {
             $span->end();
             $scope->detach();
+            $this->currentSpan = null;
         }
+    }
+
+    /**
+     * Handle HTTP response and set appropriate span status and attributes
+     */
+    protected function handleHttpResponse(SpanInterface $span, Response $response): void
+    {
+        $statusCode = $response->getStatusCode();
+        
+        // Set HTTP status code attribute
+        $span->setAttributes([
+            'http.status_code' => $statusCode,
+            'http.response.size' => strlen($response->getContent()),
+        ]);
+
+        // Determine if this is an error response
+        if ($statusCode >= 400) {
+            $span->setStatus(StatusCode::STATUS_ERROR, "HTTP {$statusCode}");
+            
+            // Add error details
+            $span->setAttributes([
+                'error' => true,
+                'error.type' => 'http_error',
+                'error.message' => $this->getHttpErrorMessage($statusCode),
+                'error.status_code' => $statusCode,
+            ]);
+
+            // Try to extract error message from response content
+            $content = $response->getContent();
+            if (!empty($content)) {
+                $decoded = json_decode($content, true);
+                if (isset($decoded['error'])) {
+                    $span->setAttributes([
+                        'error.details' => is_string($decoded['error']) ? $decoded['error'] : json_encode($decoded['error']),
+                    ]);
+                } elseif (isset($decoded['message'])) {
+                    $span->setAttributes([
+                        'error.details' => $decoded['message'],
+                    ]);
+                }
+            }
+        } else {
+            $span->setStatus(StatusCode::STATUS_OK);
+        }
+    }
+
+    /**
+     * Handle exceptions and set appropriate span status and attributes
+     */
+    protected function handleException(SpanInterface $span, \Exception $e): void
+    {
+        $span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+        $span->recordException($e);
+        
+        // Add comprehensive error attributes
+        $span->setAttributes([
+            'error' => true,
+            'error.type' => get_class($e),
+            'error.message' => $e->getMessage(),
+            'error.code' => $e->getCode(),
+            'error.file' => $e->getFile(),
+            'error.line' => $e->getLine(),
+        ]);
+
+        // Add stack trace as an event
+        $span->addEvent('exception.stack_trace', [
+            'stack_trace' => $e->getTraceAsString(),
+        ]);
+    }
+
+    /**
+     * Get human-readable HTTP error message
+     */
+    protected function getHttpErrorMessage(int $statusCode): string
+    {
+        $messages = [
+            400 => 'Bad Request',
+            401 => 'Unauthorized',
+            403 => 'Forbidden',
+            404 => 'Not Found',
+            405 => 'Method Not Allowed',
+            408 => 'Request Timeout',
+            409 => 'Conflict',
+            412 => 'Precondition Failed',
+            422 => 'Unprocessable Entity',
+            429 => 'Too Many Requests',
+            500 => 'Internal Server Error',
+            501 => 'Not Implemented',
+            502 => 'Bad Gateway',
+            503 => 'Service Unavailable',
+            504 => 'Gateway Timeout',
+        ];
+
+        return $messages[$statusCode] ?? "HTTP Error {$statusCode}";
     }
 
     protected function addSpanEvent(string $name, array $attributes = [])
     {
-        // Note: Span events need to be added to the current active span
-        // This is a simplified implementation - in a real scenario, you'd need to track the current span
-        // For now, we'll skip this functionality to avoid complexity
+        if ($this->currentSpan) {
+            $this->currentSpan->addEvent($name, $attributes);
+        }
     }
 
     protected function setSpanAttribute(string $key, $value)
     {
-        // Note: Span attributes need to be set on the current active span
-        // This is a simplified implementation - in a real scenario, you'd need to track the current span
-        // For now, we'll skip this functionality to avoid complexity
+        if ($this->currentSpan) {
+            $this->currentSpan->setAttribute($key, $value);
+        }
     }
 
-    protected function traceDatabaseQuery(string $query, callable $operation, array $params = [])
+    protected function traceDatabaseQuery(string $query, array $params, callable $operation)
     {
         return $this->traceOperation('database.query', $operation, [
             'db.statement' => $query,
@@ -85,8 +191,10 @@ trait OpenTelemetryTrait
     protected function getCurrentTraceId(): string
     {
         try {
-            $tracer = app(\OpenTelemetry\API\Trace\TracerInterface::class);
-            // For now, return a placeholder since we need proper span context management
+            if ($this->currentSpan) {
+                $spanContext = $this->currentSpan->getContext();
+                return $spanContext->getTraceId();
+            }
             return 'trace-id-not-available';
         } catch (\Exception $e) {
             return 'trace-id-not-available';
@@ -96,8 +204,10 @@ trait OpenTelemetryTrait
     protected function getCurrentSpanId(): string
     {
         try {
-            $tracer = app(\OpenTelemetry\API\Trace\TracerInterface::class);
-            // For now, return a placeholder since we need proper span context management
+            if ($this->currentSpan) {
+                $spanContext = $this->currentSpan->getContext();
+                return $spanContext->getSpanId();
+            }
             return 'span-id-not-available';
         } catch (\Exception $e) {
             return 'span-id-not-available';

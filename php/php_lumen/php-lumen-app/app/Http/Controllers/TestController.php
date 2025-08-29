@@ -71,26 +71,31 @@ class TestController extends Controller
     }
 
     /**
-     * Test error handling
+     * Test error handling with enhanced tracing
      */
     public function error(Request $request): JsonResponse
     {
-        $type = $request->get('type', 'general');
-        
-        switch ($type) {
-            case 'not_found':
-                return response()->json(['error' => 'Resource not found'], 404);
-            case 'unauthorized':
-                return response()->json(['error' => 'Unauthorized access'], 401);
-            case 'forbidden':
-                return response()->json(['error' => 'Access forbidden'], 403);
-            case 'server_error':
-                return response()->json(['error' => 'Internal server error'], 500);
-            case 'exception':
-                throw new \Exception('This is a test exception');
-            default:
-                return response()->json(['error' => 'General error'], 400);
-        }
+        return $this->traceOperation('api.error.test', function () use ($request) {
+            $type = $request->get('type', 'general');
+            
+            switch ($type) {
+                case 'not_found':
+                    return response()->json(['error' => 'Resource not found'], 404);
+                case 'unauthorized':
+                    return response()->json(['error' => 'Unauthorized access'], 401);
+                case 'forbidden':
+                    return response()->json(['error' => 'Access forbidden'], 403);
+                case 'server_error':
+                    return response()->json(['error' => 'Internal server error'], 500);
+                case 'exception':
+                    throw new \Exception('This is a test exception');
+                default:
+                    return response()->json(['error' => 'General error'], 400);
+            }
+        }, [
+            'error.test.type' => $request->get('type', 'general'),
+            'controller' => 'TestController'
+        ]);
     }
 
     /**

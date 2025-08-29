@@ -25,7 +25,10 @@ echo "OTEL_RESOURCE_ATTRIBUTES: " . ($_ENV['OTEL_RESOURCE_ATTRIBUTES'] ?? 'NOT S
 try {
     // Create OTLP transport for Last9
     echo "🚀 Creating OTLP Transport...\n";
-    $authHeader = $_ENV['OTEL_EXPORTER_OTLP_HEADERS'] ?? 'Authorization=Basic bGFzdDk6bGFzdDk=';
+    $authHeader = $_ENV['OTEL_EXPORTER_OTLP_HEADERS'] ?? null;
+    if (!$authHeader) {
+        throw new \Exception('OTEL_EXPORTER_OTLP_HEADERS environment variable is required for testing');
+    }
     // Extract the actual authorization value
     $authValue = str_replace('Authorization=', '', $authHeader);
     
