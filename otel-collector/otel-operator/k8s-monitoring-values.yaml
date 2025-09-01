@@ -19,7 +19,7 @@ prometheus:
       cluster: my-cluster-name # Replace with your cluster name
 
     remoteWrite:
-      - url: "https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write"
+      - url: "{{YOUR_MONITORING_ENDPOINT}}"
         remoteTimeout: 60s
         queueConfig:
           capacity: 10000
