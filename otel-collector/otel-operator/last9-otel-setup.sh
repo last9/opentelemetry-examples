@@ -30,7 +30,7 @@ COLLECTOR_VERSION="0.126.0"
 MONITORING_VERSION="75.15.1"
 
 WORK_DIR="otel-setup-$(date +%s)"
-DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#operator-updates"
+DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#main"
 
 # Initialize variables
 AUTH_TOKEN=""
