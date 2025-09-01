@@ -30,7 +30,7 @@ COLLECTOR_VERSION="0.126.0"
 MONITORING_VERSION="75.15.1"
 
 WORK_DIR="otel-setup-$(date +%s)"
-DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#main"
+DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#operator-updates"
 
 # Initialize variables
 AUTH_TOKEN=""
@@ -355,13 +355,13 @@ update_otel_endpoint() {
     # Handle multiple placeholder formats
     if grep -q '{{YOUR_OTEL_ENDPOINT}}' last9-otel-collector-values.yaml; then
         log_info "Found {{YOUR_OTEL_ENDPOINT}} placeholder"
-        sed -i.tmp "s/{{YOUR_OTEL_ENDPOINT}}/$OTEL_ENDPOINT/g" last9-otel-collector-values.yaml
+        sed -i.tmp "s|{{YOUR_OTEL_ENDPOINT}}|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
     elif grep -q '{{OTEL_ENDPOINT}}' last9-otel-collector-values.yaml; then
         log_info "Found {{OTEL_ENDPOINT}} placeholder"
-        sed -i.tmp "s/{{OTEL_ENDPOINT}}/$OTEL_ENDPOINT/g" last9-otel-collector-values.yaml
+        sed -i.tmp "s|{{OTEL_ENDPOINT}}|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
     elif grep -q '\${OTEL_ENDPOINT}' last9-otel-collector-values.yaml; then
         log_info "Found \${OTEL_ENDPOINT} placeholder"
-        sed -i.tmp "s/\${OTEL_ENDPOINT}/$OTEL_ENDPOINT/g" last9-otel-collector-values.yaml
+        sed -i.tmp "s|\${OTEL_ENDPOINT}|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
     elif grep -q 'https://<your_last9_endpoint>' last9-otel-collector-values.yaml; then
         log_info "Found old format https://<your_last9_endpoint> placeholder"
         sed -i.tmp "s|https://<your_last9_endpoint>|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
