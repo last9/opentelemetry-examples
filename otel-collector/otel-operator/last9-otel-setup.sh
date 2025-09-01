@@ -30,10 +30,12 @@ COLLECTOR_VERSION="0.126.0"
 MONITORING_VERSION="75.15.1"
 
 WORK_DIR="otel-setup-$(date +%s)"
-DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#otel-k8s-monitoring"
+DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#main"
 
 # Initialize variables
 AUTH_TOKEN=""
+OTEL_ENDPOINT=""
+MONITORING_ENDPOINT=""
 REPO_URL="$DEFAULT_REPO"
 UNINSTALL_MODE=false
 FUNCTION_TO_EXECUTE=""
@@ -70,40 +72,37 @@ parse_arguments() {
         case $arg in
             monitoring-only)
                 MONITORING_ONLY=true
-                shift
                 ;;
             logs-only)
                 LOGS_ONLY=true
-                shift
                 ;;
             operator-only)
                 OPERATOR_ONLY=true
-                shift
                 ;;
             uninstall)
                 UNINSTALL_MODE=true
-                shift
                 ;;
             uninstall-all)
                 UNINSTALL_MODE=true
                 FUNCTION_TO_EXECUTE="uninstall_all"
-                shift
                 ;;
             token=*)
                 AUTH_TOKEN="${arg#*=}"
-                shift
+                ;;
+            endpoint=*)
+                OTEL_ENDPOINT="${arg#*=}"
+                ;;
+            monitoring-endpoint=*)
+                MONITORING_ENDPOINT="${arg#*=}"
                 ;;
             repo=*)
                 REPO_URL="${arg#*=}"
-                shift
                 ;;
             function=*)
                 FUNCTION_TO_EXECUTE="${arg#*=}"
-                shift
                 ;;
             values=*)
                 VALUES_FILE="${arg#*=}"
-                shift
                 ;;
             monitoring=*)
                 if [ "${arg#*=}" = "false" ]; then
@@ -112,19 +111,15 @@ parse_arguments() {
                     SETUP_MONITORING=true
                     CLUSTER_NAME="${arg#*=}"
                 fi
-                shift
                 ;;
             cluster=*)
                 CLUSTER_NAME="${arg#*=}"
-                shift
                 ;;
             username=*)
                 LAST9_USERNAME="${arg#*=}"
-                shift
                 ;;
             password=*)
                 LAST9_PASSWORD="${arg#*=}"
-                shift
                 ;;
             --help|-h)
                 show_help
@@ -144,10 +139,10 @@ show_examples() {
     echo "OpenTelemetry Setup Automation Script"
     echo ""
     echo "Quick Examples:"
-    echo "  $0 token=\"your-token-here\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
-    echo "  $0 operator-only token=\"your-token-here\"  # For Traces - Install OpenTelemetry Operator and Collector"
-    echo "  $0 logs-only token=\"your-token-here\"  # For Logs - Install only Collector for logs (no operator)"
-    echo "  $0 monitoring-only username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
+    echo "  $0 token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
+    echo "  $0 operator-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Traces - Install OpenTelemetry Operator and Collector"
+    echo "  $0 logs-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Logs - Install only Collector for logs (no operator)"
+    echo "  $0 monitoring-only monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
 }
@@ -157,10 +152,10 @@ show_help() {
     echo "OpenTelemetry Setup Automation Script"
     echo ""
     echo "Usage:"
-    echo "  $0 token=\"your-token-here\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
-    echo "  $0 operator-only token=\"your-token-here\"  # For Traces - Install OpenTelemetry Operator and Collector"
-    echo "  $0 logs-only token=\"your-token-here\"  # For Logs - Install only Collector for logs (no operator)"
-    echo "  $0 monitoring-only username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
+    echo "  $0 token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
+    echo "  $0 operator-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Traces - Install OpenTelemetry Operator and Collector"
+    echo "  $0 logs-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Logs - Install only Collector for logs (no operator)"
+    echo "  $0 monitoring-only monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
 }
@@ -173,6 +168,33 @@ check_prerequisites() {
     # Note: operator-only mode will check for token later in its specific section
     if [ "$UNINSTALL_MODE" = false ] && [ "$LOGS_ONLY" = false ] && [ "$MONITORING_ONLY" = false ] && [ "$OPERATOR_ONLY" = false ] && [ -z "$AUTH_TOKEN" ]; then
         log_error "Auth token is required for installation."
+        echo ""
+        show_help
+        exit 1
+    fi
+    
+    # Check if endpoint is provided for non-monitoring modes
+    if [ "$UNINSTALL_MODE" = false ] && [ "$MONITORING_ONLY" = false ] && [ -z "$OTEL_ENDPOINT" ]; then
+        log_error "OTEL endpoint is required for installation."
+        log_error "Please provide endpoint=<your-otel-endpoint> parameter."
+        echo ""
+        show_help
+        exit 1
+    fi
+    
+    # Check if monitoring endpoint is provided for modes that include monitoring
+    if [ "$UNINSTALL_MODE" = false ] && [ "$MONITORING_ONLY" = true ] && [ -z "$MONITORING_ENDPOINT" ]; then
+        log_error "Monitoring endpoint is required for monitoring installation."
+        log_error "Please provide monitoring-endpoint=<your-monitoring-endpoint> parameter."
+        echo ""
+        show_help
+        exit 1
+    fi
+    
+    # Check if monitoring endpoint is provided for all sources mode (which includes monitoring)
+    if [ "$UNINSTALL_MODE" = false ] && [ "$MONITORING_ONLY" = false ] && [ "$OPERATOR_ONLY" = false ] && [ "$LOGS_ONLY" = false ] && [ "$SETUP_MONITORING" = true ] && [ -z "$MONITORING_ENDPOINT" ]; then
+        log_error "Monitoring endpoint is required for all sources installation (includes monitoring)."
+        log_error "Please provide monitoring-endpoint=<your-monitoring-endpoint> parameter."
         echo ""
         show_help
         exit 1
@@ -196,11 +218,17 @@ check_prerequisites() {
         elif [ "$LOGS_ONLY" = true ]; then
             log_info "Running in logs-only mode"
             log_info "Using auth token: ${AUTH_TOKEN:0:10}..."  # Show only first 10 chars for security
+            log_info "Using OTEL endpoint: ${OTEL_ENDPOINT:0:30}..."  # Show only first 30 chars for security
             log_info "Using repository: $REPO_URL"
         elif [ "$MONITORING_ONLY" = true ]; then
             log_info "Running in monitoring-only mode"
+            log_info "Using monitoring endpoint: ${MONITORING_ENDPOINT:0:30}..."  # Show only first 30 chars for security
         else
             log_info "Using auth token: ${AUTH_TOKEN:0:10}..."  # Show only first 10 chars for security
+            log_info "Using OTEL endpoint: ${OTEL_ENDPOINT:0:30}..."  # Show only first 30 chars for security
+            if [ "$SETUP_MONITORING" = true ] && [ -n "$MONITORING_ENDPOINT" ]; then
+                log_info "Using monitoring endpoint: ${MONITORING_ENDPOINT:0:30}..."  # Show only first 30 chars for security
+            fi
             log_info "Using repository: $REPO_URL"
         fi
     else
@@ -253,8 +281,9 @@ setup_repository() {
     
     log_info "Repository setup completed!"
     
-    # Update auth token in the values file
+    # Update auth token and endpoint in the values file
     update_auth_token
+    update_otel_endpoint
 }
 
 # Function to update auth token in values file
@@ -301,6 +330,112 @@ update_auth_token() {
         log_info "✓ Auth token placeholder replaced successfully!"
     else
         log_warn "⚠ Could not verify token replacement. Please check the file manually."
+    fi
+}
+
+# Function to update OTEL endpoint in values file
+update_otel_endpoint() {
+    log_info "Updating OTEL endpoint placeholder in last9-otel-collector-values.yaml..."
+    
+    # Check if the values file exists
+    if [ ! -f "last9-otel-collector-values.yaml" ]; then
+        log_error "last9-otel-collector-values.yaml not found!"
+        exit 1
+    fi
+    
+    # Create backup of original file (if not already created by update_auth_token)
+    if [ ! -f "last9-otel-collector-values.yaml.backup" ]; then
+        cp last9-otel-collector-values.yaml last9-otel-collector-values.yaml.backup
+        log_info "Created backup: last9-otel-collector-values.yaml.backup"
+    fi
+    
+    # Replace placeholder with actual endpoint
+    log_info "Using OTEL endpoint: ${OTEL_ENDPOINT:0:30}..."
+    
+    # Handle multiple placeholder formats
+    if grep -q '{{YOUR_OTEL_ENDPOINT}}' last9-otel-collector-values.yaml; then
+        log_info "Found {{YOUR_OTEL_ENDPOINT}} placeholder"
+        sed -i.tmp "s/{{YOUR_OTEL_ENDPOINT}}/$OTEL_ENDPOINT/g" last9-otel-collector-values.yaml
+    elif grep -q '{{OTEL_ENDPOINT}}' last9-otel-collector-values.yaml; then
+        log_info "Found {{OTEL_ENDPOINT}} placeholder"
+        sed -i.tmp "s/{{OTEL_ENDPOINT}}/$OTEL_ENDPOINT/g" last9-otel-collector-values.yaml
+    elif grep -q '\${OTEL_ENDPOINT}' last9-otel-collector-values.yaml; then
+        log_info "Found \${OTEL_ENDPOINT} placeholder"
+        sed -i.tmp "s/\${OTEL_ENDPOINT}/$OTEL_ENDPOINT/g" last9-otel-collector-values.yaml
+    elif grep -q 'https://<your_last9_endpoint>' last9-otel-collector-values.yaml; then
+        log_info "Found old format https://<your_last9_endpoint> placeholder"
+        sed -i.tmp "s|https://<your_last9_endpoint>|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
+    else
+        log_error "No supported OTEL endpoint placeholder found in the file."
+        log_info "Please use one of these placeholders in your YAML file:"
+        echo "  - {{YOUR_OTEL_ENDPOINT}}"
+        echo "  - {{OTEL_ENDPOINT}}"
+        echo "  - \${OTEL_ENDPOINT}"
+        echo "  - https://<your_last9_endpoint> (old format)"
+        exit 1
+    fi
+    
+    # Remove the temporary file created by sed -i
+    rm -f last9-otel-collector-values.yaml.tmp
+    
+    # Verify the change was made
+    if grep -q "$OTEL_ENDPOINT" last9-otel-collector-values.yaml && ! grep -q -E '(\{\{|\$\{).*OTEL_ENDPOINT.*(\}\}|\})' last9-otel-collector-values.yaml; then
+        log_info "✓ OTEL endpoint placeholder replaced successfully!"
+    else
+        log_warn "⚠ Could not verify endpoint replacement. Please check the file manually."
+    fi
+}
+
+# Function to update monitoring endpoint in values file
+update_monitoring_endpoint() {
+    log_info "Updating monitoring endpoint placeholder in k8s-monitoring-values.yaml..."
+    
+    # Check if the values file exists
+    if [ ! -f "k8s-monitoring-values.yaml" ]; then
+        log_error "k8s-monitoring-values.yaml not found!"
+        exit 1
+    fi
+    
+    # Create backup of original file (if not already created)
+    if [ ! -f "k8s-monitoring-values.yaml.backup" ]; then
+        cp k8s-monitoring-values.yaml k8s-monitoring-values.yaml.backup
+        log_info "Created backup: k8s-monitoring-values.yaml.backup"
+    fi
+    
+    # Replace placeholder with actual endpoint
+    log_info "Using monitoring endpoint: ${MONITORING_ENDPOINT:0:30}..."
+    
+    # Handle multiple placeholder formats
+    if grep -q '{{YOUR_MONITORING_ENDPOINT}}' k8s-monitoring-values.yaml; then
+        log_info "Found {{YOUR_MONITORING_ENDPOINT}} placeholder"
+        sed -i.tmp "s/{{YOUR_MONITORING_ENDPOINT}}/$MONITORING_ENDPOINT/g" k8s-monitoring-values.yaml
+    elif grep -q '{{MONITORING_ENDPOINT}}' k8s-monitoring-values.yaml; then
+        log_info "Found {{MONITORING_ENDPOINT}} placeholder"
+        sed -i.tmp "s/{{MONITORING_ENDPOINT}}/$MONITORING_ENDPOINT/g" k8s-monitoring-values.yaml
+    elif grep -q '\${MONITORING_ENDPOINT}' k8s-monitoring-values.yaml; then
+        log_info "Found \${MONITORING_ENDPOINT} placeholder"
+        sed -i.tmp "s/\${MONITORING_ENDPOINT}/$MONITORING_ENDPOINT/g" k8s-monitoring-values.yaml
+    elif grep -q 'https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write' k8s-monitoring-values.yaml; then
+        log_info "Found old format https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write placeholder"
+        sed -i.tmp "s|https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
+    else
+        log_error "No supported monitoring endpoint placeholder found in the file."
+        log_info "Please use one of these placeholders in your YAML file:"
+        echo "  - {{YOUR_MONITORING_ENDPOINT}}"
+        echo "  - {{MONITORING_ENDPOINT}}"
+        echo "  - \${MONITORING_ENDPOINT}"
+        echo "  - https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write (old format)"
+        exit 1
+    fi
+    
+    # Remove the temporary file created by sed -i
+    rm -f k8s-monitoring-values.yaml.tmp
+    
+    # Verify the change was made
+    if grep -q "$MONITORING_ENDPOINT" k8s-monitoring-values.yaml && ! grep -q -E '(\{\{|\$\{).*MONITORING_ENDPOINT.*(\}\}|\})' k8s-monitoring-values.yaml; then
+        log_info "✓ Monitoring endpoint placeholder replaced successfully!"
+    else
+        log_warn "⚠ Could not verify monitoring endpoint replacement. Please check the file manually."
     fi
 }
 
@@ -594,6 +729,9 @@ setup_last9_monitoring() {
     else
         log_warn "⚠ Could not verify cluster name replacement. Please check the file manually."
     fi
+    
+    # Update monitoring endpoint placeholder
+    update_monitoring_endpoint
     
     # Add prometheus-community repo if not already added
     log_info "Adding prometheus-community Helm repository..."
@@ -960,6 +1098,11 @@ main() {
                     log_error "Token is required for install_collector function"
                     exit 1
                 fi
+                
+                if [ -z "$OTEL_ENDPOINT" ]; then
+                    log_error "OTEL endpoint is required for install_collector function"
+                    exit 1
+                fi
                 setup_helm_repos
                 if [ -n "$VALUES_FILE" ]; then
                     log_info "Using custom values file from current directory: $VALUES_FILE"
@@ -1017,10 +1160,16 @@ main() {
         # Install only Cluster Monitoring (Prometheus stack)
         log_info "Starting Cluster Monitoring installation..."
         
-        # Check if credentials are provided
+        # Check if credentials and monitoring endpoint are provided
         if [ -z "$LAST9_USERNAME" ] || [ -z "$LAST9_PASSWORD" ]; then
             log_error "Last9 credentials are required for monitoring setup."
             log_error "Please provide username=<value> and password=<value> parameters."
+            exit 1
+        fi
+        
+        if [ -z "$MONITORING_ENDPOINT" ]; then
+            log_error "Monitoring endpoint is required for monitoring setup."
+            log_error "Please provide monitoring-endpoint=<value> parameter."
             exit 1
         fi
         
@@ -1045,7 +1194,7 @@ main() {
         echo ""
         echo "📝 Note: Monitoring stack deployed with cluster name: $CLUSTER_NAME"
         echo ""
-        echo "To add OpenTelemetry later, run: $0 token=\"your-token\""
+        echo "To add OpenTelemetry later, run: $0 token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\""
         echo "To uninstall later, run: $0 uninstall function=\"uninstall_last9_monitoring\""
     elif [ "$LOGS_ONLY" = true ]; then
         # Install only Collector for logs
@@ -1068,17 +1217,23 @@ main() {
         echo ""
         echo "📝 Note: Logs-only configuration file created: last9-otel-collector-logs-only.yaml"
         echo ""
-        echo "To add operator later, run: $0 operator-only"
-        echo "To add monitoring later, run: $0 token=\"your-token\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
+        echo "To add operator later, run: $0 operator-only token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\""
+        echo "To add monitoring later, run: $0 token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
         echo "To uninstall later, run: $0 uninstall"
     elif [ "$OPERATOR_ONLY" = true ]; then
         # Install OpenTelemetry Operator and Collector
         log_info "Starting OpenTelemetry Operator and Collector installation..."
         
-        # Check if token is provided for collector installation
+        # Check if token and endpoint are provided for collector installation
         if [ -z "$AUTH_TOKEN" ]; then
             log_error "Auth token is required for collector installation."
             log_error "Please provide token=<value> parameter for operator-only installation."
+            exit 1
+        fi
+        
+        if [ -z "$OTEL_ENDPOINT" ]; then
+            log_error "OTEL endpoint is required for collector installation."
+            log_error "Please provide endpoint=<value> parameter for operator-only installation."
             exit 1
         fi
         
@@ -1108,7 +1263,7 @@ main() {
         echo "📝 Note: Service selector updated to component: standalone-collector"
         echo "📝 Note: Original values file backed up as last9-otel-collector-values.yaml.backup"
         echo ""
-        echo "To add monitoring later, run: $0 token=\"your-token\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
+        echo "To add monitoring later, run: $0 token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
         echo "To uninstall later, run: $0 uninstall"
     else
         # Run installation process
@@ -1125,6 +1280,10 @@ main() {
         # Install monitoring stack if requested
         if [ "$SETUP_MONITORING" = true ]; then
             log_info "Installing Last9 monitoring stack..."
+            # Update monitoring endpoint in the monitoring values file
+            if [ -n "$MONITORING_ENDPOINT" ]; then
+                update_monitoring_endpoint
+            fi
             setup_last9_monitoring cluster="$CLUSTER_NAME"
         fi
         
