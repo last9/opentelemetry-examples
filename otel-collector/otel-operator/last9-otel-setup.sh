@@ -244,21 +244,32 @@ setup_repository() {
     mkdir -p "$WORK_DIR"
     cd "$WORK_DIR"
     
-    # Clone repository
-    log_info "Cloning repository: $REPO_URL"
-    #git clone "$REPO_URL" .
-
-     
+    # Clone repository with sparse checkout for only otel-collector/otel-operator
+    log_info "Cloning repository with sparse checkout (otel-collector/otel-operator only): $REPO_URL"
+    
     # Check if URL contains branch specification (format: url#branch)
     if [[ "$REPO_URL" == *"#"* ]]; then
        # Split URL and branch
        ACTUAL_URL="${REPO_URL%#*}"
        BRANCH="${REPO_URL#*#}"
        log_info "Cloning branch '$BRANCH' from: $ACTUAL_URL"
-       git clone -b "$BRANCH" "$ACTUAL_URL" .
+       
+       # Initialize git repository
+       git init -b main
+       git remote add origin "$ACTUAL_URL"
+       git config core.sparseCheckout true
+       echo "otel-collector/otel-operator/" > .git/info/sparse-checkout
+       git pull origin "$BRANCH"
     else
       # Clone default branch
-      git clone "$REPO_URL" .
+      log_info "Cloning default branch from: $REPO_URL"
+      
+      # Initialize git repository
+      git init -b main
+      git remote add origin "$REPO_URL"
+      git config core.sparseCheckout true
+      echo "otel-collector/otel-operator/" > .git/info/sparse-checkout
+      git pull origin main
     fi
 
     
@@ -408,13 +419,13 @@ update_monitoring_endpoint() {
     # Handle multiple placeholder formats
     if grep -q '{{YOUR_MONITORING_ENDPOINT}}' k8s-monitoring-values.yaml; then
         log_info "Found {{YOUR_MONITORING_ENDPOINT}} placeholder"
-        sed -i.tmp "s/{{YOUR_MONITORING_ENDPOINT}}/$MONITORING_ENDPOINT/g" k8s-monitoring-values.yaml
+        sed -i.tmp "s|{{YOUR_MONITORING_ENDPOINT}}|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
     elif grep -q '{{MONITORING_ENDPOINT}}' k8s-monitoring-values.yaml; then
         log_info "Found {{MONITORING_ENDPOINT}} placeholder"
-        sed -i.tmp "s/{{MONITORING_ENDPOINT}}/$MONITORING_ENDPOINT/g" k8s-monitoring-values.yaml
+        sed -i.tmp "s|{{MONITORING_ENDPOINT}}|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
     elif grep -q '\${MONITORING_ENDPOINT}' k8s-monitoring-values.yaml; then
         log_info "Found \${MONITORING_ENDPOINT} placeholder"
-        sed -i.tmp "s/\${MONITORING_ENDPOINT}/$MONITORING_ENDPOINT/g" k8s-monitoring-values.yaml
+        sed -i.tmp "s|\${MONITORING_ENDPOINT}|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
     elif grep -q 'https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write' k8s-monitoring-values.yaml; then
         log_info "Found old format https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write placeholder"
         sed -i.tmp "s|https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
@@ -1042,6 +1053,11 @@ cleanup() {
         rm -rf "$WORK_DIR"
         log_info "✓ Temporary directory '$WORK_DIR' removed"
     fi
+    
+    # Always cleanup all otel-setup-* directories from where script was run
+    log_info "Cleaning up all otel-setup-* directories..."
+    rm -rf otel-setup-*
+    log_info "✓ All otel-setup-* directories removed"
 }
 
 # Main execution function
@@ -1280,10 +1296,6 @@ main() {
         # Install monitoring stack if requested
         if [ "$SETUP_MONITORING" = true ]; then
             log_info "Installing Last9 monitoring stack..."
-            # Update monitoring endpoint in the monitoring values file
-            if [ -n "$MONITORING_ENDPOINT" ]; then
-                update_monitoring_endpoint
-            fi
             setup_last9_monitoring cluster="$CLUSTER_NAME"
         fi
         
@@ -1301,8 +1313,8 @@ main() {
     fi
 }
 
-# Handle script interruption
-trap cleanup EXIT
+# Handle script interruption and cleanup
+trap cleanup EXIT INT TERM
 
 # Run main function
 main "$@"
