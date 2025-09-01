@@ -139,10 +139,10 @@ show_examples() {
     echo "OpenTelemetry Setup Automation Script"
     echo ""
     echo "Quick Examples:"
-    echo "  $0 token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
-    echo "  $0 operator-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Traces - Install OpenTelemetry Operator and Collector"
-    echo "  $0 logs-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Logs - Install only Collector for logs (no operator)"
-    echo "  $0 monitoring-only monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
+    echo "  $0 token=\"your-token-here\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
+    echo "  $0 operator-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Traces - Install OpenTelemetry Operator and Collector"
+    echo "  $0 logs-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Logs - Install only Collector for logs (no operator)"
+    echo "  $0 monitoring-only monitoring-endpoint=\"your-monitoring-endpoint\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
 }
@@ -152,10 +152,10 @@ show_help() {
     echo "OpenTelemetry Setup Automation Script"
     echo ""
     echo "Usage:"
-    echo "  $0 token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
-    echo "  $0 operator-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Traces - Install OpenTelemetry Operator and Collector"
-    echo "  $0 logs-only token=\"your-token-here\" endpoint=\"https://otlp-aps1.last9.io:443\"  # For Logs - Install only Collector for logs (no operator)"
-    echo "  $0 monitoring-only monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
+    echo "  $0 token=\"your-token-here\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
+    echo "  $0 operator-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Traces - Install OpenTelemetry Operator and Collector"
+    echo "  $0 logs-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Logs - Install only Collector for logs (no operator)"
+    echo "  $0 monitoring-only monitoring-endpoint=\"your-monitoring-endpoint\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
 }
@@ -1210,7 +1210,7 @@ main() {
         echo ""
         echo "📝 Note: Monitoring stack deployed with cluster name: $CLUSTER_NAME"
         echo ""
-        echo "To add OpenTelemetry later, run: $0 token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\""
+        echo "To add OpenTelemetry later, run: $0 token=\"your-token\" endpoint=\"your-otel-endpoint\""
         echo "To uninstall later, run: $0 uninstall function=\"uninstall_last9_monitoring\""
     elif [ "$LOGS_ONLY" = true ]; then
         # Install only Collector for logs
@@ -1233,8 +1233,8 @@ main() {
         echo ""
         echo "📝 Note: Logs-only configuration file created: last9-otel-collector-logs-only.yaml"
         echo ""
-        echo "To add operator later, run: $0 operator-only token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\""
-        echo "To add monitoring later, run: $0 token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
+        echo "To add operator later, run: $0 operator-only token=\"your-token\" endpoint=\"your-otel-endpoint\""
+        echo "To add monitoring later, run: $0 token=\"your-token\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
         echo "To uninstall later, run: $0 uninstall"
     elif [ "$OPERATOR_ONLY" = true ]; then
         # Install OpenTelemetry Operator and Collector
@@ -1279,7 +1279,7 @@ main() {
         echo "📝 Note: Service selector updated to component: standalone-collector"
         echo "📝 Note: Original values file backed up as last9-otel-collector-values.yaml.backup"
         echo ""
-        echo "To add monitoring later, run: $0 token=\"your-token\" endpoint=\"https://otlp-aps1.last9.io:443\" monitoring-endpoint=\"https://app-tsdb.last9.io/v1/metrics/82639318fe4e71a0cf3a875e15e803f6/sender/last9/write\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
+        echo "To add monitoring later, run: $0 token=\"your-token\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" cluster=\"cluster-name\" username=\"user\" password=\"pass\""
         echo "To uninstall later, run: $0 uninstall"
     else
         # Run installation process
