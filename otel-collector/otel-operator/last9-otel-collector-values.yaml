@@ -130,7 +130,7 @@ config:
       sampling_initial: 5
       sampling_thereafter: 200
     otlp/last9:
-      endpoint: "https://<your_last9_endpoint>"
+      endpoint: "{{YOUR_OTEL_ENDPOINT}}"
       headers:
         "Authorization": "{{AUTH_TOKEN}}"
 
