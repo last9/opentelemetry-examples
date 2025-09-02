@@ -66,6 +66,11 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Helper function to escape special characters for sed
+escape_for_sed() {
+    printf '%s\n' "$1" | sed 's:[[\.*^$()+?{|/]:\\&:g'
+}
+
 # Parse named arguments
 parse_arguments() {
     for arg in "$@"; do
@@ -255,7 +260,7 @@ setup_repository() {
        log_info "Cloning branch '$BRANCH' from: $ACTUAL_URL"
        
        # Initialize git repository
-       git init -b main
+       git init
        git remote add origin "$ACTUAL_URL"
        git config core.sparseCheckout true
        echo "otel-collector/otel-operator/" > .git/info/sparse-checkout
@@ -265,7 +270,7 @@ setup_repository() {
       log_info "Cloning default branch from: $REPO_URL"
       
       # Initialize git repository
-      git init -b main
+      git init
       git remote add origin "$REPO_URL"
       git config core.sparseCheckout true
       echo "otel-collector/otel-operator/" > .git/info/sparse-checkout
@@ -317,13 +322,16 @@ update_auth_token() {
     # Handle multiple placeholder formats
     if grep -q '{{AUTH_TOKEN}}' last9-otel-collector-values.yaml; then
         log_info "Found {{AUTH_TOKEN}} placeholder"
-        sed -i.tmp "s/{{AUTH_TOKEN}}/$AUTH_TOKEN/g" last9-otel-collector-values.yaml
+        escaped_token=$(escape_for_sed "$AUTH_TOKEN")
+        sed -i.tmp "s|{{AUTH_TOKEN}}|$escaped_token|g" last9-otel-collector-values.yaml
     elif grep -q '${AUTH_TOKEN}' last9-otel-collector-values.yaml; then
         log_info "Found \${AUTH_TOKEN} placeholder"
-        sed -i.tmp "s/\${AUTH_TOKEN}/$AUTH_TOKEN/g" last9-otel-collector-values.yaml
+        escaped_token=$(escape_for_sed "$AUTH_TOKEN")
+        sed -i.tmp "s|\${AUTH_TOKEN}|$escaped_token|g" last9-otel-collector-values.yaml
     elif grep -q '{{ \.Values\.authToken }}' last9-otel-collector-values.yaml; then
         log_info "Found Helm template placeholder"
-        sed -i.tmp "s/{{ \.Values\.authToken }}/$AUTH_TOKEN/g" last9-otel-collector-values.yaml
+        escaped_token=$(escape_for_sed "$AUTH_TOKEN")
+        sed -i.tmp "s|{{ \.Values\.authToken }}|$escaped_token|g" last9-otel-collector-values.yaml
     else
         log_error "No supported placeholder found in the file."
         log_info "Please use one of these placeholders in your YAML file:"
@@ -366,16 +374,20 @@ update_otel_endpoint() {
     # Handle multiple placeholder formats
     if grep -q '{{YOUR_OTEL_ENDPOINT}}' last9-otel-collector-values.yaml; then
         log_info "Found {{YOUR_OTEL_ENDPOINT}} placeholder"
-        sed -i.tmp "s|{{YOUR_OTEL_ENDPOINT}}|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
+        escaped_endpoint=$(escape_for_sed "$OTEL_ENDPOINT")
+        sed -i.tmp "s|{{YOUR_OTEL_ENDPOINT}}|$escaped_endpoint|g" last9-otel-collector-values.yaml
     elif grep -q '{{OTEL_ENDPOINT}}' last9-otel-collector-values.yaml; then
         log_info "Found {{OTEL_ENDPOINT}} placeholder"
-        sed -i.tmp "s|{{OTEL_ENDPOINT}}|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
+        escaped_endpoint=$(escape_for_sed "$OTEL_ENDPOINT")
+        sed -i.tmp "s|{{OTEL_ENDPOINT}}|$escaped_endpoint|g" last9-otel-collector-values.yaml
     elif grep -q '\${OTEL_ENDPOINT}' last9-otel-collector-values.yaml; then
         log_info "Found \${OTEL_ENDPOINT} placeholder"
-        sed -i.tmp "s|\${OTEL_ENDPOINT}|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
+        escaped_endpoint=$(escape_for_sed "$OTEL_ENDPOINT")
+        sed -i.tmp "s|\${OTEL_ENDPOINT}|$escaped_endpoint|g" last9-otel-collector-values.yaml
     elif grep -q 'https://<your_last9_endpoint>' last9-otel-collector-values.yaml; then
         log_info "Found old format https://<your_last9_endpoint> placeholder"
-        sed -i.tmp "s|https://<your_last9_endpoint>|$OTEL_ENDPOINT|g" last9-otel-collector-values.yaml
+        escaped_endpoint=$(escape_for_sed "$OTEL_ENDPOINT")
+        sed -i.tmp "s|https://<your_last9_endpoint>|$escaped_endpoint|g" last9-otel-collector-values.yaml
     else
         log_error "No supported OTEL endpoint placeholder found in the file."
         log_info "Please use one of these placeholders in your YAML file:"
@@ -419,16 +431,20 @@ update_monitoring_endpoint() {
     # Handle multiple placeholder formats
     if grep -q '{{YOUR_MONITORING_ENDPOINT}}' k8s-monitoring-values.yaml; then
         log_info "Found {{YOUR_MONITORING_ENDPOINT}} placeholder"
-        sed -i.tmp "s|{{YOUR_MONITORING_ENDPOINT}}|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
+        escaped_endpoint=$(escape_for_sed "$MONITORING_ENDPOINT")
+        sed -i.tmp "s|{{YOUR_MONITORING_ENDPOINT}}|$escaped_endpoint|g" k8s-monitoring-values.yaml
     elif grep -q '{{MONITORING_ENDPOINT}}' k8s-monitoring-values.yaml; then
         log_info "Found {{MONITORING_ENDPOINT}} placeholder"
-        sed -i.tmp "s|{{MONITORING_ENDPOINT}}|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
+        escaped_endpoint=$(escape_for_sed "$MONITORING_ENDPOINT")
+        sed -i.tmp "s|{{MONITORING_ENDPOINT}}|$escaped_endpoint|g" k8s-monitoring-values.yaml
     elif grep -q '\${MONITORING_ENDPOINT}' k8s-monitoring-values.yaml; then
         log_info "Found \${MONITORING_ENDPOINT} placeholder"
-        sed -i.tmp "s|\${MONITORING_ENDPOINT}|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
+        escaped_endpoint=$(escape_for_sed "$MONITORING_ENDPOINT")
+        sed -i.tmp "s|\${MONITORING_ENDPOINT}|$escaped_endpoint|g" k8s-monitoring-values.yaml
     elif grep -q 'https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write' k8s-monitoring-values.yaml; then
         log_info "Found old format https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write placeholder"
-        sed -i.tmp "s|https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write|$MONITORING_ENDPOINT|g" k8s-monitoring-values.yaml
+        escaped_endpoint=$(escape_for_sed "$MONITORING_ENDPOINT")
+        sed -i.tmp "s|https://app-tsdb.last9.io/v1/metrics/YOUR_CLUSTER_ID/sender/last9/write|$escaped_endpoint|g" k8s-monitoring-values.yaml
     else
         log_error "No supported monitoring endpoint placeholder found in the file."
         log_info "Please use one of these placeholders in your YAML file:"
@@ -729,16 +745,19 @@ setup_last9_monitoring() {
     
     # Replace cluster name placeholder in the values file
     log_info "Updating cluster name in k8s-monitoring-values.yaml..."
-    sed -i.tmp "s/my-cluster-name/$cluster_name/g" k8s-monitoring-values.yaml
+    log_info "Cluster name to replace: $cluster_name"
+    # Use awk for more robust replacement that handles special characters better
+    awk -v cluster="$cluster_name" '{gsub(/my-cluster-name/, cluster)}1' k8s-monitoring-values.yaml > k8s-monitoring-values.yaml.tmp && mv k8s-monitoring-values.yaml.tmp k8s-monitoring-values.yaml
     
-    # Remove the temporary file created by sed -i
-    rm -f k8s-monitoring-values.yaml.tmp
+    # Note: Using awk instead of sed for cluster name replacement to handle special characters
     
     # Verify the change was made
     if grep -q "cluster: $cluster_name" k8s-monitoring-values.yaml; then
         log_info "✓ Cluster name placeholder replaced successfully!"
+        log_info "Updated line: $(grep 'cluster:' k8s-monitoring-values.yaml)"
     else
         log_warn "⚠ Could not verify cluster name replacement. Please check the file manually."
+        log_warn "Current cluster line: $(grep 'cluster:' k8s-monitoring-values.yaml || echo 'Not found')"
     fi
     
     # Update monitoring endpoint placeholder
