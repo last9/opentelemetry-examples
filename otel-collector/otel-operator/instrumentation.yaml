@@ -30,6 +30,8 @@ spec:
           value: "none"
         - name: OTEL_LOGS_EXPORTER
           value: "none"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "deployment.environment=local"
   nodejs:
     env:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -50,4 +52,6 @@ spec:
           value: "none"
         - name: OTEL_LOGS_EXPORTER
           value: "none"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "deployment.environment=local"
 

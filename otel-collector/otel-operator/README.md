@@ -10,9 +10,8 @@ Before running the script, ensure you have:
 - ✅ **kubectl**: Configured and connected to your cluster
 - ✅ **helm**: Installed (v3.9+)
 - ✅ **git**: Installed
-- ✅ **Last9 Token**: https://app.last9.io/integrations?category=all&search_term=op&integration=OpenTelemetry --> Copy the Auth header token
-- ✅ **Last9 Username**: https://app.last9.io/integrations?category=all&search_term=prome&integration=Prometheus --> Copy the username value
-- ✅ **Last9 Password**: https://app.last9.io/integrations?category=all&search_term=prome&integration=Prometheus --> Copy the password value
+- ✅ **Last9 OTLP Endpoint and Token**: https://app.last9.io/integrations?category=all&search_term=op&integration=OpenTelemetry --> Copy the OTLP endpoint URL and the Auth header token
+- ✅ **Last9 Monitoring Endpoint and username & Password**: https://app.last9.io/integrations?category=all&search_term=prome&integration=Prometheus --> Copy the remote write URL and Values of username & password
 
 
 ### Step 1 Quick Start - Installation Options
@@ -23,7 +22,7 @@ First, download the shell script from the GitHub repository:
 
 ```bash
 # Download shell script directly from below link
-curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/otel-k8s-monitoring/otel-collector/otel-operator/last9-otel-setup.sh
+curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/main/otel-collector/otel-operator/last9-otel-setup.sh
 chmod +x last9-otel-setup.sh
 ```
 
@@ -31,22 +30,22 @@ chmod +x last9-otel-setup.sh
 
 #### Option 1: Install Everything (Recommended - This will cover integration of Logs, Traces and Cluster Monitoring)
 ```bash
-./last9-otel-setup.sh token="your-token-here" username="your-username" password="your-password"
+./last9-otel-setup.sh token="your-token-here" endpoint="your-endpoint-here" monitoring-endpoint="your-metrics-endpoint" username="your-username" password="your-password"
 ```
 
-#### Option 2: For Traces alone --> Instal OpenTelemetry Operator and collector
+#### Option 2: For Traces alone --> Install OpenTelemetry Operator and collector
 ```bash
-./last9-otel-setup.sh operator-only token="your-token-here"
+./last9-otel-setup.sh operator-only endpoint="your-endpoint-here" token="your-token-here" 
 ```
 
 #### Option 3: For Logs use case --> Install Only Collector for Logs (No Operator)
 ```bash
-./last9-otel-setup.sh logs-only token="your-token-here"
+./last9-otel-setup.sh logs-only endpoint="your-endpoint-here"  token="your-token-here" 
 ```
 
 #### Option 4: Install Only Cluster Monitoring (Using Metrics)
 ```bash
-./last9-otel-setup.sh monitoring-only username="your-username" password="your-password"
+./last9-otel-setup.sh monitoring-only monitoring-endpoint="your-metrics-endpoint" username="your-username" password="your-password"
 ```
 
 
@@ -86,7 +85,7 @@ spec:
         image: my-java-app:latest
 ```
 
-### In case, you want to Uninstall any or all of components, use below
+### In case you want to uninstall any or all components, use the following:
 
 ```bash
 ./last9-otel-setup.sh uninstall-all
