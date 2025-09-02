@@ -1,0 +1,12 @@
+{
+  "environment_name": "production-airflow",
+  "dag_id": "data_processing_pipeline",
+  "parameters": {
+    "start_date": "2024-01-01",
+    "end_date": "2024-01-31",
+    "source_table": "raw_events",
+    "target_table": "processed_events",
+    "batch_size": 1000,
+    "notification_email": "data-team@company.com"
+  }
+}
