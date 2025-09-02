@@ -6,3 +6,4 @@ opentelemetry-exporter-otlp
 opentelemetry-distro
 circus
 requests
+boto3

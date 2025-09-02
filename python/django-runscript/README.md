@@ -172,7 +172,87 @@ The `circus.ini` file includes:
 - **Logging**: Proper stdout/stderr handling for better debugging
 - **Working Directory**: Correctly set for Django project structure
 
+## SQS Processing with LocalStack
+
+This example also includes SQS message processing with OpenTelemetry tracing using LocalStack for local development and testing.
+
+### LocalStack Setup
+
+7. **Start LocalStack with SQS service:**
+   ```bash
+   docker-compose -f docker-compose.localstack.yml up -d
+   ```
+
+8. **Set up SQS queue and send test messages:**
+   ```bash
+   python setup_localstack_sqs.py
+   ```
+
+### Running SQS Processor
+
+**Manual execution:**
+```bash
+# Set LocalStack environment variables
+export AWS_ENDPOINT_URL=http://localhost:4566
+export SQS_QUEUE_URL=http://localhost:4566/000000000000/django-test-queue
+export AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+
+# Run SQS processor with OpenTelemetry
+PYTHONPATH=. DJANGO_SETTINGS_MODULE=mysite.settings opentelemetry-instrument python manage.py runscript sqs_processor
+```
+
+**With Circus process manager:**
+Update `circus.ini` to include AWS/LocalStack environment variables:
+```ini
+[env]
+DJANGO_SETTINGS_MODULE = mysite.settings
+AWS_ENDPOINT_URL = http://localhost:4566
+SQS_QUEUE_URL = http://localhost:4566/000000000000/django-test-queue
+AWS_REGION = us-east-1
+AWS_ACCESS_KEY_ID = test
+AWS_SECRET_ACCESS_KEY = test
+MAX_ITERATIONS = 10
+SQS_POLLING_DELAY = 5
+```
+
+Then update the watcher command:
+```ini
+[watcher:sqs-processor]
+cmd = opentelemetry-instrument python manage.py runscript sqs_processor
+```
+
+### Automated Testing
+
+Run the complete test with automated setup:
+```bash
+./test_localstack_sqs.sh
+```
+
+This script will:
+- Start LocalStack
+- Install dependencies  
+- Create SQS queue and send test messages
+- Run the SQS processor with OpenTelemetry tracing
+- Clean up when finished
+
+### SQS Processor Features
+
+The `sqs_processor.py` script includes:
+- **OpenTelemetry Integration**: Full tracing for SQS operations with proper span kinds
+- **LocalStack Support**: Works with both LocalStack and real AWS SQS
+- **Message Processing**: JSON message handling with error recovery
+- **Configurable Polling**: Environment-based configuration for delays and iterations
+- **Robust Error Handling**: Continues processing even if individual messages fail
+
+### Volume Directory
+
+The `volume/` directory is used by LocalStack to persist data between container restarts. It's automatically created and managed by Docker Compose and is not required for the basic integration to work.
+
 ## References
 - [OpenTelemetry Python Documentation](https://opentelemetry-python.readthedocs.io/)
 - [django-extensions runscript docs](https://django-extensions.readthedocs.io/en/latest/runscript.html)
-- [Circus Process Manager Documentation](https://circus.readthedocs.io/) 
+- [Circus Process Manager Documentation](https://circus.readthedocs.io/)
+- [LocalStack Documentation](https://docs.localstack.cloud/)
+- [AWS SQS Documentation](https://docs.aws.amazon.com/sqs/) 
