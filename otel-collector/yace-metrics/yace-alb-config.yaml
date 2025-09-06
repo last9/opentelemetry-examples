@@ -10,7 +10,7 @@ discovery:
       regions:
         - ap-south-1  # Adjust this to your specific region
       period: 10
-      length: 120
+      length: 60
       metrics:
         - name: RequestCount
           statistics: [Sum]
