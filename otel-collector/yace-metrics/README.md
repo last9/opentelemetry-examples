@@ -20,8 +20,8 @@ Tested on Ubuntu 22.04 (LTS):
 ```bash
 sudo apt-get update
 sudo apt-get -y install wget systemctl
-wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.110.0/otelcol-contrib_0.110.0_linux_amd64.deb
-sudo dpkg -i otelcol-contrib_0.110.0_linux_amd64.deb
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.128.0/otelcol-contrib_0.128.0_linux_amd64.deb
+sudo dpkg -i otelcol-contrib_0.128.0_linux_amd64.deb
 ```
 
 For more installation options, refer to the [official documentation](https://opentelemetry.io/docs/collector/installation/).
@@ -97,161 +97,11 @@ For more AWS CLI installation options, check the [AWS CLI documentation](https:/
 
 ### OpenTelemetry Collector Configuration
 
-Edit the configuration file at `/etc/otelcol-contrib/config.yaml`:
-
-```yaml
-receivers:
-  prometheus:
-    config:
-      scrape_configs:
-        - job_name: 'yace'
-          scrape_interval: 10s
-          static_configs:
-            - targets: ['localhost:5000']
-
-processors:
-  filter:
-    metrics:
-      include:
-        match_type: regexp
-        metric_names:
-          - ".*"  # Include all metrics
-
-  attributes:
-    actions:
-      - key: scraper
-        value: "yace"
-        action: insert
-
-exporters:
-  otlp/last9:
-    endpoint: "Use Metrics TSDB endpoint from Integration page"
-    headers:
-      "Authorization": "Use Base64 component of username/password as Auth header details"
-    timeout: 30s
-    retry_on_failure:
-      enabled: true
-      initial_interval: 5s
-      max_interval: 30s
-      max_elapsed_time: 300s
-
-  debug:
-    verbosity: detailed
-
-service:
-  pipelines:
-    metrics:
-      receivers: [prometheus]
-      processors: [filter, attributes]
-      exporters: [logging, otlp/last9]
-```
+Edit the configuration file at `/etc/otelcol-contrib/config.yaml` with `otel-config.yaml` file.
 
 ### YACE Configuration
 
-Create a file named `yace_config.yml` with the following content:
-
-```yaml
-apiVersion: v1alpha1
-discovery:
-  exportedTagsOnMetrics:
-    # EC2/EBS
-    AWS/EC2:
-      - instance-id
-      - Name
-    AWS/ApplicationELB:
-      - LoadBalancer
-      - TargetGroup
-    AWS/NetworkELB:
-      - LoadBalancer
-      - TargetGroup
-
-  jobs:
-    - type: AWS/EC2
-      regions:
-        - ap-south-1  # Adjust this to your specific region
-      period: 300
-      length: 300
-      metrics:
-        - name: CPUUtilization
-          statistics: [Average, Maximum, Minimum]
-        - name: DiskReadOps
-          statistics: [Sum]
-        - name: DiskWriteOps
-          statistics: [Sum]
-        - name: DiskReadBytes
-          statistics: [Sum]
-        - name: DiskWriteBytes
-          statistics: [Sum]
-        - name: NetworkIn
-          statistics: [Sum]
-        - name: NetworkOut
-          statistics: [Sum]
-        - name: StatusCheckFailed
-          statistics: [Sum]
-        # Add more EC2 metrics as needed
-
-    - type: AWS/ELB  # Classic Load Balancer
-      regions:
-        - ap-south-1  # Adjust this to your specific region
-      period: 300
-      length: 300
-      metrics:
-        - name: RequestCount
-          statistics: [Sum]
-        - name: HealthyHostCount
-          statistics: [Average]
-        - name: UnHealthyHostCount
-          statistics: [Average]
-        - name: Latency
-          statistics: [Average]
-        - name: HTTPCode_Backend_2XX
-          statistics: [Sum]
-        - name: HTTPCode_Backend_4XX
-          statistics: [Sum]
-        - name: HTTPCode_Backend_5XX
-          statistics: [Sum]
-        # Add more ELB metrics as needed
-
-    - type: AWS/ApplicationELB  # Application Load Balancer
-      regions:
-        - ap-south-1  # Adjust this to your specific region
-      period: 300
-      length: 300
-      metrics:
-        - name: RequestCount
-          statistics: [Sum]
-        - name: TargetResponseTime
-          statistics: [Average]
-        - name: HealthyHostCount
-          statistics: [Average]
-        - name: UnHealthyHostCount
-          statistics: [Average]
-        - name: HTTPCode_Target_2XX_Count
-          statistics: [Sum]
-        - name: HTTPCode_Target_4XX_Count
-          statistics: [Sum]
-        - name: HTTPCode_Target_5XX_Count
-          statistics: [Sum]
-        # Add more ALB metrics as needed
-
-    - type: AWS/NetworkELB  # Network Load Balancer
-      regions:
-        - ap-south-1  # Adjust this to your specific region
-      period: 300
-      length: 300
-      metrics:
-        - name: ActiveFlowCount
-          statistics: [Average]
-        - name: ConsumedLCUs
-          statistics: [Sum]
-        - name: HealthyHostCount
-          statistics: [Average]
-        - name: UnHealthyHostCount
-          statistics: [Average]
-        - name: ProcessedBytes
-          statistics: [Sum]
-        # Add more NLB metrics as needed
-```
+Create a file named `yace_config.yml` with the content from `yace_config.yaml`.
 
 For more YACE configuration options, see the [YACE documentation](https://github.com/nerdswords/yet-another-cloudwatch-exporter).
 
@@ -284,7 +134,7 @@ otelcol-contrib --config /etc/otelcol-contrib/config.yaml
 
 ## Verifying Metrics
 
-This will push the metrics from YACE config to be sent to Levitate. To see the data in action, visit the [Grafana Dashboard](https://app.last9.io/).
+This will push the metrics from YACE config to be sent to Levitate. To see the data in action, visit the [Last9](https://app.last9.io/).
 
 ## Troubleshooting
 
