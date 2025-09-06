@@ -1,6 +1,6 @@
 # Installing YACE Exporter to Scrape AWS Cloudwatch Metrics
 
-This guide explains how to use Levitate's OpenTelemetry metrics endpoint to ingest metrics from AWS Cloudwatch using YACE Exporter and OpenTelemetry Collector.
+This guide explains how to use Last9's OpenTelemetry metrics endpoint to ingest metrics from AWS Cloudwatch using YACE Exporter and OpenTelemetry Collector.
 
 ## Prerequisites
 
@@ -134,7 +134,7 @@ otelcol-contrib --config /etc/otelcol-contrib/config.yaml
 
 ## Verifying Metrics
 
-This will push the metrics from YACE config to be sent to Levitate. To see the data in action, visit the [Last9](https://app.last9.io/).
+This will push the metrics from YACE config to be sent to Last9. To see the data in action, visit the [Last9](https://app.last9.io/).
 
 ## Troubleshooting
 
