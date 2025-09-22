@@ -1,0 +1,38 @@
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.log
+
+# NuGet packages
+packages/
+*.nupkg
+
+# Visual Studio
+.vs/
+*.sln.docstates
+*.userprefs
+
+# JetBrains Rider
+.idea/
+
+# macOS
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Runtime files
+*.runtimeconfig.json
+*.deps.json
