@@ -153,8 +153,10 @@ func demo(ctx context.Context, bucket, key, queueURL string, tracer trace.Tracer
         return fmt.Errorf("sqs send failed: %w", err)
     }
 
-    // SQS Receive: request all message attributes so we can extract
-    recv, err := sqsc.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+    // SQS Receive: use background context to avoid creating spans for polling
+    // Only create spans when messages are actually received
+    pollCtx := context.Background()
+    recv, err := sqsc.ReceiveMessage(pollCtx, &sqs.ReceiveMessageInput{
         QueueUrl:              aws.String(queueURL),
         MaxNumberOfMessages:   1,
         WaitTimeSeconds:       5,
@@ -164,18 +166,21 @@ func demo(ctx context.Context, bucket, key, queueURL string, tracer trace.Tracer
         return fmt.Errorf("sqs receive failed: %w", err)
     }
 
-    for _, m := range recv.Messages {
-        msgCtx := extractFromSQS(ctx, m)
-        msgCtx, span := tracer.Start(msgCtx, "process SQS message", trace.WithSpanKind(trace.SpanKindConsumer))
-        // Simulate work
-        time.Sleep(50 * time.Millisecond)
-        span.End()
+    // Only process and create spans if messages were received
+    if len(recv.Messages) > 0 {
+        for _, m := range recv.Messages {
+            msgCtx := extractFromSQS(ctx, m)
+            msgCtx, span := tracer.Start(msgCtx, "process SQS message", trace.WithSpanKind(trace.SpanKindConsumer))
+            // Simulate work
+            time.Sleep(50 * time.Millisecond)
+            span.End()
 
-        // Delete the message so it is not reprocessed
-        _, _ = sqsc.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-            QueueUrl:      aws.String(queueURL),
-            ReceiptHandle: m.ReceiptHandle,
-        })
+            // Delete the message so it is not reprocessed
+            _, _ = sqsc.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+                QueueUrl:      aws.String(queueURL),
+                ReceiptHandle: m.ReceiptHandle,
+            })
+        }
     }
     return nil
 }
