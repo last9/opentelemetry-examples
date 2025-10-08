@@ -5,11 +5,11 @@ base_url = "https://app.last9.io/api/v4/organizations/last9/logs/api/v2/query_ra
 
 # All the query parameters as a dictionary
 params = {
-    "start": 1759924800,  
-    "end": 1759925400,    
-    "region": "ap-south-1",
-    "query": '{service="accounting"}',
-    "mode": "editor"
+    "start": 1759924800,  # use the epoch time
+    "end": 1759925400,    # we can change start/end time as per request
+    "region": "ap-south-1", # can be changed
+    "query": '{service="accounting"}', # use the respective service
+    "mode": "editor" # we can change to editor, and above query should be LogQL one
 }
 
 headers = {
