@@ -9,7 +9,7 @@ discovery:
     - type: AWS/ApplicationELB  # Application Load Balancer
       regions:
         - ap-south-1  # Adjust this to your specific region
-      period: 10
+      period: 60
       length: 60
       metrics:
         - name: RequestCount
@@ -32,10 +32,11 @@ discovery:
           statistics: [Sum]
         - name: HTTPCode_ELB_2XX_Count
           statistics: [Sum]
-        - name: HTTPCode_ELB_502_Count
-          statistics: [Sum]
-        - name: HTTPCode_ELB_503_Count
-          statistics: [Sum]
-        - name: HTTPCode_ELB_504_Count
-          statistics: [Sum]
         # Add more ALB metrics as needed
+        #- name: HTTPCode_ELB_502_Count
+        #  statistics: [Sum]
+        #- name: HTTPCode_ELB_503_Count
+        #  statistics: [Sum]
+        #- name: HTTPCode_ELB_504_Count
+        #  statistics: [Sum]
+        
