@@ -1,5 +1,6 @@
 import requests
 import time
+import json
 from datetime import datetime
 from urllib.parse import quote
 
@@ -22,14 +23,14 @@ def fetch_logs(token, base_url):
     physical_index = "Default"
     
     # Define query in plain text
-    query = '{service=~"example.*"}'
+    query = '{service="ab-testing"}'
     
     # Convert query to required URL-encoded format
     encoded_query = quote(query)
     
-    # Calculate epoch timestamps (nanoseconds)
-    end_epoc = int(time.time() * 1000000000)  # Current time
-    start_epoc = end_epoc - (15 * 60 * 1000000000)  # 15 minutes ago in nanoseconds
+    # Calculate epoch timestamps (seconds)
+    end_epoc = int(time.time())  # Current time
+    start_epoc = end_epoc - (5 * 60)  # 5 minutes ago in seconds
     
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting log fetch from Last9")
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Query: {query}")
@@ -38,7 +39,7 @@ def fetch_logs(token, base_url):
     
     while True:
         # Set headers
-        headers = {"Authorization": f"Basic {token}"}
+        headers = {"Authorization": f"{token}"}
         
         # Construct URL with parameters
         url = (
@@ -48,12 +49,19 @@ def fetch_logs(token, base_url):
             f"&end={end_epoc}"
             f"&offset={offset}"
             f"&limit={limit}"
-            f"&index=physical_index:{physical_index}"
+            #f"&index=physical_index:{physical_index}"
         )
         
         try:
+            # Debug: Print the curl command equivalent
+            curl_command = f"curl -H 'Authorization: {headers['Authorization']}' '{url}'"
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DEBUG: Equivalent curl command:")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {curl_command}")
+            
             # Make API request
             response = requests.get(url, headers=headers)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DEBUG: Response status code: {response.status_code}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DEBUG: Response headers: {dict(response.headers)}")
             response.raise_for_status()
             
             # Parse response
@@ -79,6 +87,9 @@ def fetch_logs(token, base_url):
             
         except requests.exceptions.RequestException as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Request failed: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DEBUG: Error response status: {e.response.status_code}")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DEBUG: Error response content: {e.response.text}")
             break
         except KeyError as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Unexpected response format: {e}")
@@ -96,12 +107,17 @@ def fetch_logs(token, base_url):
 if __name__ == "__main__":
     
     # API Documentation: https://last9.io/docs/query-logs-api/
-    # Get your API token from: https://app.last9.io/settings/api-access
     
     # Replace with your actual token
-    auth_token = "your_token_here"
+    auth_token="Basic auth token"
     # Replace with your base url
     base_url = "https://otlp-aps1.last9.io/loki/logs/api/v2/query_range"
     
-    logs = fetch_logs(auth_token)
+    logs = fetch_logs(auth_token, base_url)
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Final count: {len(logs)} log entries")
+    
+    # Write output to file
+    output_file = "output.json"
+    with open(output_file, 'w') as f:
+        json.dump(logs, f, indent=2)
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Output written to {output_file}")
