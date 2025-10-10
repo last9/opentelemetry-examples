@@ -1,7 +1,7 @@
 GEM
   remote: https://rubygems.org/
   specs:
-    base64 (0.2.0)
+    base64 (0.3.0)
     bigdecimal (3.1.8)
     dotenv (3.1.2)
     google-protobuf (4.27.5-x86_64-darwin)
@@ -12,8 +12,8 @@ GEM
       rake (>= 13)
     googleapis-common-protos-types (1.15.0)
       google-protobuf (>= 3.18, < 5.a)
-    logger (1.6.1)
-    mustermann (3.0.3)
+    logger (1.7.0)
+    mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
     opentelemetry-api (1.2.5)
     opentelemetry-common (0.21.0)
@@ -215,23 +215,24 @@ GEM
       opentelemetry-semantic_conventions
     opentelemetry-semantic_conventions (1.10.0)
       opentelemetry-api (~> 1.0)
-    rack (3.1.12)
-    rack-protection (4.1.0)
+    rack (3.2.3)
+    rack-protection (4.2.0)
       base64 (>= 0.1.0)
       logger (>= 1.6.0)
       rack (>= 3.0.0, < 4)
-    rack-session (2.0.0)
+    rack-session (2.1.1)
+      base64 (>= 0.1.0)
       rack (>= 3.0.0)
     rake (13.2.1)
     ruby2_keywords (0.0.5)
-    sinatra (4.1.0)
+    sinatra (4.2.0)
       logger (>= 1.6.0)
       mustermann (~> 3.0)
       rack (>= 3.0.0, < 4)
-      rack-protection (= 4.1.0)
+      rack-protection (= 4.2.0)
       rack-session (>= 2.0.0, < 3)
       tilt (~> 2.0)
-    tilt (2.4.0)
+    tilt (2.6.1)
 
 PLATFORMS
   x86_64-darwin-22
