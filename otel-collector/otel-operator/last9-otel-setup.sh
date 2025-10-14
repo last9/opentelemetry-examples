@@ -25,7 +25,7 @@ set -e  # Exit on any error
 
 # Configuration defaults
 NAMESPACE="last9"
-OPERATOR_VERSION="0.92.1"
+OPERATOR_VERSION="0.97.0"
 COLLECTOR_VERSION="0.126.0"
 MONITORING_VERSION="75.15.1"
 
@@ -487,7 +487,8 @@ install_operator() {
         --create-namespace \
         --set "manager.collectorImage.repository=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s" \
         --set admissionWebhooks.certManager.enabled=false \
-        --set admissionWebhooks.autoGenerateCert.enabled=true
+        --set admissionWebhooks.autoGenerateCert.enabled=true \
+        --disable-openapi-validation
     
     log_info "OpenTelemetry Operator installed!"
     
