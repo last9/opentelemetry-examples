@@ -6,7 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
+	"os"
+	"strings"
 
 	_ "github.com/lib/pq"
 	"go.nhat.io/otelsql"
@@ -35,9 +36,15 @@ func initDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to register driver: %v", err)
 	}
 
-	db, err := sql.Open(driverName, dsnName)
+	dsn := getEnv("DATABASE_URL", dsnName)
+
+	db, err := sql.Open(driverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
+	}
+
+	if err := ensureSchema(db); err != nil {
+		return nil, fmt.Errorf("failed to ensure schema: %v", err)
 	}
 
 	// Record stats to expose metrics
@@ -46,6 +53,31 @@ func initDB() (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func ensureSchema(db *sql.DB) error {
+	// Enable pgcrypto for gen_random_uuid and create users table
+	_, err := db.Exec(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`)
+	if err != nil {
+		return fmt.Errorf("failed to create extension: %w", err)
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		name TEXT NOT NULL,
+		email TEXT NOT NULL UNIQUE
+	);`)
+	if err != nil {
+		return fmt.Errorf("failed to create users table: %w", err)
+	}
+	return nil
 }
 
 func NewUsersController(redisClient *redis.Client) *UsersController {
@@ -102,7 +134,7 @@ func (c *UsersController) GetUser(ctx context.Context, id string) (*User, error)
 
 func (c *UsersController) CreateUser(ctx context.Context, user *User) error {
 	// Create user in database
-	err := createUserInDatabase(user)
+    err := createUserInDatabase(user)
 	if err != nil {
 		return err
 	}
@@ -120,22 +152,52 @@ func (c *UsersController) CreateUser(ctx context.Context, user *User) error {
 	return nil
 }
 
-// Implement UpdateUser and DeleteUser methods similarly,
-// updating Redis cache accordingly
-
-// Helper functions (implement these according to your database setup)
+// Helper functions
 func fetchUsersFromDatabase() ([]User, error) {
-	// Implement database fetch logic
-	return nil, nil // Temporary placeholder
+	db, err := initDB()
+	if err != nil {
+		log.Printf("failed to initialize database: %v", err)
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SELECT id::text, name, email FROM users ORDER BY name ASC")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+	return users, nil
 }
 
 func fetchUserFromDatabase(id string) (*User, error) {
-	// Implement database fetch logic
-	return nil, nil // Temporary placeholder
+	db, err := initDB()
+	if err != nil {
+		log.Printf("failed to initialize database: %v", err)
+		return nil, err
+	}
+	defer db.Close()
+
+	var u User
+	row := db.QueryRow("SELECT id::text, name, email FROM users WHERE id = $1::uuid", id)
+	if err := row.Scan(&u.ID, &u.Name, &u.Email); err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 func createUserInDatabase(user *User) error {
-	// Implement database creation logic
 	db, err := initDB()
 	if err != nil {
 		log.Printf("failed to initialize database: %v", err)
@@ -143,43 +205,75 @@ func createUserInDatabase(user *User) error {
 	}
 	defer db.Close()
 
-	// CREATE TABLE users (
-	// 	id SERIAL PRIMARY KEY,
-	// 	name VARCHAR(255) NOT NULL,
-	// 	email VARCHAR(255) NOT NULL UNIQUE
-	// );
-	stmt, err := db.Prepare("INSERT INTO users (id, name, email) VALUES ($1, $2, $3)")
+	stmt, err := db.Prepare("INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id::text")
 	if err != nil {
 		log.Printf("failed to prepare statement: %v", err)
 		return fmt.Errorf("failed to prepare statement: %v", err)
 	}
 	defer stmt.Close()
 
-	// Execute the SQL statement
-	_, err = stmt.Exec(user.ID, user.Name, user.Email)
-	if err != nil {
+	if err := stmt.QueryRow(user.Name, user.Email).Scan(&user.ID); err != nil {
 		log.Printf("failed to insert user: %v", err)
 		return fmt.Errorf("failed to insert user: %v", err)
 	}
-	return nil // Temporary placeholder
+	return nil
 }
 
-// Add this method to the UsersController struct
-func (c *UsersController) UpdateUser(id int, name string) *User {
-	// Implementation here
-	ctx := context.Background() // Create a context
-	user, err := c.GetUser(ctx, strconv.Itoa(id))
+// UpdateUser updates a user by ID. Only non-nil fields are updated.
+func (c *UsersController) UpdateUser(ctx context.Context, id string, name *string, email *string) (*User, error) {
+	if name == nil && email == nil {
+		return c.GetUser(ctx, id)
+	}
+
+	db, err := initDB()
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	if user != nil {
-		user.Name = name
-		// Update user in storage
+	defer db.Close()
+
+	setClauses := make([]string, 0, 2)
+	args := make([]any, 0, 3)
+	argPos := 1
+	if name != nil {
+		setClauses = append(setClauses, fmt.Sprintf("name=$%d", argPos))
+		args = append(args, *name)
+		argPos++
 	}
-	return user
+	if email != nil {
+		setClauses = append(setClauses, fmt.Sprintf("email=$%d", argPos))
+		args = append(args, *email)
+		argPos++
+	}
+
+	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d::uuid RETURNING id::text, name, email", strings.Join(setClauses, ", "), argPos)
+	args = append(args, id)
+
+	var updated User
+	if err := db.QueryRow(query, args...).Scan(&updated.ID, &updated.Name, &updated.Email); err != nil {
+		return nil, err
+	}
+
+	// Update Redis cache
+	jsonUser, _ := json.Marshal(updated)
+	c.redisClient.Set(ctx, fmt.Sprintf("user:%s", updated.ID), jsonUser, 0)
+	c.redisClient.Del(ctx, "users")
+
+	return &updated, nil
 }
 
-func (uc *UsersController) DeleteUser(ctx context.Context, id int) error {
-	// Implement user deletion logic here
+// DeleteUser deletes a user by UUID string, updates Redis cache accordingly
+func (uc *UsersController) DeleteUser(ctx context.Context, id string) error {
+	db, err := initDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if _, err := db.Exec("DELETE FROM users WHERE id = $1::uuid", id); err != nil {
+		return err
+	}
+
+	uc.redisClient.Del(ctx, fmt.Sprintf("user:%s", id))
+	uc.redisClient.Del(ctx, "users")
 	return nil
 }
