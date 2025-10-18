@@ -1,21 +1,37 @@
 import opentelemetry from '@opentelemetry/api';
 import { environment } from '../environments/environment';
 
+type TestScenario = 
+  | 'javascript-errors'
+  | 'network-errors'
+  | 'performance-issues'
+  | 'user-interaction-issues'
+  | 'angular-specific-issues'
+  | 'business-logic-errors'
+  | 'success-scenarios';
+
+interface FormData {
+  email: string;
+  password: string;
+  age: string;
+}
+
 /**
  * Test Scenarios for Last9 Monitoring Validation
  * 
  * This file contains various test scenarios to validate your monitoring setup.
  * Each scenario produces specific traces that you can monitor in Last9.
  */
-
 export class MonitoringTestScenarios {
-  private tracer = opentelemetry.trace.getTracer('monitoring-test-tracer');
+  private readonly tracer = opentelemetry.trace.getTracer('monitoring-test-tracer');
+  private readonly httpbinUrl: string = 'https://httpbin.org';
+  private readonly githubUrl: string = 'https://api.github.com';
 
   /**
    * SCENARIO 1: JavaScript Errors
    * Tests: Error tracking, stack traces, error categorization
    */
-  testJavaScriptErrors() {
+  testJavaScriptErrors(): void {
     console.log('🧪 Testing JavaScript Errors...');
     
     // Test 1: Reference Error
@@ -83,17 +99,17 @@ export class MonitoringTestScenarios {
    * SCENARIO 2: Network Request Errors
    * Tests: API failures, timeouts, CORS errors, HTTP status codes
    */
-  testNetworkErrors() {
+  testNetworkErrors(): void {
     console.log('🌐 Testing Network Request Errors...');
 
     // Test 1: 404 Error
     setTimeout(() => {
       this.tracer.startActiveSpan('network-404-error', (span) => {
-        fetch('https://httpbin.org/status/404')
+        fetch(`${this.httpbinUrl}/status/404`)
           .then(response => {
             span.setAttribute('http.status_code', response.status);
             span.setAttribute('http.status_text', response.statusText);
-            span.setAttribute('http.url', 'https://httpbin.org/status/404');
+            span.setAttribute('http.url', `${this.httpbinUrl}/status/404`);
             span.setAttribute('test.scenario', 'network-errors');
             span.setAttribute('test.status_message', 'HTTP 404: Not Found');
             span.setAttribute('environment', environment.environment);
@@ -115,11 +131,11 @@ export class MonitoringTestScenarios {
     // Test 2: 500 Error
     setTimeout(() => {
       this.tracer.startActiveSpan('network-500-error', (span) => {
-        fetch('https://httpbin.org/status/500')
+        fetch(`${this.httpbinUrl}/status/500`)
           .then(response => {
             span.setAttribute('http.status_code', response.status);
             span.setAttribute('http.status_text', response.statusText);
-            span.setAttribute('http.url', 'https://httpbin.org/status/500');
+            span.setAttribute('http.url', `${this.httpbinUrl}/status/500`);
             span.setAttribute('test.scenario', 'network-errors');
             span.setAttribute('test.status_message', 'HTTP 500: Internal Server Error');
             span.setAttribute('environment', environment.environment);
@@ -135,7 +151,7 @@ export class MonitoringTestScenarios {
         const controller = new AbortController();
         setTimeout(() => controller.abort(), 1000);
 
-        fetch('https://httpbin.org/delay/10', { signal: controller.signal })
+        fetch(`${this.httpbinUrl}/delay/10`, { signal: controller.signal })
           .then(response => response.json())
           .catch(error => {
             const err = error as any;
@@ -155,7 +171,7 @@ export class MonitoringTestScenarios {
     // Test 4: CORS Error
     setTimeout(() => {
       this.tracer.startActiveSpan('network-cors-error', (span) => {
-        fetch('https://api.github.com/users/nonexistentuser123456789')
+        fetch(`${this.githubUrl}/users/nonexistentuser123456789`)
           .then(response => {
             if (!response.ok) {
               span.setAttribute('http.status_code', response.status);
@@ -184,7 +200,7 @@ export class MonitoringTestScenarios {
    * SCENARIO 3: Performance Issues
    * Tests: Slow operations, memory leaks, long-running tasks
    */
-  testPerformanceIssues() {
+  testPerformanceIssues(): void {
     console.log('⚡ Testing Performance Issues...');
 
     // Test 1: Slow Operation
@@ -266,7 +282,7 @@ export class MonitoringTestScenarios {
    * SCENARIO 4: User Interaction Issues
    * Tests: Slow UI responses, unresponsive buttons, form validation errors
    */
-  testUserInteractionIssues() {
+  testUserInteractionIssues(): void {
     console.log('👆 Testing User Interaction Issues...');
 
     // Test 1: Slow Button Response
@@ -293,7 +309,7 @@ export class MonitoringTestScenarios {
     setTimeout(() => {
       this.tracer.startActiveSpan('form-validation-error', (span) => {
         // Simulate form validation error
-        const formData = {
+        const formData: FormData = {
           email: 'invalid-email',
           password: '123', // Too short
           age: 'abc' // Invalid number
@@ -356,7 +372,7 @@ export class MonitoringTestScenarios {
    * SCENARIO 5: Angular-Specific Issues
    * Tests: Change detection problems, component errors, service failures
    */
-  testAngularSpecificIssues() {
+  testAngularSpecificIssues(): void {
     console.log('🅰️ Testing Angular-Specific Issues...');
 
     // Test 1: Change Detection Cycle Issues
@@ -450,7 +466,7 @@ export class MonitoringTestScenarios {
    * SCENARIO 6: Business Logic Errors
    * Tests: Data processing errors, calculation mistakes, business rule violations
    */
-  testBusinessLogicErrors() {
+  testBusinessLogicErrors(): void {
     console.log('💼 Testing Business Logic Errors...');
 
     // Test 1: Data Processing Error
@@ -536,17 +552,17 @@ export class MonitoringTestScenarios {
    * SCENARIO 7: Success Scenarios
    * Tests: Normal operations, successful API calls, good performance
    */
-  testSuccessScenarios() {
+  testSuccessScenarios(): void {
     console.log('✅ Testing Success Scenarios...');
 
     // Test 1: Successful API Call
     setTimeout(() => {
       this.tracer.startActiveSpan('successful-api-call', (span) => {
-        fetch('https://httpbin.org/status/200')
+        fetch(`${this.httpbinUrl}/status/200`)
           .then(response => {
             span.setAttribute('http.status_code', response.status);
             span.setAttribute('http.status_text', response.statusText);
-            span.setAttribute('http.url', 'https://httpbin.org/status/200');
+            span.setAttribute('http.url', `${this.httpbinUrl}/status/200`);
             span.setAttribute('test.scenario', 'success-scenarios');
             span.setAttribute('test.status_message', 'API call successful');
             span.setAttribute('environment', environment.environment);
@@ -601,7 +617,7 @@ export class MonitoringTestScenarios {
   /**
    * Run all test scenarios
    */
-  runAllTests() {
+  runAllTests(): void {
     console.log('🚀 Starting All Monitoring Test Scenarios...');
     console.log('📊 Check your Last9 dashboard for traces!');
     
@@ -618,7 +634,7 @@ export class MonitoringTestScenarios {
   /**
    * Run specific test scenario
    */
-  runTest(testName: string) {
+  runTest(testName: string): void {
     switch (testName) {
       case 'javascript-errors':
         this.testJavaScriptErrors();

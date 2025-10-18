@@ -2,6 +2,15 @@ import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { monitoringTests } from './test-scenarios';
 
+type TestScenario = 
+  | 'javascript-errors'
+  | 'network-errors'
+  | 'performance-issues'
+  | 'user-interaction-issues'
+  | 'angular-specific-issues'
+  | 'business-logic-errors'
+  | 'success-scenarios';
+
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet],
@@ -9,38 +18,69 @@ import { monitoringTests } from './test-scenarios';
   styleUrl: './app.css'
 })
 export class App {
-  protected title = 'last9-angular-sample';
+  protected readonly title = 'last9-angular-sample';
 
-  // Test scenario methods
-  runAllTests() {
+  /**
+   * Run all monitoring test scenarios
+   */
+  runAllTests(): void {
     monitoringTests.runAllTests();
   }
 
-  runJavaScriptErrors() {
-    monitoringTests.runTest('javascript-errors');
+  /**
+   * Run JavaScript error test scenarios
+   */
+  runJavaScriptErrors(): void {
+    this.runTest('javascript-errors');
   }
 
-  runNetworkErrors() {
-    monitoringTests.runTest('network-errors');
+  /**
+   * Run network error test scenarios
+   */
+  runNetworkErrors(): void {
+    this.runTest('network-errors');
   }
 
-  runPerformanceIssues() {
-    monitoringTests.runTest('performance-issues');
+  /**
+   * Run performance issue test scenarios
+   */
+  runPerformanceIssues(): void {
+    this.runTest('performance-issues');
   }
 
-  runUserInteractionIssues() {
-    monitoringTests.runTest('user-interaction-issues');
+  /**
+   * Run user interaction issue test scenarios
+   */
+  runUserInteractionIssues(): void {
+    this.runTest('user-interaction-issues');
   }
 
-  runAngularSpecificIssues() {
-    monitoringTests.runTest('angular-specific-issues');
+  /**
+   * Run Angular-specific issue test scenarios
+   */
+  runAngularSpecificIssues(): void {
+    this.runTest('angular-specific-issues');
   }
 
-  runBusinessLogicErrors() {
-    monitoringTests.runTest('business-logic-errors');
+  /**
+   * Run business logic error test scenarios
+   */
+  runBusinessLogicErrors(): void {
+    this.runTest('business-logic-errors');
   }
 
-  runSuccessScenarios() {
-    monitoringTests.runTest('success-scenarios');
+  /**
+   * Run success scenario tests
+   */
+  runSuccessScenarios(): void {
+    this.runTest('success-scenarios');
+  }
+
+  /**
+   * Run a specific test scenario
+   * @param scenario - The test scenario to run
+   */
+  private runTest(scenario: TestScenario): void {
+    monitoringTests.runTest(scenario);
   }
 }
