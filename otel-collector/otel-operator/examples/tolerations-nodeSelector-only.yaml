@@ -1,0 +1,27 @@
+# Example: NodeSelector Only (No Taints Required)
+#
+# Use case: You want to run components on specific nodes but your nodes are NOT tainted
+# This is useful when you have labeled nodes for organization but no taints
+#
+# This example shows you can use the tolerations feature JUST for nodeSelector
+# without requiring any taints on your cluster
+#
+# Usage:
+#   1. Label your nodes (no tainting required):
+#      kubectl label nodes node1 node2 monitoring=true
+#
+#   2. Run installation:
+#      ./last9-otel-setup.sh tolerations-file=examples/tolerations-nodeSelector-only.yaml \
+#        token="xxx" endpoint="xxx" monitoring-endpoint="xxx" username="xxx" password="xxx"
+#
+# Note: If you don't have taints, you can leave tolerations as empty array
+
+# No tolerations needed if nodes are not tainted
+tolerations: []
+
+# Only use nodeSelector to target specific nodes
+nodeSelector:
+  monitoring: "true"
+
+# node-exporter should run on ALL nodes (no restrictions)
+nodeExporterTolerations: []

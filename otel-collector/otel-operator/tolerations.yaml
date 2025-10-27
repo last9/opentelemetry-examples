@@ -1,0 +1,5 @@
+tolerations:
+  - key: "env"
+    operator: "Equal"
+    value: "production"
+    effect: "NoExecute"
