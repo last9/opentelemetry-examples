@@ -48,6 +48,52 @@ chmod +x last9-otel-setup.sh
 ./last9-otel-setup.sh monitoring-only monitoring-endpoint="your-metrics-endpoint" username="your-username" password="your-password"
 ```
 
+---
+
+## 🌍 Environment Configuration (Optional)
+
+```bash
+# Combined with monitoring and tolerations
+./last9-otel-setup.sh \
+  token="your-token" \
+  endpoint="your-endpoint" \
+  monitoring-endpoint="your-metrics-endpoint" \
+  username="your-username" \
+  password="your-password" \
+  env=production
+```
+
+---
+
+## 🎯 Advanced (Optional): Kubernetes Tolerations and NodeSelector
+
+If your nodes **ARE tainted**, you need both tolerations and nodeSelector:
+
+```yaml
+# tolerations.yaml
+tolerations:
+  - key: "monitoring"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+nodeSelector:
+  monitoring: "true"
+
+nodeExporterTolerations:
+  - operator: "Exists"
+```
+
+**Usage:**
+```bash
+
+# Run installation (same command as above)
+./last9-otel-setup.sh \
+  tolerations-file=tolerations.yaml \
+  token="your-token" ...
+```
+
+---
 
 ### Step 2: Verify Installation
 

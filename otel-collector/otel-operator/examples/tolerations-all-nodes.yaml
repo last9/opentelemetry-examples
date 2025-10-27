@@ -1,0 +1,24 @@
+# Example 2: Run on ALL nodes including control-plane/master
+#
+# Use case: Run monitoring on all nodes, including control-plane/master nodes
+# This is useful for complete cluster observability
+#
+# Usage:
+#   ./last9-otel-setup.sh tolerations-file=examples/tolerations-all-nodes.yaml \
+#     token="xxx" endpoint="xxx" monitoring-endpoint="xxx" username="xxx" password="xxx"
+
+# Tolerate both control-plane and master taints (covers different Kubernetes versions)
+tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
+  - key: "node-role.kubernetes.io/master"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+# No node selector - run anywhere
+nodeSelector: {}
+
+# node-exporter tolerates everything to run on all nodes
+nodeExporterTolerations:
+  - operator: "Exists"

@@ -54,4 +54,25 @@ spec:
           value: "none"
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: "deployment.environment=local"
-
+  python:
+      env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector-service.last9.svc.cluster.local:4318
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+      - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+        value: "512"
+      - name: OTEL_BSP_EXPORT_TIMEOUT
+        value: "2"
+      - name: OTEL_BSP_SCHEDULE_DELAY
+        value: "1"
+      - name: OTEL_EXPORTER_OTLP_COMPRESSION
+        value: gzip
+      - name: OTEL_EXPORTER_OTLP_TIMEOUT
+        value: "10"
+      - name: OTEL_LOGS_EXPORTER
+        value: none
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: deployment.environment=local
+      - name: OTEL_PYTHON_DISABLED_INSTRUMENTATIONS
+        value: system-metrics

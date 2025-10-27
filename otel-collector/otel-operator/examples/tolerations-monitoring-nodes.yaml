@@ -1,0 +1,24 @@
+# Example 1: Run on dedicated monitoring nodes
+#
+# Use case: You have nodes with taint monitoring=true:NoSchedule
+# All OpenTelemetry and monitoring components will run only on these nodes
+#
+# Usage:
+#   ./last9-otel-setup.sh tolerations-file=examples/tolerations-monitoring-nodes.yaml \
+#     token="xxx" endpoint="xxx" monitoring-endpoint="xxx" username="xxx" password="xxx"
+
+# Applied to: Operator, Collector, Prometheus, Kube-State-Metrics, Prometheus Operator
+tolerations:
+  - key: "monitoring"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Node selector to ensure pods only run on monitoring nodes
+nodeSelector:
+  monitoring: "true"
+
+# node-exporter needs to run on ALL nodes (not just monitoring nodes)
+# This ensures metrics are collected from every node in the cluster
+nodeExporterTolerations:
+  - operator: "Exists"

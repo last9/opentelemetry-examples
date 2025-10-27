@@ -1,0 +1,40 @@
+# Example 4: Multiple tolerations for complex scenarios
+#
+# Use case: Mixed node types with multiple taints
+# Components need to tolerate multiple taints to schedule properly
+#
+# Usage:
+#   ./last9-otel-setup.sh tolerations-file=examples/tolerations-multi-taint.yaml \
+#     token="xxx" endpoint="xxx" monitoring-endpoint="xxx" username="xxx" password="xxx"
+
+# Multiple tolerations for different scenarios
+tolerations:
+  # Monitoring nodes
+  - key: "monitoring"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+  # Control plane nodes
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+  # GPU nodes (if monitoring GPU workloads)
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+  # NoExecute for critical operations
+  - key: "dedicated"
+    operator: "Equal"
+    value: "monitoring"
+    effect: "NoExecute"
+
+# Target monitoring nodes specifically
+nodeSelector:
+  monitoring: "true"
+
+# node-exporter needs to run everywhere for complete visibility
+nodeExporterTolerations:
+  - operator: "Exists"

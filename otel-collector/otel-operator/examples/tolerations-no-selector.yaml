@@ -1,0 +1,22 @@
+# Example 5: Tolerations without nodeSelector
+#
+# Use case: Tolerate taints but don't restrict to specific nodes
+# Useful when you have taints for resource guarantees but want flexible scheduling
+#
+# Usage:
+#   ./last9-otel-setup.sh tolerations-file=examples/tolerations-no-selector.yaml \
+#     token="xxx" endpoint="xxx" monitoring-endpoint="xxx" username="xxx" password="xxx"
+
+# Tolerate the taint but allow scheduling on any node
+tolerations:
+  - key: "workload"
+    operator: "Equal"
+    value: "system"
+    effect: "NoSchedule"
+
+# Empty nodeSelector means no restrictions, Kubernetes will schedule anywhere
+nodeSelector: {}
+
+# node-exporter tolerates all taints
+nodeExporterTolerations:
+  - operator: "Exists"

@@ -47,6 +47,9 @@ LAST9_PASSWORD=""
 OPERATOR_ONLY=false
 LOGS_ONLY=false
 MONITORING_ONLY=false
+TOLERATIONS_FILE=""
+USE_YQ=false
+DEPLOYMENT_ENV=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -55,20 +58,602 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 # Helper function to escape special characters for sed
 escape_for_sed() {
     printf '%s\n' "$1" | sed 's:[[\.*^$()+?{|/]:\\&:g'
+}
+
+# Check if yq is available
+check_yq_available() {
+    if command -v yq >/dev/null 2>&1; then
+        USE_YQ=true
+        log_info "✓ yq found: $(yq --version 2>&1 | head -n1)"
+    else
+        USE_YQ=false
+        log_warn "⚠ yq not found - using awk/sed fallback for YAML parsing"
+        log_warn "  For better reliability, install yq:"
+        log_warn "  - macOS: brew install yq"
+        log_warn "  - Linux: wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && chmod +x /usr/local/bin/yq"
+    fi
+}
+
+# Load and parse tolerations from YAML file
+load_tolerations_from_file() {
+    local file_path="$1"
+
+    log_info "Loading tolerations from file: $file_path"
+
+    # Validate file exists and is readable
+    if [ ! -f "$file_path" ]; then
+        log_error "Tolerations file not found: $file_path"
+        exit 1
+    fi
+
+    if [ ! -r "$file_path" ]; then
+        log_error "Tolerations file is not readable: $file_path"
+        exit 1
+    fi
+
+    # Check for yq
+    check_yq_available
+
+    log_info "✓ Tolerations file loaded successfully"
+
+    # Store the file path for later use
+    export TOLERATIONS_FILE_PATH="$file_path"
+}
+
+# Convert tolerations from YAML to Helm --set format
+convert_tolerations_to_helm_set() {
+    local file_path="$1"
+    local prefix="$2"  # e.g., "" for operator, "manager" for other charts
+    local helm_args=""
+    local path_prefix=""
+
+    # Add dot separator only if prefix is not empty
+    [ -n "$prefix" ] && path_prefix="${prefix}."
+
+    if [ "$USE_YQ" = true ]; then
+        # Use yq to parse YAML and convert to --set format
+        local count=0
+        local tolerations_count=$(yq eval '.tolerations | length' "$file_path" 2>/dev/null || echo "0")
+
+        if [ "$tolerations_count" != "0" ] && [ "$tolerations_count" != "null" ]; then
+            while [ $count -lt $tolerations_count ]; do
+                local key=$(yq eval ".tolerations[$count].key" "$file_path" 2>/dev/null)
+                local operator=$(yq eval ".tolerations[$count].operator" "$file_path" 2>/dev/null)
+                local value=$(yq eval ".tolerations[$count].value" "$file_path" 2>/dev/null)
+                local effect=$(yq eval ".tolerations[$count].effect" "$file_path" 2>/dev/null)
+
+                if [ "$key" != "null" ]; then
+                    helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].key=$key"
+                    helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].operator=$operator"
+                    [ "$value" != "null" ] && helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].value=$value"
+                    [ "$effect" != "null" ] && helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].effect=$effect"
+                fi
+
+                count=$((count + 1))
+            done
+        fi
+    else
+        # Awk fallback for parsing YAML
+        log_warn "Using awk fallback for tolerations parsing"
+
+        local in_tolerations=false
+        local count=0
+        local current_key=""
+        local current_operator=""
+        local current_value=""
+        local current_effect=""
+
+        while IFS= read -r line; do
+            # Check if we're in the tolerations section
+            if echo "$line" | grep -q "^tolerations:"; then
+                in_tolerations=true
+                continue
+            fi
+
+            # Exit tolerations section if we hit another top-level key
+            if echo "$line" | grep -q "^[a-zA-Z]" && [ "$in_tolerations" = true ]; then
+                in_tolerations=false
+            fi
+
+            if [ "$in_tolerations" = true ]; then
+                # Parse toleration entry
+                if echo "$line" | grep -q "^  - key:"; then
+                    # Save previous entry if exists
+                    if [ -n "$current_key" ]; then
+                        helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].key=$current_key"
+                        helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].operator=$current_operator"
+                        [ -n "$current_value" ] && helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].value=$current_value"
+                        [ -n "$current_effect" ] && helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].effect=$current_effect"
+                        count=$((count + 1))
+                    fi
+
+                    # Start new entry
+                    current_key=$(echo "$line" | sed -E 's/.*key: *"?([^"]*)"?.*/\1/')
+                    current_operator=""
+                    current_value=""
+                    current_effect=""
+                elif echo "$line" | grep -q "operator:"; then
+                    current_operator=$(echo "$line" | sed -E 's/.*operator: *"?([^"]*)"?.*/\1/')
+                elif echo "$line" | grep -q "value:"; then
+                    current_value=$(echo "$line" | sed -E 's/.*value: *"?([^"]*)"?.*/\1/')
+                elif echo "$line" | grep -q "effect:"; then
+                    current_effect=$(echo "$line" | sed -E 's/.*effect: *"?([^"]*)"?.*/\1/')
+                fi
+            fi
+        done < "$file_path"
+
+        # Save last entry
+        if [ -n "$current_key" ]; then
+            helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].key=$current_key"
+            helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].operator=$current_operator"
+            [ -n "$current_value" ] && helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].value=$current_value"
+            [ -n "$current_effect" ] && helm_args="$helm_args --set-string ${path_prefix}tolerations[$count].effect=$current_effect"
+        fi
+    fi
+
+    echo "$helm_args"
+}
+
+# Convert nodeSelector from YAML to Helm --set format
+convert_node_selector_to_helm_set() {
+    local file_path="$1"
+    local prefix="$2"  # e.g., "" for operator, "manager" for other charts
+    local helm_args=""
+    local path_prefix=""
+
+    # Add dot separator only if prefix is not empty
+    [ -n "$prefix" ] && path_prefix="${prefix}."
+
+    if [ "$USE_YQ" = true ]; then
+        # Check if nodeSelector exists and is not empty
+        local has_selector=$(yq eval '.nodeSelector | length' "$file_path" 2>/dev/null || echo "0")
+
+        if [ "$has_selector" != "0" ] && [ "$has_selector" != "null" ]; then
+            # Get all keys
+            local keys=$(yq eval '.nodeSelector | keys | .[]' "$file_path" 2>/dev/null)
+
+            while IFS= read -r key; do
+                if [ -n "$key" ]; then
+                    local value=$(yq eval ".nodeSelector.\"$key\"" "$file_path" 2>/dev/null)
+                    # Escape special characters in key for Helm --set
+                    local escaped_key=$(echo "$key" | sed 's/\./\\./g')
+                    # Use --set-string to force string interpretation (prevents boolean conversion)
+                    helm_args="$helm_args --set-string ${path_prefix}nodeSelector.${escaped_key}=$value"
+                fi
+            done <<< "$keys"
+        fi
+    else
+        # Awk fallback for nodeSelector parsing
+        local in_selector=false
+
+        while IFS= read -r line; do
+            if echo "$line" | grep -q "^nodeSelector:"; then
+                in_selector=true
+                # Check if it's empty object
+                if echo "$line" | grep -q "nodeSelector: {}"; then
+                    break
+                fi
+                continue
+            fi
+
+            # Exit nodeSelector section
+            if echo "$line" | grep -q "^[a-zA-Z]" && [ "$in_selector" = true ]; then
+                break
+            fi
+
+            if [ "$in_selector" = true ]; then
+                # Parse key: value
+                if echo "$line" | grep -q ":"; then
+                    local key=$(echo "$line" | sed -E 's/^ *([^:]+):.*/\1/' | tr -d '"')
+                    local value=$(echo "$line" | sed -E 's/.*: *"?([^"]*)"?.*/\1/')
+
+                    if [ -n "$key" ]; then
+                        local escaped_key=$(echo "$key" | sed 's/\./\\./g')
+                        # Use --set-string to force string interpretation (prevents boolean conversion)
+                        helm_args="$helm_args --set-string ${path_prefix}nodeSelector.${escaped_key}=$value"
+                    fi
+                fi
+            fi
+        done < "$file_path"
+    fi
+
+    echo "$helm_args"
+}
+
+# Apply tolerations to collector values file
+apply_tolerations_to_collector_values() {
+    local values_file="$1"
+    local tolerations_file="$TOLERATIONS_FILE_PATH"
+
+    log_info "Applying tolerations to collector values file: $values_file"
+
+    # Create backup
+    cp "$values_file" "${values_file}.backup-tolerations"
+    log_info "Created backup: ${values_file}.backup-tolerations"
+
+    if [ "$USE_YQ" = true ]; then
+        # Use yq for precise YAML manipulation
+
+        # Apply tolerations
+        local has_tolerations=$(yq eval '.tolerations | length' "$tolerations_file" 2>/dev/null || echo "0")
+        if [ "$has_tolerations" != "0" ] && [ "$has_tolerations" != "null" ]; then
+            log_info "Applying tolerations array to collector values..."
+            yq eval-all 'select(fileIndex == 0).tolerations = select(fileIndex == 1).tolerations | select(fileIndex == 0)' \
+                "$values_file" "$tolerations_file" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+        fi
+
+        # Apply nodeSelector
+        local has_selector=$(yq eval '.nodeSelector | length' "$tolerations_file" 2>/dev/null || echo "0")
+        if [ "$has_selector" != "0" ] && [ "$has_selector" != "null" ]; then
+            log_info "Applying nodeSelector to collector values..."
+            yq eval-all 'select(fileIndex == 0).nodeSelector = select(fileIndex == 1).nodeSelector | select(fileIndex == 0)' \
+                "$values_file" "$tolerations_file" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+        fi
+    else
+        # Awk fallback - replace tolerations: [] and nodeSelector: {}
+        log_warn "Using awk fallback for collector values injection"
+
+        # Extract tolerations from file and format as YAML
+        local tolerations_yaml=""
+        local in_tolerations=false
+        while IFS= read -r line; do
+            if echo "$line" | grep -q "^tolerations:"; then
+                in_tolerations=true
+                continue
+            fi
+            if echo "$line" | grep -q "^[a-zA-Z]" && [ "$in_tolerations" = true ]; then
+                break
+            fi
+            if [ "$in_tolerations" = true ]; then
+                tolerations_yaml="${tolerations_yaml}${line}\n"
+            fi
+        done < "$tolerations_file"
+
+        # Replace in values file
+        if [ -n "$tolerations_yaml" ]; then
+            awk -v tol="$tolerations_yaml" '
+            /^tolerations: \[\]/ {
+                print "tolerations:"
+                printf "%s", tol
+                next
+            }
+            {print}
+            ' "$values_file" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+        fi
+
+        # Extract and apply nodeSelector
+        local selector_yaml=""
+        local in_selector=false
+        while IFS= read -r line; do
+            if echo "$line" | grep -q "^nodeSelector:"; then
+                in_selector=true
+                if echo "$line" | grep -q "nodeSelector: {}"; then
+                    break
+                fi
+                continue
+            fi
+            if echo "$line" | grep -q "^[a-zA-Z]" && [ "$in_selector" = true ]; then
+                break
+            fi
+            if [ "$in_selector" = true ]; then
+                selector_yaml="${selector_yaml}${line}\n"
+            fi
+        done < "$tolerations_file"
+
+        if [ -n "$selector_yaml" ]; then
+            awk -v sel="$selector_yaml" '
+            /^nodeSelector: \{\}/ {
+                print "nodeSelector:"
+                printf "%s", sel
+                next
+            }
+            {print}
+            ' "$values_file" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+        fi
+    fi
+
+    log_info "✓ Tolerations applied to collector values file"
+}
+
+# Apply tolerations to monitoring values file
+apply_tolerations_to_monitoring_values() {
+    local values_file="$1"
+    local tolerations_file="$TOLERATIONS_FILE_PATH"
+
+    log_info "Applying tolerations to monitoring values file: $values_file"
+
+    # Create backup
+    cp "$values_file" "${values_file}.backup-tolerations"
+    log_info "Created backup: ${values_file}.backup-tolerations"
+
+    if [ "$USE_YQ" = true ]; then
+        # Apply to Prometheus
+        local has_tolerations=$(yq eval '.tolerations | length' "$tolerations_file" 2>/dev/null || echo "0")
+        if [ "$has_tolerations" != "0" ] && [ "$has_tolerations" != "null" ]; then
+            log_info "Applying tolerations to prometheus.prometheusSpec..."
+            yq eval ".prometheus.prometheusSpec.tolerations = $(yq eval '.tolerations' "$tolerations_file")" -i "$values_file"
+
+            log_info "Applying tolerations to kubeStateMetrics..."
+            yq eval ".kubeStateMetrics.tolerations = $(yq eval '.tolerations' "$tolerations_file")" -i "$values_file"
+
+            log_info "Applying tolerations to prometheusOperator..."
+            yq eval ".prometheusOperator.tolerations = $(yq eval '.tolerations' "$tolerations_file")" -i "$values_file"
+        fi
+
+        # Apply nodeSelector
+        local has_selector=$(yq eval '.nodeSelector | length' "$tolerations_file" 2>/dev/null || echo "0")
+        if [ "$has_selector" != "0" ] && [ "$has_selector" != "null" ]; then
+            log_info "Applying nodeSelector to prometheus.prometheusSpec..."
+            yq eval ".prometheus.prometheusSpec.nodeSelector = $(yq eval '.nodeSelector' "$tolerations_file")" -i "$values_file"
+
+            log_info "Applying nodeSelector to kubeStateMetrics..."
+            yq eval ".kubeStateMetrics.nodeSelector = $(yq eval '.nodeSelector' "$tolerations_file")" -i "$values_file"
+
+            log_info "Applying nodeSelector to prometheusOperator..."
+            yq eval ".prometheusOperator.nodeSelector = $(yq eval '.nodeSelector' "$tolerations_file")" -i "$values_file"
+        fi
+
+        # Special handling for node-exporter - check for nodeExporterTolerations
+        local has_node_exporter_tol=$(yq eval '.nodeExporterTolerations | length' "$tolerations_file" 2>/dev/null || echo "0")
+        if [ "$has_node_exporter_tol" != "0" ] && [ "$has_node_exporter_tol" != "null" ]; then
+            log_info "Applying special nodeExporterTolerations..."
+            yq eval ".nodeExporter.tolerations = $(yq eval '.nodeExporterTolerations' "$tolerations_file")" -i "$values_file"
+        else
+            # Default: operator Exists (run on all nodes)
+            log_info "Applying default permissive tolerations to node-exporter (operator: Exists)..."
+            yq eval '.nodeExporter.tolerations = [{"operator": "Exists"}]' -i "$values_file"
+        fi
+    else
+        # Awk fallback - using sed for simpler and more reliable injection
+        log_warn "Using awk/sed fallback for monitoring values injection"
+
+        # Create temp file for extracted sections
+        local temp_dir=$(mktemp -d)
+        local tol_file="$temp_dir/tolerations.txt"
+        local ns_file="$temp_dir/nodeselector.txt"
+        local ne_tol_file="$temp_dir/ne_tolerations.txt"
+
+        # Extract sections from tolerations file
+        awk '/^tolerations:/{flag=1; next} /^[a-zA-Z]/{flag=0} flag && NF' "$tolerations_file" > "$tol_file"
+        awk '/^nodeSelector:/{flag=1; next} /^[a-zA-Z]/{flag=0} flag && NF && !/^#/' "$tolerations_file" > "$ns_file"
+        awk '/^nodeExporterTolerations:/{flag=1; next} /^[a-zA-Z]/{flag=0} flag && NF' "$tolerations_file" > "$ne_tol_file"
+
+        # Apply to prometheusOperator using sed
+        if [ -s "$tol_file" ]; then
+            log_info "Injecting tolerations to prometheusOperator..."
+            # Find prometheusOperator: and insert tolerations after it
+            sed '/^prometheusOperator:/a\
+  tolerations:
+' "$values_file" > "${values_file}.tmp1"
+            # Now insert the actual toleration content
+            awk -v tol_file="$tol_file" '
+                /^prometheusOperator:/ {print; getline; print
+                    while ((getline line < tol_file) > 0) {
+                        print "  " line
+                    }
+                    close(tol_file)
+                    next
+                }
+                {print}
+            ' "${values_file}.tmp1" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+            rm -f "${values_file}.tmp1"
+        fi
+
+        # Apply to kubeStateMetrics
+        if [ -s "$tol_file" ]; then
+            log_info "Injecting tolerations to kubeStateMetrics..."
+            sed '/^kubeStateMetrics:/a\
+  tolerations:
+' "$values_file" > "${values_file}.tmp1"
+            awk -v tol_file="$tol_file" '
+                /^kubeStateMetrics:/ {print; getline; print
+                    while ((getline line < tol_file) > 0) {
+                        print "  " line
+                    }
+                    close(tol_file)
+                    next
+                }
+                {print}
+            ' "${values_file}.tmp1" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+            rm -f "${values_file}.tmp1"
+        fi
+
+        # Apply nodeSelector to prometheusOperator
+        if [ -s "$ns_file" ]; then
+            log_info "Injecting nodeSelector to prometheusOperator..."
+            sed '/^prometheusOperator:/a\
+  nodeSelector:
+' "$values_file" > "${values_file}.tmp1"
+            awk -v ns_file="$ns_file" '
+                /^prometheusOperator:/ {print; getline; print
+                    while ((getline line < ns_file) > 0) {
+                        print "  " line
+                    }
+                    close(ns_file)
+                    next
+                }
+                {print}
+            ' "${values_file}.tmp1" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+            rm -f "${values_file}.tmp1"
+        fi
+
+        # Apply nodeSelector to kubeStateMetrics
+        if [ -s "$ns_file" ]; then
+            log_info "Injecting nodeSelector to kubeStateMetrics..."
+            sed '/^kubeStateMetrics:/a\
+  nodeSelector:
+' "$values_file" > "${values_file}.tmp1"
+            awk -v ns_file="$ns_file" '
+                /^kubeStateMetrics:/ {print; getline; print
+                    while ((getline line < ns_file) > 0) {
+                        print "  " line
+                    }
+                    close(ns_file)
+                    next
+                }
+                {print}
+            ' "${values_file}.tmp1" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+            rm -f "${values_file}.tmp1"
+        fi
+
+        # Apply node-exporter tolerations
+        if [ -s "$ne_tol_file" ]; then
+            log_info "Injecting nodeExporterTolerations..."
+            sed '/^nodeExporter:/a\
+  tolerations:
+' "$values_file" > "${values_file}.tmp1"
+            awk -v ne_file="$ne_tol_file" '
+                /^nodeExporter:/ {print; getline; print
+                    while ((getline line < ne_file) > 0) {
+                        print "  " line
+                    }
+                    close(ne_file)
+                    next
+                }
+                {print}
+            ' "${values_file}.tmp1" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+            rm -f "${values_file}.tmp1"
+        else
+            log_info "Applying default permissive tolerations to node-exporter (operator: Exists)..."
+            sed '/^nodeExporter:/a\
+  tolerations:\
+    - operator: Exists
+' "$values_file" > "${values_file}.tmp"
+            mv "${values_file}.tmp" "$values_file"
+        fi
+
+        # Cleanup temp files
+        rm -rf "$temp_dir"
+
+        log_info "✓ Awk/sed fallback completed"
+    fi
+
+    log_info "✓ Tolerations applied to monitoring values file"
+}
+
+# Function to patch monitoring components with tolerations directly via kubectl
+# This handles components that don't properly inherit tolerations from Helm values
+patch_monitoring_components_tolerations() {
+    local tolerations_file="$TOLERATIONS_FILE_PATH"
+
+    if [ -z "$tolerations_file" ]; then
+        log_info "No tolerations file provided, skipping component patching"
+        return 0
+    fi
+
+    log_info "Patching monitoring components with tolerations from Kubernetes API..."
+
+    # Extract tolerations in JSON format for kubectl patch
+    local tolerations_json=""
+
+    if [ "$USE_YQ" = true ]; then
+        # Use yq to convert YAML tolerations to JSON
+        tolerations_json=$(yq eval '.tolerations' "$tolerations_file" -o=json 2>/dev/null)
+        if [ "$tolerations_json" = "null" ] || [ -z "$tolerations_json" ]; then
+            log_warn "No tolerations found in file, skipping component patching"
+            return 0
+        fi
+    else
+        # Awk fallback - build JSON manually
+        log_warn "Using awk fallback to build JSON patch"
+
+        local temp_file=$(mktemp)
+        awk '/^tolerations:/{flag=1; next} /^[a-zA-Z]/{flag=0} flag && NF' "$tolerations_file" > "$temp_file"
+
+        if [ ! -s "$temp_file" ]; then
+            log_warn "No tolerations found in file, skipping component patching"
+            rm -f "$temp_file"
+            return 0
+        fi
+
+        # Build JSON array from YAML tolerations
+        tolerations_json="["
+        local first=true
+        local current_obj=""
+
+        while IFS= read -r line; do
+            if echo "$line" | grep -q "^  - key:"; then
+                # Start of new toleration object
+                if [ "$first" = false ]; then
+                    tolerations_json="${tolerations_json},"
+                fi
+                first=false
+                local key=$(echo "$line" | sed -E 's/.*key: *"?([^"]*)"?.*/\1/')
+                current_obj="{\"key\":\"$key\""
+            elif echo "$line" | grep -q "operator:"; then
+                local op=$(echo "$line" | sed -E 's/.*operator: *"?([^"]*)"?.*/\1/')
+                current_obj="${current_obj},\"operator\":\"$op\""
+            elif echo "$line" | grep -q "value:"; then
+                local val=$(echo "$line" | sed -E 's/.*value: *"?([^"]*)"?.*/\1/')
+                current_obj="${current_obj},\"value\":\"$val\""
+            elif echo "$line" | grep -q "effect:"; then
+                local eff=$(echo "$line" | sed -E 's/.*effect: *"?([^"]*)"?.*/\1/')
+                current_obj="${current_obj},\"effect\":\"$eff\"}"
+                tolerations_json="${tolerations_json}${current_obj}"
+            fi
+        done < "$temp_file"
+
+        tolerations_json="${tolerations_json}]"
+        rm -f "$temp_file"
+    fi
+
+    log_info "Tolerations JSON: $tolerations_json"
+
+    # Wait a bit for resources to be created by Helm
+    log_info "Waiting for monitoring resources to be created..."
+    sleep 5
+
+    # Patch kube-state-metrics Deployment
+    log_info "Patching kube-state-metrics Deployment..."
+    if kubectl get deployment last9-k8s-monitoring-kube-state-metrics -n "$NAMESPACE" &>/dev/null; then
+        kubectl patch deployment last9-k8s-monitoring-kube-state-metrics -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
+        log_info "✓ kube-state-metrics Deployment patched"
+    else
+        log_warn "kube-state-metrics Deployment not found, skipping"
+    fi
+
+    # Patch PrometheusAgent CRD
+    log_info "Patching PrometheusAgent CRD..."
+    if kubectl get prometheusagent last9-k8s-monitoring-kube-prometheus -n "$NAMESPACE" &>/dev/null; then
+        kubectl patch prometheusagent last9-k8s-monitoring-kube-prometheus -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
+        log_info "✓ PrometheusAgent CRD patched"
+    else
+        log_warn "PrometheusAgent CRD not found, skipping"
+    fi
+
+    # Wait for pods to be recreated and ready
+    log_info "Waiting for monitoring pods to be ready..."
+    sleep 10
+
+    # Check pod status
+    log_info "Monitoring pod status:"
+    kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=kube-state-metrics" 2>/dev/null || true
+    kubectl get pods -n "$NAMESPACE" | grep "prom-agent" 2>/dev/null || true
+
+    log_info "✓ Monitoring components patched with tolerations"
 }
 
 # Parse named arguments
@@ -126,6 +711,12 @@ parse_arguments() {
             password=*)
                 LAST9_PASSWORD="${arg#*=}"
                 ;;
+            tolerations-file=*)
+                TOLERATIONS_FILE="${arg#*=}"
+                ;;
+            env=*)
+                DEPLOYMENT_ENV="${arg#*=}"
+                ;;
             --help|-h)
                 show_help
                 exit 0
@@ -150,6 +741,16 @@ show_examples() {
     echo "  $0 monitoring-only monitoring-endpoint=\"your-monitoring-endpoint\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
+    echo "With Environment Override:"
+    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=production  # Set deployment.environment=production"
+    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=staging     # Set deployment.environment=staging"
+    echo ""
+    echo "With Tolerations and NodeSelector:"
+    echo "  $0 tolerations-file=examples/tolerations-monitoring-nodes.yaml token=\"xxx\" endpoint=\"xxx\" ...  # Run on monitoring nodes"
+    echo "  $0 tolerations-file=examples/tolerations-all-nodes.yaml operator-only token=\"xxx\" endpoint=\"xxx\"  # Operator on all nodes including control-plane"
+    echo ""
+    echo "See examples/ directory for more tolerations configurations"
+    echo ""
 }
 
 # Show help function
@@ -162,6 +763,32 @@ show_help() {
     echo "  $0 logs-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Logs - Install only Collector for logs (no operator)"
     echo "  $0 monitoring-only monitoring-endpoint=\"your-monitoring-endpoint\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
+    echo ""
+    echo "Advanced Options:"
+    echo "  env=ENVIRONMENT          Override deployment.environment attribute (e.g., production, staging, dev)"
+    echo "                           Updates both collector and auto-instrumentation configurations"
+    echo "                           Default: 'staging' for collector, 'local' for instrumentation"
+    echo ""
+    echo "  tolerations-file=FILE    Apply Kubernetes tolerations and nodeSelector from YAML file"
+    echo "                           Allows running components on tainted nodes (e.g., monitoring nodes, control-plane)"
+    echo "                           See examples/ directory for sample configurations"
+    echo ""
+    echo "Examples with Environment Override:"
+    echo "  # Set environment to production"
+    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=production"
+    echo ""
+    echo "  # Set environment to staging"
+    echo "  $0 operator-only token=\"xxx\" endpoint=\"xxx\" env=staging"
+    echo ""
+    echo "Examples with Tolerations:"
+    echo "  # Run on dedicated monitoring nodes"
+    echo "  $0 tolerations-file=tolerations.yaml token=\"xxx\" endpoint=\"xxx\" ..."
+    echo ""
+    echo "  # Run on all nodes including control-plane/master"
+    echo "  $0 tolerations-file=examples/tolerations-all-nodes.yaml operator-only token=\"xxx\" endpoint=\"xxx\""
+    echo ""
+    echo "  # Run on spot/preemptible instances"
+    echo "  $0 tolerations-file=examples/tolerations-spot-instances.yaml monitoring-only monitoring-endpoint=\"xxx\" ..."
     echo ""
 }
 
@@ -296,10 +923,21 @@ setup_repository() {
     done
     
     log_info "Repository setup completed!"
-    
+
     # Update auth token and endpoint in the values file
     update_auth_token
     update_otel_endpoint
+
+    # Update deployment environment if provided
+    if [ -n "$DEPLOYMENT_ENV" ]; then
+        update_deployment_environment "$DEPLOYMENT_ENV"
+    fi
+
+    # Load and apply tolerations if provided
+    if [ -n "$TOLERATIONS_FILE" ]; then
+        load_tolerations_from_file "$TOLERATIONS_FILE"
+        apply_tolerations_to_collector_values "last9-otel-collector-values.yaml"
+    fi
 }
 
 # Function to update auth token in values file
@@ -409,6 +1047,56 @@ update_otel_endpoint() {
     fi
 }
 
+# Function to update deployment environment in configuration files
+update_deployment_environment() {
+    local env="$1"
+
+    if [ -z "$env" ]; then
+        log_info "No deployment environment specified, using default values"
+        return 0
+    fi
+
+    log_info "Setting deployment.environment to: $env"
+
+    # Update collector values file (last9-otel-collector-values.yaml)
+    if [ -f "last9-otel-collector-values.yaml" ]; then
+        log_info "Updating deployment.environment in collector values file..."
+
+        # Replace deployment.environment value in the set(attributes[...]) line
+        sed -i.tmp "s/deployment\.environment\"], \"[^\"]*\"/deployment.environment\"], \"$env\"/" last9-otel-collector-values.yaml
+        rm -f last9-otel-collector-values.yaml.tmp
+
+        # Verify the change
+        if grep -q "deployment.environment\"], \"$env\"" last9-otel-collector-values.yaml; then
+            log_info "✓ Updated deployment.environment=$env in collector values file"
+        else
+            log_warn "⚠ Could not verify deployment.environment update in collector values file"
+        fi
+    else
+        log_warn "⚠ last9-otel-collector-values.yaml not found, skipping collector environment update"
+    fi
+
+    # Update instrumentation file (instrumentation.yaml)
+    if [ -f "instrumentation.yaml" ]; then
+        log_info "Updating deployment.environment in instrumentation file..."
+
+        # Replace deployment.environment=<value> in all occurrences
+        sed -i.tmp "s/deployment\.environment=[^ \"]*/deployment.environment=$env/g" instrumentation.yaml
+        rm -f instrumentation.yaml.tmp
+
+        # Verify the change
+        if grep -q "deployment.environment=$env" instrumentation.yaml; then
+            log_info "✓ Updated deployment.environment=$env in instrumentation file"
+        else
+            log_warn "⚠ Could not verify deployment.environment update in instrumentation file"
+        fi
+    else
+        log_warn "⚠ instrumentation.yaml not found, skipping instrumentation environment update"
+    fi
+
+    log_info "✓ Deployment environment configuration completed"
+}
+
 # Function to update monitoring endpoint in values file
 update_monitoring_endpoint() {
     log_info "Updating monitoring endpoint placeholder in k8s-monitoring-values.yaml..."
@@ -480,17 +1168,49 @@ setup_helm_repos() {
 # Function to install OpenTelemetry Operator
 install_operator() {
     log_info "Installing OpenTelemetry Operator..."
-    
-    helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
-        --version "$OPERATOR_VERSION" \
-        -n "$NAMESPACE" \
-        --create-namespace \
-        --set "manager.collectorImage.repository=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s" \
-        --set admissionWebhooks.certManager.enabled=false \
-        --set admissionWebhooks.autoGenerateCert.enabled=true
-    
+
+    # Build helm command as array for proper argument handling
+    local helm_args=(
+        "upgrade" "--install"
+        "opentelemetry-operator"
+        "open-telemetry/opentelemetry-operator"
+        "--version" "$OPERATOR_VERSION"
+        "-n" "$NAMESPACE"
+        "--create-namespace"
+        "--set" "manager.collectorImage.repository=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s"
+        "--set" "admissionWebhooks.certManager.enabled=false"
+        "--set" "admissionWebhooks.autoGenerateCert.enabled=true"
+    )
+
+    # Add tolerations and nodeSelector if provided
+    if [ -n "$TOLERATIONS_FILE_PATH" ]; then
+        log_info "Adding tolerations to operator installation..."
+
+        # Note: For operator chart, tolerations and nodeSelector are at root level (no prefix)
+        local tolerations_args=$(convert_tolerations_to_helm_set "$TOLERATIONS_FILE_PATH" "")
+        if [ -n "$tolerations_args" ]; then
+            # Parse --set arguments from tolerations_args string and add to array
+            while IFS= read -r arg; do
+                [ -n "$arg" ] && helm_args+=("$arg")
+            done < <(echo "$tolerations_args" | xargs -n1)
+            log_info "✓ Tolerations added to operator"
+        fi
+
+        local node_selector_args=$(convert_node_selector_to_helm_set "$TOLERATIONS_FILE_PATH" "")
+        if [ -n "$node_selector_args" ]; then
+            # Parse --set arguments from node_selector_args string and add to array
+            while IFS= read -r arg; do
+                [ -n "$arg" ] && helm_args+=("$arg")
+            done < <(echo "$node_selector_args" | xargs -n1)
+            log_info "✓ NodeSelector added to operator"
+        fi
+    fi
+
+    # Execute helm command
+    helm "${helm_args[@]}"
+
     log_info "OpenTelemetry Operator installed!"
-    
+
     # Additional wait for webhook service to be available
     log_info "Waiting for webhook service to be available..."
     sleep 30
@@ -762,7 +1482,16 @@ setup_last9_monitoring() {
     
     # Update monitoring endpoint placeholder
     update_monitoring_endpoint
-    
+
+    # Load and apply tolerations if provided
+    if [ -n "$TOLERATIONS_FILE" ]; then
+        # Load tolerations if not already loaded
+        if [ -z "$TOLERATIONS_FILE_PATH" ]; then
+            load_tolerations_from_file "$TOLERATIONS_FILE"
+        fi
+        apply_tolerations_to_monitoring_values "k8s-monitoring-values.yaml"
+    fi
+
     # Add prometheus-community repo if not already added
     log_info "Adding prometheus-community Helm repository..."
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -777,7 +1506,12 @@ setup_last9_monitoring() {
         --create-namespace
     
     log_info "✓ Last9 K8s monitoring stack deployed successfully!"
-    
+
+    # Patch monitoring components with tolerations if provided
+    if [ -n "$TOLERATIONS_FILE" ]; then
+        patch_monitoring_components_tolerations
+    fi
+
     # Show the deployed resources
     log_info "Monitoring stack resources in last9 namespace:"
     kubectl get pods -n last9 -l "app.kubernetes.io/name=prometheus" 2>/dev/null || true

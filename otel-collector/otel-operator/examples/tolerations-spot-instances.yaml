@@ -1,0 +1,36 @@
+# Example 3: Run on spot/preemptible instances
+#
+# Use case: Cost optimization by running monitoring on cheaper spot instances
+# Covers AWS, Azure, and GCP spot instance taints
+#
+# Usage:
+#   ./last9-otel-setup.sh tolerations-file=examples/tolerations-spot-instances.yaml \
+#     token="xxx" endpoint="xxx" monitoring-endpoint="xxx" username="xxx" password="xxx"
+
+# Tolerate spot instance taints for all major cloud providers
+tolerations:
+  # AWS Spot Instances
+  - key: "eks.amazonaws.com/capacityType"
+    operator: "Equal"
+    value: "SPOT"
+    effect: "NoSchedule"
+
+  # Azure Spot VMs
+  - key: "kubernetes.azure.com/scalesetpriority"
+    operator: "Equal"
+    value: "spot"
+    effect: "NoSchedule"
+
+  # GCP Preemptible VMs
+  - key: "cloud.google.com/gke-preemptible"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Select only spot/preemptible nodes
+nodeSelector:
+  node-lifecycle: "spot"
+
+# node-exporter runs on all nodes including on-demand nodes
+nodeExporterTolerations:
+  - operator: "Exists"
