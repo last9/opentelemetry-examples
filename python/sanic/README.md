@@ -1,6 +1,6 @@
 # Sanic + OpenTelemetry Demo for Last9
 
-Complete working example of Sanic microservices with OpenTelemetry distributed tracing to Last9.
+A complete working example of Sanic microservices with OpenTelemetry distributed tracing to Last9.
 
 ## Features
 
@@ -31,11 +31,11 @@ Complete working example of Sanic microservices with OpenTelemetry distributed t
 pip install -r requirements-otel.txt
 ```
 
-### 2. Configure environment
+### 2. Configure the environment
 
 ```bash
 export OTEL_SERVICE_NAME=service-b
-export OTEL_EXPORTER_OTLP_ENDPOINT=your_last9_endpoint
+export OTEL_EXPORTER_OTLP_ENDPOINT="your_last9_endpoint"
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <your-credentials>"
 ```
 
@@ -51,7 +51,7 @@ Service B runs on http://localhost:8002
 
 ```bash
 export OTEL_SERVICE_NAME=service-a
-export OTEL_EXPORTER_OTLP_ENDPOINT=your_last9_endpoint
+export OTEL_EXPORTER_OTLP_ENDPOINT="your_last9_endpoint"
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <your-credentials>"
 
 python service-a/app.py
@@ -84,13 +84,13 @@ curl http://localhost:8001/health
 ### Service A (Port 8001)
 - `GET /health` - Health check
 - `GET /internal` - Internal endpoint
-- `GET /call-service-b` - Calls service-b
+- `GET /call-service-b` - Calls Service B
 - `GET /call-self` - Calls its own /internal endpoint
-- `GET /call-chain` - Calls both service-b AND itself (full distributed trace)
+- `GET /call-chain` - Calls both Service B and itself (full distributed trace)
 
 ### Service B (Port 8002)
 - `GET /health` - Health check
-- `GET /process` - Process data endpoint
+- `GET /process` - Data processing endpoint
 
 ## Integration Guide
 
@@ -107,4 +107,4 @@ This demo solves the Sanic multiprocessing challenge by:
 3. Extracting and propagating trace context from HTTP headers
 4. Auto-instrumenting HTTP clients (aiohttp) for CLIENT spans
 
-See the [integration guide](Sanic_integration.md) for detailed explanation.
+See the [integration guide](Sanic_integration.md) for a detailed explanation.
