@@ -65,7 +65,45 @@ chmod +x last9-otel-setup.sh
 
 ---
 
-## 🎯 Advanced (Optional): Kubernetes Tolerations and NodeSelector
+## 🎯 Advanced Configuration (Optional)
+
+### Cluster Name Override
+
+By default, the cluster name is auto-detected from your kubectl current context. You can override it using the `cluster=` parameter:
+
+```bash
+# Set custom cluster name
+./last9-otel-setup.sh \
+  token="your-token" \
+  endpoint="your-endpoint" \
+  cluster=prod-us-east-1
+
+# Combined with environment
+./last9-otel-setup.sh \
+  token="your-token" \
+  endpoint="your-endpoint" \
+  env=production \
+  cluster=prod-us-east-1
+
+# Full setup with cluster name
+./last9-otel-setup.sh \
+  token="your-token" \
+  endpoint="your-endpoint" \
+  monitoring-endpoint="your-metrics-endpoint" \
+  username="your-username" \
+  password="your-password" \
+  env=production \
+  cluster=my-k8s-cluster
+```
+
+**Why override cluster name?**
+- When kubectl context name doesn't match your preferred cluster identifier
+- For consistent naming across multiple environments
+- When auto-detection doesn't provide meaningful names
+
+---
+
+### Kubernetes Tolerations and NodeSelector
 
 If your nodes **ARE tainted**, you need both tolerations and nodeSelector:
 
