@@ -554,8 +554,9 @@ apply_tolerations_to_monitoring_values() {
     log_info "✓ Tolerations applied to monitoring values file"
 }
 
-# Function to patch monitoring components with tolerations directly via kubectl
+# Function to patch monitoring components with tolerations and nodeSelector directly via kubectl
 # This handles components that don't properly inherit tolerations from Helm values
+# This is the primary method for applying tolerations/nodeSelector (more reliable than Helm values)
 patch_monitoring_components_tolerations() {
     local tolerations_file="$TOLERATIONS_FILE_PATH"
 
@@ -564,17 +565,32 @@ patch_monitoring_components_tolerations() {
         return 0
     fi
 
-    log_info "Patching monitoring components with tolerations from Kubernetes API..."
+    log_info "Patching monitoring components with tolerations and nodeSelector from Kubernetes API..."
 
     # Extract tolerations in JSON format for kubectl patch
     local tolerations_json=""
+    local node_exporter_tolerations_json=""
+    local node_selector_json=""
 
     if [ "$USE_YQ" = true ]; then
-        # Use yq to convert YAML tolerations to JSON
+        # Use yq to convert YAML to JSON
         tolerations_json=$(yq eval '.tolerations' "$tolerations_file" -o=json 2>/dev/null)
         if [ "$tolerations_json" = "null" ] || [ -z "$tolerations_json" ]; then
-            log_warn "No tolerations found in file, skipping component patching"
-            return 0
+            log_warn "No tolerations found in file"
+            tolerations_json=""
+        fi
+
+        # Check for special nodeExporterTolerations
+        node_exporter_tolerations_json=$(yq eval '.nodeExporterTolerations' "$tolerations_file" -o=json 2>/dev/null)
+        if [ "$node_exporter_tolerations_json" = "null" ] || [ -z "$node_exporter_tolerations_json" ]; then
+            # Default: operator Exists (run on all nodes)
+            node_exporter_tolerations_json='[{"operator":"Exists"}]'
+        fi
+
+        # Extract nodeSelector
+        node_selector_json=$(yq eval '.nodeSelector' "$tolerations_file" -o=json 2>/dev/null)
+        if [ "$node_selector_json" = "null" ] || [ -z "$node_selector_json" ]; then
+            node_selector_json=""
         fi
     else
         # Awk fallback - build JSON manually
@@ -583,65 +599,157 @@ patch_monitoring_components_tolerations() {
         local temp_file=$(mktemp)
         awk '/^tolerations:/{flag=1; next} /^[a-zA-Z]/{flag=0} flag && NF' "$tolerations_file" > "$temp_file"
 
-        if [ ! -s "$temp_file" ]; then
-            log_warn "No tolerations found in file, skipping component patching"
-            rm -f "$temp_file"
-            return 0
-        fi
+        if [ -s "$temp_file" ]; then
+            # Build JSON array from YAML tolerations
+            tolerations_json="["
+            local first=true
+            local current_obj=""
 
-        # Build JSON array from YAML tolerations
-        tolerations_json="["
-        local first=true
-        local current_obj=""
-
-        while IFS= read -r line; do
-            if echo "$line" | grep -q "^  - key:"; then
-                # Start of new toleration object
-                if [ "$first" = false ]; then
-                    tolerations_json="${tolerations_json},"
+            while IFS= read -r line; do
+                if echo "$line" | grep -q "^  - key:"; then
+                    # Start of new toleration object
+                    if [ "$first" = false ]; then
+                        tolerations_json="${tolerations_json},"
+                    fi
+                    first=false
+                    local key=$(echo "$line" | sed -E 's/.*key: *"?([^"]*)"?.*/\1/')
+                    current_obj="{\"key\":\"$key\""
+                elif echo "$line" | grep -q "operator:"; then
+                    local op=$(echo "$line" | sed -E 's/.*operator: *"?([^"]*)"?.*/\1/')
+                    current_obj="${current_obj},\"operator\":\"$op\""
+                elif echo "$line" | grep -q "value:"; then
+                    local val=$(echo "$line" | sed -E 's/.*value: *"?([^"]*)"?.*/\1/')
+                    current_obj="${current_obj},\"value\":\"$val\""
+                elif echo "$line" | grep -q "effect:"; then
+                    local eff=$(echo "$line" | sed -E 's/.*effect: *"?([^"]*)"?.*/\1/')
+                    current_obj="${current_obj},\"effect\":\"$eff\"}"
+                    tolerations_json="${tolerations_json}${current_obj}"
                 fi
-                first=false
-                local key=$(echo "$line" | sed -E 's/.*key: *"?([^"]*)"?.*/\1/')
-                current_obj="{\"key\":\"$key\""
-            elif echo "$line" | grep -q "operator:"; then
-                local op=$(echo "$line" | sed -E 's/.*operator: *"?([^"]*)"?.*/\1/')
-                current_obj="${current_obj},\"operator\":\"$op\""
-            elif echo "$line" | grep -q "value:"; then
-                local val=$(echo "$line" | sed -E 's/.*value: *"?([^"]*)"?.*/\1/')
-                current_obj="${current_obj},\"value\":\"$val\""
-            elif echo "$line" | grep -q "effect:"; then
-                local eff=$(echo "$line" | sed -E 's/.*effect: *"?([^"]*)"?.*/\1/')
-                current_obj="${current_obj},\"effect\":\"$eff\"}"
-                tolerations_json="${tolerations_json}${current_obj}"
-            fi
-        done < "$temp_file"
+            done < "$temp_file"
 
-        tolerations_json="${tolerations_json}]"
+            tolerations_json="${tolerations_json}]"
+        fi
         rm -f "$temp_file"
+
+        # Check for nodeExporterTolerations
+        local ne_temp_file=$(mktemp)
+        awk '/^nodeExporterTolerations:/{flag=1; next} /^[a-zA-Z]/{flag=0} flag && NF' "$tolerations_file" > "$ne_temp_file"
+
+        if [ -s "$ne_temp_file" ]; then
+            # Build JSON for node-exporter tolerations
+            node_exporter_tolerations_json="["
+            local first=true
+            local current_obj=""
+
+            while IFS= read -r line; do
+                if echo "$line" | grep -q "^  - "; then
+                    if [ "$first" = false ]; then
+                        node_exporter_tolerations_json="${node_exporter_tolerations_json},"
+                    fi
+                    first=false
+
+                    if echo "$line" | grep -q "operator:"; then
+                        local op=$(echo "$line" | sed -E 's/.*operator: *"?([^"]*)"?.*/\1/')
+                        node_exporter_tolerations_json="${node_exporter_tolerations_json}{\"operator\":\"$op\"}"
+                    fi
+                fi
+            done < "$ne_temp_file"
+            node_exporter_tolerations_json="${node_exporter_tolerations_json}]"
+        else
+            # Default: operator Exists
+            node_exporter_tolerations_json='[{"operator":"Exists"}]'
+        fi
+        rm -f "$ne_temp_file"
+
+        # Extract nodeSelector
+        local ns_temp_file=$(mktemp)
+        awk '/^nodeSelector:/{flag=1; next} /^[a-zA-Z]/{flag=0} flag && NF && !/^#/' "$tolerations_file" > "$ns_temp_file"
+
+        if [ -s "$ns_temp_file" ]; then
+            node_selector_json="{"
+            local first=true
+            while IFS= read -r line; do
+                if echo "$line" | grep -q ":"; then
+                    local key=$(echo "$line" | sed -E 's/^ *([^:]+):.*/\1/' | tr -d '"')
+                    local value=$(echo "$line" | sed -E 's/.*: *"?([^"]*)"?.*/\1/')
+
+                    if [ "$first" = false ]; then
+                        node_selector_json="${node_selector_json},"
+                    fi
+                    first=false
+                    node_selector_json="${node_selector_json}\"$key\":\"$value\""
+                fi
+            done < "$ns_temp_file"
+            node_selector_json="${node_selector_json}}"
+        fi
+        rm -f "$ns_temp_file"
     fi
 
-    log_info "Tolerations JSON: $tolerations_json"
+    [ -n "$tolerations_json" ] && log_info "Tolerations JSON: $tolerations_json"
+    [ -n "$node_selector_json" ] && log_info "NodeSelector JSON: $node_selector_json"
+    [ -n "$node_exporter_tolerations_json" ] && log_info "NodeExporter Tolerations JSON: $node_exporter_tolerations_json"
 
-    # Wait a bit for resources to be created by Helm
+    # Wait for resources to be created by Helm
     log_info "Waiting for monitoring resources to be created..."
     sleep 5
 
     # Patch kube-state-metrics Deployment
-    log_info "Patching kube-state-metrics Deployment..."
-    if kubectl get deployment last9-k8s-monitoring-kube-state-metrics -n "$NAMESPACE" &>/dev/null; then
-        kubectl patch deployment last9-k8s-monitoring-kube-state-metrics -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
-        log_info "✓ kube-state-metrics Deployment patched"
-    else
-        log_warn "kube-state-metrics Deployment not found, skipping"
+    if [ -n "$tolerations_json" ] || [ -n "$node_selector_json" ]; then
+        log_info "Patching kube-state-metrics Deployment..."
+        if kubectl get deployment last9-k8s-monitoring-kube-state-metrics -n "$NAMESPACE" &>/dev/null; then
+            if [ -n "$tolerations_json" ]; then
+                kubectl patch deployment last9-k8s-monitoring-kube-state-metrics -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            if [ -n "$node_selector_json" ]; then
+                kubectl patch deployment last9-k8s-monitoring-kube-state-metrics -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/nodeSelector\", \"value\": $node_selector_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            log_info "✓ kube-state-metrics Deployment patched"
+        else
+            log_warn "kube-state-metrics Deployment not found, skipping"
+        fi
     fi
 
     # Patch PrometheusAgent CRD
-    log_info "Patching PrometheusAgent CRD..."
-    if kubectl get prometheusagent last9-k8s-monitoring-kube-prometheus -n "$NAMESPACE" &>/dev/null; then
-        kubectl patch prometheusagent last9-k8s-monitoring-kube-prometheus -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
-        log_info "✓ PrometheusAgent CRD patched"
-    else
-        log_warn "PrometheusAgent CRD not found, skipping"
+    if [ -n "$tolerations_json" ] || [ -n "$node_selector_json" ]; then
+        log_info "Patching PrometheusAgent CRD..."
+        if kubectl get prometheusagent last9-k8s-monitoring-kube-prometheus -n "$NAMESPACE" &>/dev/null; then
+            if [ -n "$tolerations_json" ]; then
+                kubectl patch prometheusagent last9-k8s-monitoring-kube-prometheus -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            if [ -n "$node_selector_json" ]; then
+                kubectl patch prometheusagent last9-k8s-monitoring-kube-prometheus -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/nodeSelector\", \"value\": $node_selector_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            log_info "✓ PrometheusAgent CRD patched"
+        else
+            log_warn "PrometheusAgent CRD not found, skipping"
+        fi
+    fi
+
+    # Patch Prometheus Operator Deployment
+    if [ -n "$tolerations_json" ] || [ -n "$node_selector_json" ]; then
+        log_info "Patching Prometheus Operator Deployment..."
+        if kubectl get deployment last9-k8s-monitoring-kube-prom-operator -n "$NAMESPACE" &>/dev/null; then
+            if [ -n "$tolerations_json" ]; then
+                kubectl patch deployment last9-k8s-monitoring-kube-prom-operator -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            if [ -n "$node_selector_json" ]; then
+                kubectl patch deployment last9-k8s-monitoring-kube-prom-operator -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/nodeSelector\", \"value\": $node_selector_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            log_info "✓ Prometheus Operator Deployment patched"
+        else
+            log_warn "Prometheus Operator Deployment not found, skipping"
+        fi
+    fi
+
+    # Patch node-exporter DaemonSet with special tolerations
+    if [ -n "$node_exporter_tolerations_json" ]; then
+        log_info "Patching node-exporter DaemonSet with permissive tolerations..."
+        if kubectl get daemonset last9-k8s-monitoring-prometheus-node-exporter -n "$NAMESPACE" &>/dev/null; then
+            kubectl patch daemonset last9-k8s-monitoring-prometheus-node-exporter -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/tolerations\", \"value\": $node_exporter_tolerations_json}]" 2>&1 | grep -v "Warning:" || true
+            log_info "✓ node-exporter DaemonSet patched"
+        else
+            log_warn "node-exporter DaemonSet not found, skipping"
+        fi
     fi
 
     # Wait for pods to be recreated and ready
@@ -651,9 +759,10 @@ patch_monitoring_components_tolerations() {
     # Check pod status
     log_info "Monitoring pod status:"
     kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=kube-state-metrics" 2>/dev/null || true
-    kubectl get pods -n "$NAMESPACE" | grep "prom-agent" 2>/dev/null || true
+    kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=prometheus" 2>/dev/null || true
+    kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=prometheus-node-exporter" 2>/dev/null || true
 
-    log_info "✓ Monitoring components patched with tolerations"
+    log_info "✓ Monitoring components patched with tolerations and nodeSelector"
 }
 
 # Parse named arguments
@@ -741,9 +850,9 @@ show_examples() {
     echo "  $0 monitoring-only monitoring-endpoint=\"your-monitoring-endpoint\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
-    echo "With Environment Override:"
-    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=production  # Set deployment.environment=production"
-    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=staging     # Set deployment.environment=staging"
+    echo "With Environment and Cluster Override:"
+    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=production cluster=prod-us-east-1  # Set environment and cluster name"
+    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=staging cluster=staging-cluster    # Set environment and cluster name"
     echo ""
     echo "With Tolerations and NodeSelector:"
     echo "  $0 tolerations-file=examples/tolerations-monitoring-nodes.yaml token=\"xxx\" endpoint=\"xxx\" ...  # Run on monitoring nodes"
@@ -769,16 +878,23 @@ show_help() {
     echo "                           Updates both collector and auto-instrumentation configurations"
     echo "                           Default: 'staging' for collector, 'local' for instrumentation"
     echo ""
+    echo "  cluster=CLUSTER_NAME     Set cluster.name attribute for telemetry data"
+    echo "                           If not provided, automatically detected from kubectl current-context"
+    echo "                           Example: cluster=prod-us-east-1"
+    echo ""
     echo "  tolerations-file=FILE    Apply Kubernetes tolerations and nodeSelector from YAML file"
     echo "                           Allows running components on tainted nodes (e.g., monitoring nodes, control-plane)"
     echo "                           See examples/ directory for sample configurations"
     echo ""
-    echo "Examples with Environment Override:"
-    echo "  # Set environment to production"
-    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=production"
+    echo "Examples with Environment and Cluster Override:"
+    echo "  # Set environment to production with cluster name"
+    echo "  $0 token=\"xxx\" endpoint=\"xxx\" env=production cluster=prod-us-east-1"
     echo ""
-    echo "  # Set environment to staging"
+    echo "  # Set environment to staging with auto-detected cluster name"
     echo "  $0 operator-only token=\"xxx\" endpoint=\"xxx\" env=staging"
+    echo ""
+    echo "  # Use custom cluster name only (environment will use default)"
+    echo "  $0 token=\"xxx\" endpoint=\"xxx\" cluster=my-k8s-cluster"
     echo ""
     echo "Examples with Tolerations:"
     echo "  # Run on dedicated monitoring nodes"
@@ -932,6 +1048,9 @@ setup_repository() {
     if [ -n "$DEPLOYMENT_ENV" ]; then
         update_deployment_environment "$DEPLOYMENT_ENV"
     fi
+
+    # Add cluster name attribute to collector values
+    update_cluster_name_attribute
 
     # Load and apply tolerations if provided
     if [ -n "$TOLERATIONS_FILE" ]; then
@@ -1095,6 +1214,59 @@ update_deployment_environment() {
     fi
 
     log_info "✓ Deployment environment configuration completed"
+}
+
+# Function to add cluster name attribute to collector values file
+update_cluster_name_attribute() {
+    log_info "Adding cluster name attribute to collector values file..."
+
+    # Detect cluster name from kubectl context
+    local cluster_name="${CLUSTER_NAME}"
+
+    if [ -z "$cluster_name" ]; then
+        log_info "Cluster name not provided, attempting to detect from kubectl..."
+        cluster_name=$(kubectl config current-context 2>/dev/null || echo "unknown-cluster")
+        log_info "Detected cluster name: $cluster_name"
+    else
+        log_info "Using provided cluster name: $cluster_name"
+    fi
+
+    # Update collector values file (last9-otel-collector-values.yaml)
+    if [ -f "last9-otel-collector-values.yaml" ]; then
+        # Check if cluster.name attribute already exists
+        if grep -q "cluster\.name" last9-otel-collector-values.yaml; then
+            log_info "cluster.name attribute already exists, updating value..."
+            sed -i.tmp "s/cluster\.name\"], \"[^\"]*\"/cluster.name\"], \"$cluster_name\"/" last9-otel-collector-values.yaml
+            rm -f last9-otel-collector-values.yaml.tmp
+        else
+            log_info "Adding cluster.name attribute after deployment.environment..."
+            # Add the cluster.name attribute right after deployment.environment line
+            # Using awk to insert a new line after the deployment.environment line
+            awk -v cluster="$cluster_name" '
+            /set\(attributes\["deployment\.environment"\]/ {
+                print
+                # Match the indentation of the previous line
+                match($0, /^[[:space:]]*/);
+                indent = substr($0, RSTART, RLENGTH);
+                print indent "- set(attributes[\"cluster.name\"], \"" cluster "\")"
+                next
+            }
+            {print}
+            ' last9-otel-collector-values.yaml > last9-otel-collector-values.yaml.tmp
+            mv last9-otel-collector-values.yaml.tmp last9-otel-collector-values.yaml
+        fi
+
+        # Verify the change
+        if grep -q "cluster.name\"], \"$cluster_name\"" last9-otel-collector-values.yaml; then
+            log_info "✓ Added/updated cluster.name=$cluster_name in collector values file"
+        else
+            log_warn "⚠ Could not verify cluster.name addition in collector values file"
+        fi
+    else
+        log_warn "⚠ last9-otel-collector-values.yaml not found, skipping cluster name update"
+    fi
+
+    log_info "✓ Cluster name attribute configuration completed"
 }
 
 # Function to update monitoring endpoint in values file
@@ -1483,20 +1655,22 @@ setup_last9_monitoring() {
     # Update monitoring endpoint placeholder
     update_monitoring_endpoint
 
-    # Load and apply tolerations if provided
+    # Load tolerations if provided (needed for kubectl patching later)
+    # NOTE: We skip apply_tolerations_to_monitoring_values() to avoid yq lexer issues
+    # and rely on kubectl patch approach which is more reliable
     if [ -n "$TOLERATIONS_FILE" ]; then
         # Load tolerations if not already loaded
         if [ -z "$TOLERATIONS_FILE_PATH" ]; then
             load_tolerations_from_file "$TOLERATIONS_FILE"
         fi
-        apply_tolerations_to_monitoring_values "k8s-monitoring-values.yaml"
+        log_info "Tolerations will be applied via kubectl patch after Helm install"
     fi
 
     # Add prometheus-community repo if not already added
     log_info "Adding prometheus-community Helm repository..."
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
-    
+
     # Install/upgrade the monitoring stack
     log_info "Installing/upgrading Last9 K8s monitoring stack..."
     helm upgrade --install last9-k8s-monitoring prometheus-community/kube-prometheus-stack \
@@ -1504,10 +1678,11 @@ setup_last9_monitoring() {
         -n "$NAMESPACE" \
         -f k8s-monitoring-values.yaml \
         --create-namespace
-    
+
     log_info "✓ Last9 K8s monitoring stack deployed successfully!"
 
-    # Patch monitoring components with tolerations if provided
+    # Patch monitoring components with tolerations and nodeSelector if provided
+    # This is the primary method for applying tolerations (more reliable than Helm values)
     if [ -n "$TOLERATIONS_FILE" ]; then
         patch_monitoring_components_tolerations
     fi
