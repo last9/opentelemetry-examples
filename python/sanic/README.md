@@ -19,7 +19,6 @@ A complete working example of Sanic microservices with OpenTelemetry distributed
 ├── service-b/          # Service B (port 8002)
 │   └── app.py         # Fully instrumented Sanic app
 ├── requirements-otel.txt
-├── Sanic_integration.md  # Complete integration guide
 └── README.md
 ```
 
@@ -92,12 +91,6 @@ curl http://localhost:8001/health
 - `GET /health` - Health check
 - `GET /process` - Data processing endpoint
 
-## Integration Guide
-
-For complete integration instructions, including database instrumentation, environment variables, and production deployment, see:
-
-**[Sanic_integration.md](Sanic_integration.md)**
-
 ## What Makes This Work
 
 This demo solves the Sanic multiprocessing challenge by:
@@ -107,4 +100,3 @@ This demo solves the Sanic multiprocessing challenge by:
 3. Extracting and propagating trace context from HTTP headers
 4. Auto-instrumenting HTTP clients (aiohttp) for CLIENT spans
 
-See the [integration guide](Sanic_integration.md) for a detailed explanation.
