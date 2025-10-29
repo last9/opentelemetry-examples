@@ -1,0 +1,17 @@
+# Sanic Framework
+sanic>=21.0
+
+# OpenTelemetry Core
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-grpc>=1.20.0
+
+# HTTP Client Instrumentation
+opentelemetry-instrumentation-aiohttp-client>=0.40b0
+
+# Database Instrumentation (uncomment what you use)
+# opentelemetry-instrumentation-asyncpg>=0.40b0        # Async PostgreSQL
+# opentelemetry-instrumentation-psycopg2>=0.40b0       # PostgreSQL
+# opentelemetry-instrumentation-redis>=0.40b0          # Redis
+# opentelemetry-instrumentation-sqlalchemy>=0.40b0     # SQLAlchemy
+# opentelemetry-instrumentation-pymysql>=0.40b0        # MySQL
