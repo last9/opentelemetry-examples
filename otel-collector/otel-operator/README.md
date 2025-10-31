@@ -122,14 +122,37 @@ nodeExporterTolerations:
   - operator: "Exists"
 ```
 
+**Components that receive tolerations and nodeSelector:**
+- OpenTelemetry Operator
+- OpenTelemetry Collector (DaemonSet)
+- Prometheus Agent
+- Kube-State-Metrics
+- Prometheus Operator
+- Kube-Operator
+
+**Note:** node-exporter DaemonSet only receives `nodeExporterTolerations` (no nodeSelector) to ensure it runs on ALL nodes for complete metrics collection.
+
 **Usage:**
 ```bash
-
-# Run installation (same command as above)
+# IMPORTANT: tolerations-file must be an absolute path
 ./last9-otel-setup.sh \
-  tolerations-file=tolerations.yaml \
+  tolerations-file=/absolute/path/to/tolerations.yaml \
+  token="your-token" \
+  endpoint="your-endpoint" \
+  monitoring-endpoint="your-metrics-endpoint" \
+  username="your-username" \
+  password="your-password"
+
+# Example with full path
+./last9-otel-setup.sh \
+  tolerations-file=/home/user/k8s/tolerations.yaml \
   token="your-token" ...
 ```
+
+**Path Requirements:**
+- ✅ Must be an absolute path (starts with `/`)
+- ✅ File must exist and be readable
+- ❌ Relative paths (e.g., `./tolerations.yaml`) are not supported
 
 ---
 

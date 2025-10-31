@@ -31,6 +31,7 @@ MONITORING_VERSION="75.15.1"
 
 WORK_DIR="otel-setup-$(date +%s)"
 DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#main"
+ORIGINAL_DIR="$(pwd)"
 
 # Initialize variables
 AUTH_TOKEN=""
@@ -741,6 +742,22 @@ patch_monitoring_components_tolerations() {
         fi
     fi
 
+    # Patch kube-operator Deployment
+    if [ -n "$tolerations_json" ] || [ -n "$node_selector_json" ]; then
+        log_info "Patching kube-operator Deployment..."
+        if kubectl get deployment last9-k8s-monitoring-kube-operator -n "$NAMESPACE" &>/dev/null; then
+            if [ -n "$tolerations_json" ]; then
+                kubectl patch deployment last9-k8s-monitoring-kube-operator -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/tolerations\", \"value\": $tolerations_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            if [ -n "$node_selector_json" ]; then
+                kubectl patch deployment last9-k8s-monitoring-kube-operator -n "$NAMESPACE" --type='json' -p="[{\"op\": \"add\", \"path\": \"/spec/template/spec/nodeSelector\", \"value\": $node_selector_json}]" 2>&1 | grep -v "Warning:" || true
+            fi
+            log_info "✓ kube-operator Deployment patched"
+        else
+            log_warn "kube-operator Deployment not found, skipping"
+        fi
+    fi
+
     # Patch node-exporter DaemonSet with special tolerations
     if [ -n "$node_exporter_tolerations_json" ]; then
         log_info "Patching node-exporter DaemonSet with permissive tolerations..."
@@ -822,6 +839,37 @@ parse_arguments() {
                 ;;
             tolerations-file=*)
                 TOLERATIONS_FILE="${arg#*=}"
+
+                # Validate tolerations file path immediately
+                if [ -z "$TOLERATIONS_FILE" ]; then
+                    log_error "tolerations-file argument is empty. Please provide an absolute path to the tolerations YAML file."
+                    log_error "Example: tolerations-file=/absolute/path/to/tolerations.yaml"
+                    exit 1
+                fi
+
+                # Check if path is absolute (starts with /)
+                if [[ ! "$TOLERATIONS_FILE" =~ ^/ ]]; then
+                    log_error "tolerations-file must be an absolute path (starting with /)"
+                    log_error "Provided: $TOLERATIONS_FILE"
+                    log_error "Example: tolerations-file=/home/user/tolerations.yaml"
+                    exit 1
+                fi
+
+                # Check if file exists
+                if [ ! -f "$TOLERATIONS_FILE" ]; then
+                    log_error "Tolerations file not found at: $TOLERATIONS_FILE"
+                    log_error "Please verify the file path and try again."
+                    exit 1
+                fi
+
+                # Check if file is readable
+                if [ ! -r "$TOLERATIONS_FILE" ]; then
+                    log_error "Tolerations file is not readable: $TOLERATIONS_FILE"
+                    log_error "Please check file permissions and try again."
+                    exit 1
+                fi
+
+                log_info "✓ Tolerations file validated: $TOLERATIONS_FILE"
                 ;;
             env=*)
                 DEPLOYMENT_ENV="${arg#*=}"
@@ -1974,18 +2022,27 @@ uninstall_all() {
 # Function to cleanup temporary files
 cleanup() {
     # Always cleanup temporary files unless it's an uninstall operation
-    if [ "$UNINSTALL_MODE" = false ] && [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
+    if [ "$UNINSTALL_MODE" = false ] && [ -n "$WORK_DIR" ]; then
         log_info "Cleaning up temporary files..."
-        # Go back to the original directory and remove the work directory
-        cd "$(dirname "$0")" 2>/dev/null || cd /tmp
-        rm -rf "$WORK_DIR"
-        log_info "✓ Temporary directory '$WORK_DIR' removed"
+        # Go back to the original directory where script was executed
+        cd "$ORIGINAL_DIR" 2>/dev/null || cd /tmp
+
+        # Remove the work directory if it exists
+        if [ -d "$WORK_DIR" ]; then
+            rm -rf "$WORK_DIR"
+            log_info "✓ Temporary directory '$WORK_DIR' removed"
+        fi
     fi
-    
+
     # Always cleanup all otel-setup-* directories from where script was run
-    log_info "Cleaning up all otel-setup-* directories..."
-    rm -rf otel-setup-*
-    log_info "✓ All otel-setup-* directories removed"
+    # Make sure we're in the original directory
+    cd "$ORIGINAL_DIR" 2>/dev/null || true
+
+    if ls otel-setup-* 1> /dev/null 2>&1; then
+        log_info "Cleaning up all otel-setup-* directories..."
+        rm -rf otel-setup-*
+        log_info "✓ All otel-setup-* directories removed"
+    fi
 }
 
 # Main execution function
