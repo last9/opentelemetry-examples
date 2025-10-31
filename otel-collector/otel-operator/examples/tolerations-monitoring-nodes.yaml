@@ -7,7 +7,7 @@
 #   ./last9-otel-setup.sh tolerations-file=examples/tolerations-monitoring-nodes.yaml \
 #     token="xxx" endpoint="xxx" monitoring-endpoint="xxx" username="xxx" password="xxx"
 
-# Applied to: Operator, Collector, Prometheus, Kube-State-Metrics, Prometheus Operator
+# Applied to: Operator, Collector, Prometheus, Kube-State-Metrics, Prometheus Operator, Kube-Operator
 tolerations:
   - key: "monitoring"
     operator: "Equal"
