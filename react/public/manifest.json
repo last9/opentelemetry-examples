@@ -1,0 +1,8 @@
+{
+  "short_name": "React Demo",
+  "name": "React Demo App with OpenTelemetry",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}
