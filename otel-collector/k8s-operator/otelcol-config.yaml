@@ -1,15 +1,271 @@
-receivers:
-  filelog:
-    include: [ /log/*.log ]
-    start_at: beginning
-processors:
-  batch: {}
-exporters:
-  debug:
-    verbosity: detailed
-service:
-  pipelines:
-    logs:
-      receivers: [filelog]
-      processors: [batch]
-      exporters: [debug] 
+# Last9 OpenTelemetry Collector Configuration
+# Conflict-free setup using high ports (40000+)
+# Integrated with Last9 conflict resolution operator
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: last9-otelcol-config
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-collector
+    app.kubernetes.io/managed-by: last9-operator
+    app.kubernetes.io/component: collector
+  annotations:
+    last9.com/conflict-resolution: "high-ports-40000+"
+data:
+  otelcol-config.yaml: |
+    # Last9 OpenTelemetry Collector Configuration
+    # Uses conflict-free high ports (40000+)
+
+    receivers:
+      # OTLP receivers on high ports to avoid conflicts
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:40005
+            max_recv_msg_size: 4194304  # 4MB
+            max_concurrent_streams: 16
+          http:
+            endpoint: 0.0.0.0:40004
+            cors:
+              allowed_origins:
+                - "*"
+
+      # File log receiver for local logs
+      filelog:
+        include: [ /log/*.log ]
+        include_file_path: true
+        include_file_name_resolved: true
+        start_at: beginning
+        operators:
+          - type: json_parser
+            id: parser-json
+            if: 'body matches "^\\{"'
+          - type: regex_parser
+            id: parser-regex
+            if: 'body matches "^\\["'
+            regex: '^\[(?P<timestamp>[^\]]+)\] (?P<level>\w+): (?P<message>.*)'
+            timestamp:
+              parse_from: attributes.timestamp
+              layout: '%Y-%m-%d %H:%M:%S'
+          - type: add
+            field: attributes.log_type
+            value: "last9-operator"
+
+      # Prometheus receiver for metrics (using standard port internally)
+      prometheus:
+        config:
+          global:
+            scrape_interval: 30s
+            evaluation_interval: 30s
+          scrape_configs:
+            - job_name: 'last9-operator-metrics'
+              static_configs:
+                - targets: ['localhost:40007']
+              scrape_interval: 30s
+              metrics_path: /metrics
+            - job_name: 'otel-collector-metrics'
+              static_configs:
+                - targets: ['localhost:8888']
+              scrape_interval: 30s
+              metrics_path: /metrics
+
+      # Kubernetes cluster receiver for K8s metrics
+      k8s_cluster:
+        auth_type: serviceAccount
+        node_conditions_to_report:
+          - Ready
+          - MemoryPressure
+          - DiskPressure
+          - PIDPressure
+        allocatable_types_to_report:
+          - cpu
+          - memory
+          - storage
+
+    processors:
+      # Enhanced batch processor for better performance
+      batch:
+        timeout: 10s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+
+      # Resource detection for automatic tagging
+      resourcedetection:
+        detectors: [env, system, k8snode, k8s_cluster]
+        timeout: 5s
+
+      # Memory limiter to prevent OOM
+      memory_limiter:
+        limit_mib: 400
+        spike_limit_mib: 100
+        check_interval: 5s
+
+      # Resource processor for adding cluster information
+      resource:
+        attributes:
+          - key: cluster.name
+            value: "${CLUSTER_NAME:-last9-cluster}"
+            action: upsert
+          - key: k8s.namespace.name
+            from_attribute: k8s.namespace.name
+            action: upsert
+          - key: deployment.environment
+            value: "${ENVIRONMENT:-production}"
+            action: upsert
+          - key: last9.operator.version
+            value: "1.0.0"
+            action: upsert
+          - key: last9.conflict_resolution
+            value: "enabled"
+            action: upsert
+
+      # Attributes processor for log enhancement
+      attributes/logs:
+        actions:
+          - key: log.source
+            value: "last9-operator"
+            action: upsert
+          - key: service.name
+            value: "last9-otel-operator"
+            action: upsert
+
+    exporters:
+      # Debug exporter for troubleshooting
+      debug:
+        verbosity: detailed
+        sampling_initial: 2
+        sampling_thereafter: 500
+
+      # Logging exporter with structured output
+      logging:
+        loglevel: info
+        sampling_initial: 2
+        sampling_thereafter: 500
+
+      # OTLP HTTP exporter for Last9 (configurable endpoint)
+      otlphttp/last9:
+        endpoint: "${LAST9_ENDPOINT:-https://otlp.last9.io/v1/traces}"
+        headers:
+          Authorization: "Bearer ${LAST9_TOKEN:-your-token-here}"
+        compression: gzip
+        timeout: 30s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+      # OTLP HTTP exporter for metrics to Last9
+      otlphttp/last9-metrics:
+        endpoint: "${LAST9_METRICS_ENDPOINT:-https://metrics-otlp.last9.io/v1/metrics}"
+        headers:
+          Authorization: "Bearer ${LAST9_METRICS_TOKEN:-your-metrics-token-here}"
+        compression: gzip
+        timeout: 30s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+      # OTLP HTTP exporter for logs to Last9
+      otlphttp/last9-logs:
+        endpoint: "${LAST9_LOGS_ENDPOINT:-https://logs-otlp.last9.io/v1/logs}"
+        headers:
+          Authorization: "Bearer ${LAST9_LOGS_TOKEN:-your-logs-token-here}"
+        compression: gzip
+        timeout: 30s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+      # Prometheus exporter for local metrics
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        const_labels:
+          cluster: "${CLUSTER_NAME:-last9-cluster}"
+          operator: "last9-otel-operator"
+
+    extensions:
+      # Health check extension
+      health_check:
+        endpoint: "0.0.0.0:8888"
+        path: "/health"
+
+      # pprof for debugging
+      pprof:
+        endpoint: "0.0.0.0:1777"
+
+      # Memory ballast for stability
+      memory_ballast:
+        size_mib: 64
+
+    service:
+      extensions: [health_check, pprof, memory_ballast]
+
+      pipelines:
+        # Traces pipeline
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resourcedetection, resource, batch]
+          exporters: [debug, otlphttp/last9]
+
+        # Metrics pipeline
+        metrics:
+          receivers: [otlp, prometheus, k8s_cluster]
+          processors: [memory_limiter, resourcedetection, resource, batch]
+          exporters: [debug, prometheus, otlphttp/last9-metrics]
+
+        # Logs pipeline
+        logs:
+          receivers: [otlp, filelog]
+          processors: [memory_limiter, resourcedetection, resource, attributes/logs, batch]
+          exporters: [debug, logging, otlphttp/last9-logs]
+
+      telemetry:
+        logs:
+          level: "info"
+          development: false
+        metrics:
+          address: "0.0.0.0:8888"
+          level: "normal"
+        resource:
+          "service.name": "last9-otel-collector"
+          "service.version": "1.0.0"
+          "deployment.environment": "${ENVIRONMENT:-production}"
+          "k8s.namespace.name": "last9"
+
+---
+# Secret template for Last9 credentials (to be filled by user)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: last9-credentials
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+type: Opaque
+stringData:
+  # Replace these with your actual Last9 credentials
+  # You can get these from your Last9 dashboard
+
+  # Traces endpoint and token
+  LAST9_ENDPOINT: "https://otlp.last9.io/v1/traces"
+  LAST9_TOKEN: "your-traces-token-here"
+
+  # Metrics endpoint and token
+  LAST9_METRICS_ENDPOINT: "https://metrics-otlp.last9.io/v1/metrics"
+  LAST9_METRICS_TOKEN: "your-metrics-token-here"
+
+  # Logs endpoint and token
+  LAST9_LOGS_ENDPOINT: "https://logs-otlp.last9.io/v1/logs"
+  LAST9_LOGS_TOKEN: "your-logs-token-here"
+
+  # Cluster and environment configuration
+  CLUSTER_NAME: "last9-cluster"
+  ENVIRONMENT: "production" 

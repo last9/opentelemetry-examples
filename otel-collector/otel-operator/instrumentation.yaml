@@ -1,7 +1,17 @@
+# Last9 OpenTelemetry Instrumentation Configuration
+# Conflict-free setup using high port 40004 (instead of 4318) for OTLP HTTP
+# This instrumentation resource configures auto-instrumentation for Java, Node.js, and Python applications
+
 apiVersion: opentelemetry.io/v1alpha1
 kind: Instrumentation
 metadata:
   name: l9-instrumentation
+  annotations:
+    last9.com/conflict-resolution: "enabled"
+    last9.com/high-ports: "40000+"
+    last9.com/otlp-http-port: "40004"
+  labels:
+    last9.com/conflict-resolution: "enabled"
 spec:
   propagators:
     - tracecontext
@@ -13,7 +23,7 @@ spec:
   java:
     env:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://otel-collector-service.last9.svc.cluster.local:4318"
+          value: "http://otel-collector-service.last9.svc.cluster.local:40004"
         - name: OTEL_EXPORTER_OTLP_PROTOCOL
           value: "http/protobuf"
         - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE
@@ -35,7 +45,7 @@ spec:
   nodejs:
     env:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://otel-collector-service.last9.svc.cluster.local:4318"
+          value: "http://otel-collector-service.last9.svc.cluster.local:40004"
         - name: OTEL_EXPORTER_OTLP_PROTOCOL
           value: "http/protobuf"
         - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE
@@ -57,7 +67,7 @@ spec:
   python:
       env:
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: http://otel-collector-service.last9.svc.cluster.local:4318
+        value: http://otel-collector-service.last9.svc.cluster.local:40004
       - name: OTEL_EXPORTER_OTLP_PROTOCOL
         value: http/protobuf
       - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE

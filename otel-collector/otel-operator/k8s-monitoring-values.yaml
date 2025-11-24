@@ -1,3 +1,10 @@
+# Last9 Kubernetes Monitoring Values
+# Conflict-free configuration using high ports (40000+) to avoid conflicts
+# Port allocation:
+# - Prometheus: 40002 (instead of 9090)
+# - Node Exporter: 40001 (instead of 9100)
+# - Kube State Metrics: 40003 (instead of 8080)
+
 # Disable default deployments
 alertmanager:
   enabled: false
@@ -8,6 +15,9 @@ grafana:
 prometheus:
   enabled: true
   agentMode: true
+  # Use high ports to avoid conflicts
+  service:
+    port: 40002
   prometheusSpec:
     # Enable only necessary scrape configs
     serviceMonitorSelectorNilUsesHelmValues: false
@@ -41,13 +51,21 @@ prometheus:
             regex: "up|kube_.*|container_.*|node_.*"  # Keep relevant metrics
             action: keep
 
-# Keep kube-state-metrics
+# Keep kube-state-metrics with high port to avoid conflicts
 kubeStateMetrics:
   enabled: true
+  service:
+    port: 40003
 
-# Keep node-exporter
+# Keep node-exporter with high port to avoid conflicts
 nodeExporter:
   enabled: true
+  service:
+    port: 40001
+    targetPort: 40001
+  # Avoid host port binding completely
+  hostNetwork: false
+  hostPID: true
 
 # Enable cadvisor via kubelet service monitor
 kubelet:
@@ -81,4 +99,12 @@ kubeProxy:
 
 kubeScheduler:
   enabled: false
+
+# Global annotations and labels for conflict resolution
+commonAnnotations:
+  last9.com/conflict-resolution: "enabled"
+  last9.com/high-ports: "40000+"
+
+commonLabels:
+  last9.com/conflict-resolution: "enabled"
 

@@ -29,6 +29,16 @@ OPERATOR_VERSION="0.92.1"
 COLLECTOR_VERSION="0.126.0"
 MONITORING_VERSION="75.15.1"
 
+# Last9 Conflict-Free Port Configuration (High ports 40000+ to avoid conflicts)
+COLLECTOR_GRPC_PORT="40005"
+COLLECTOR_HTTP_PORT="40004"
+PROMETHEUS_PORT="40002"
+NODE_EXPORTER_PORT="40001"
+KUBE_STATE_METRICS_PORT="40003"
+WEBHOOK_PORT="40006"
+METRICS_PORT="40007"
+CONFLICT_RESOLUTION_ENABLED=true
+
 WORK_DIR="otel-setup-$(date +%s)"
 DEFAULT_REPO="https://github.com/last9/opentelemetry-examples.git#main"
 ORIGINAL_DIR="$(pwd)"
@@ -51,6 +61,8 @@ MONITORING_ONLY=false
 TOLERATIONS_FILE=""
 USE_YQ=false
 DEPLOYMENT_ENV=""
+SKIP_CRDS=false
+FORCE_CRD_INSTALL=false
 
 # Colors for output
 RED='\033[0;31m'
@@ -87,6 +99,195 @@ check_yq_available() {
         log_warn "  - macOS: brew install yq"
         log_warn "  - Linux: wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && chmod +x /usr/local/bin/yq"
     fi
+}
+
+# Last9 Conflict Resolution Functions
+# These functions detect and resolve common OpenTelemetry installation conflicts
+
+# Check if we can connect to the Kubernetes cluster
+check_kubernetes_connectivity() {
+    if ! kubectl cluster-info &> /dev/null; then
+        log_error "❌ Cannot connect to Kubernetes cluster. Check kubectl configuration."
+        return 1
+    fi
+    log_info "✅ Kubernetes cluster connectivity verified"
+    return 0
+}
+
+# Detect existing OpenTelemetry operator installations
+detect_existing_opentelemetry_operator() {
+    log_info "🔍 Checking for existing OpenTelemetry operator installations..."
+
+    # Check for OpenTelemetry operator deployments across all namespaces
+    local operator_deployments
+    operator_deployments=$(kubectl get deployments --all-namespaces -l app.kubernetes.io/name=opentelemetry-operator -o json 2>/dev/null || echo '{"items":[]}')
+
+    local deployment_count
+    deployment_count=$(echo "$operator_deployments" | grep -o '"metadata":' | wc -l)
+
+    if [[ "$deployment_count" -gt 0 ]]; then
+        # Extract information about the existing operator
+        local namespace management version
+        if command -v jq >/dev/null 2>&1; then
+            namespace=$(echo "$operator_deployments" | jq -r '.items[0].metadata.namespace // "unknown"')
+            management=$(echo "$operator_deployments" | jq -r '.items[0].metadata.labels."app.kubernetes.io/managed-by" // "unknown"')
+            version=$(echo "$operator_deployments" | jq -r '.items[0].spec.template.spec.containers[0].image // "unknown"' | sed 's/.*://')
+        else
+            # Fallback parsing without jq
+            namespace=$(echo "$operator_deployments" | grep -A10 '"metadata":' | grep '"namespace":' | head -1 | sed 's/.*"namespace": *"//; s/".*//')
+            management="unknown"
+            version="unknown"
+        fi
+
+        log_warn "⚠️  Found existing OpenTelemetry operator:"
+        log_warn "   Namespace: $namespace"
+        log_warn "   Managed by: $management"
+        log_warn "   Version: $version"
+
+        if [[ "$management" == "Helm" ]]; then
+            log_info "✅ Existing operator is Helm-managed - compatible with Last9 approach"
+        else
+            log_warn "⚠️  Existing operator is $management-managed - will use conflict-free strategy"
+        fi
+
+        return 0  # Operator found
+    else
+        log_info "✅ No existing OpenTelemetry operator found"
+        return 1  # No operator found
+    fi
+}
+
+# Determine CRD installation strategy based on existing CRDs
+determine_crd_strategy() {
+    log_info "🔍 Determining CRD installation strategy..."
+
+    local required_crds=(
+        "opentelemetrycollectors.opentelemetry.io"
+        "instrumentations.opentelemetry.io"
+        "opampbridges.opentelemetry.io"
+    )
+
+    local existing_crds=0
+    local crd_info=""
+
+    for crd in "${required_crds[@]}"; do
+        if kubectl get crd "$crd" &> /dev/null; then
+            ((existing_crds++))
+            # Get CRD version and management info
+            local version managed_by
+            version=$(kubectl get crd "$crd" -o jsonpath='{.spec.versions[0].name}' 2>/dev/null || echo "unknown")
+            managed_by=$(kubectl get crd "$crd" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null || echo "unknown")
+
+            crd_info="$crd_info\n   • $crd (version: $version, managed-by: $managed_by)"
+            log_info "   Found $crd (version: $version, managed-by: $managed_by)"
+        fi
+    done
+
+    if [[ $existing_crds -eq 0 ]]; then
+        log_info "📋 Strategy: Install CRDs normally (no existing CRDs found)"
+        return 0  # install-crds
+    elif [[ $existing_crds -eq ${#required_crds[@]} ]]; then
+        log_info "✅ Strategy: Skip CRDs (all required CRDs already exist)"
+        log_info "   Recommendation: Will use --skip-crds to avoid ownership conflicts"
+        return 1  # skip-crds
+    else
+        log_warn "⚠️  Strategy: Force install CRDs (partial CRDs found: $existing_crds/${#required_crds[@]})"
+        return 2  # install-crds-force
+    fi
+}
+
+# Check for port conflicts on the standard OTLP ports
+check_port_conflicts() {
+    log_info "🔍 Checking for port conflicts on standard OTLP ports..."
+
+    local conflicts_found=false
+    local standard_ports=("4317" "4318" "9090" "9100" "8080")
+
+    for port in "${standard_ports[@]}"; do
+        # Check if port is in use by any service in the cluster
+        local services_using_port
+        services_using_port=$(kubectl get svc --all-namespaces -o json 2>/dev/null | \
+            grep -E "\"port\": *$port|\"targetPort\": *$port" | wc -l)
+
+        if [[ "$services_using_port" -gt 0 ]]; then
+            log_warn "⚠️  Port conflict detected: $port is in use by existing services"
+            conflicts_found=true
+        fi
+    done
+
+    if [[ "$conflicts_found" == true ]]; then
+        log_info "🎯 Solution: Using high ports (40000+) to avoid all conflicts"
+        return 0  # Conflicts found
+    else
+        log_info "✅ No port conflicts detected on standard ports"
+        return 1  # No conflicts
+    fi
+}
+
+# Main conflict resolution function
+resolve_conflicts() {
+    local cluster_name="${1:-last9-cluster}"
+
+    log_info "🎯 Starting Last9 OpenTelemetry conflict resolution..."
+    log_info "   Using high-port strategy (40000+) to eliminate port conflicts"
+
+    # Step 1: Check Kubernetes connectivity
+    if ! check_kubernetes_connectivity; then
+        log_error "❌ Cannot proceed without Kubernetes cluster access"
+        return 1
+    fi
+
+    # Step 2: Detect existing OpenTelemetry operator
+    local existing_operator_found=false
+    if detect_existing_opentelemetry_operator; then
+        existing_operator_found=true
+    fi
+
+    # Step 3: Determine CRD strategy
+    local crd_strategy="install"
+    determine_crd_strategy
+    case $? in
+        0) crd_strategy="install" ;;
+        1) crd_strategy="skip" ;;
+        2) crd_strategy="force" ;;
+    esac
+
+    # Step 4: Check for port conflicts
+    check_port_conflicts
+
+    # Step 5: Apply conflict resolution strategy
+    log_info "✅ Conflict resolution completed successfully!"
+    log_info ""
+    log_info "📋 Resolution Summary:"
+    log_info "   • High-port strategy: Active (ports 40000+)"
+    log_info "   • CRD strategy: $crd_strategy"
+    log_info "   • Existing operator: $([ "$existing_operator_found" == true ] && echo "Found" || echo "None")"
+    log_info ""
+    log_info "🔧 Port Configuration:"
+    log_info "   • OTLP HTTP: $COLLECTOR_HTTP_PORT (instead of 4318)"
+    log_info "   • OTLP gRPC: $COLLECTOR_GRPC_PORT (instead of 4317)"
+    log_info "   • Prometheus: $PROMETHEUS_PORT (instead of 9090)"
+    log_info "   • Node Exporter: $NODE_EXPORTER_PORT (instead of 9100)"
+    log_info "   • Kube State Metrics: $KUBE_STATE_METRICS_PORT (instead of 8080)"
+    log_info ""
+
+    # Set global variables based on resolution
+    case "$crd_strategy" in
+        "skip")
+            SKIP_CRDS=true
+            log_info "🎯 Will use --skip-crds flag to avoid CRD ownership conflicts"
+            ;;
+        "force")
+            FORCE_CRD_INSTALL=true
+            log_warn "⚠️  Will force CRD installation due to partial existing CRDs"
+            ;;
+        *)
+            SKIP_CRDS=false
+            FORCE_CRD_INSTALL=false
+            ;;
+    esac
+
+    return 0
 }
 
 # Load and parse tolerations from YAML file
@@ -1402,6 +1603,12 @@ install_operator() {
         "--set" "admissionWebhooks.autoGenerateCert.enabled=true"
     )
 
+    # Add --skip-crds flag if conflict resolution determined it should be used
+    if [ "$SKIP_CRDS" = true ]; then
+        log_info "🎯 Using --skip-crds flag to avoid CRD ownership conflicts"
+        helm_args+=("--skip-crds")
+    fi
+
     # Add tolerations and nodeSelector if provided
     if [ -n "$TOLERATIONS_FILE_PATH" ]; then
         log_info "Adding tolerations to operator installation..."
@@ -2058,9 +2265,15 @@ main() {
     
     # Parse command line arguments
     parse_arguments "$@"
-    
+
     # Check prerequisites
     check_prerequisites
+
+    # Run conflict resolution (unless in uninstall mode)
+    if [ "$UNINSTALL_MODE" != true ] && [ "$CONFLICT_RESOLUTION_ENABLED" = true ]; then
+        log_info "🔧 Running conflict resolution analysis..."
+        resolve_conflicts "$CLUSTER_NAME"
+    fi
     
     if [ "$UNINSTALL_MODE" = true ] && [ -n "$FUNCTION_TO_EXECUTE" ]; then
         # Handle special uninstall functions

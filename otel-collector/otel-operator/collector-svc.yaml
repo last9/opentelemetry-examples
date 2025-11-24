@@ -1,8 +1,21 @@
+# Last9 OpenTelemetry Collector Service
+# Conflict-free configuration using high ports (40000+) to avoid conflicts
+# Port allocation:
+# - OTLP gRPC: 40005 (instead of 4317)
+# - OTLP HTTP: 40004 (instead of 4318)
+
 apiVersion: v1
 kind: Service
 metadata:
   name: otel-collector-service
   namespace: last9
+  annotations:
+    last9.com/conflict-resolution: "enabled"
+    last9.com/high-ports: "40000+"
+    last9.com/otlp-grpc-port: "40005"
+    last9.com/otlp-http-port: "40004"
+  labels:
+    last9.com/conflict-resolution: "enabled"
 spec:
   selector:
     app.kubernetes.io/instance: last9-opentelemetry-collector
@@ -11,12 +24,12 @@ spec:
   ports:
   - appProtocol: grpc
     name: otlp-grpc
-    port: 4317
+    port: 40005
     protocol: TCP
-    targetPort: 4317
+    targetPort: 40005
   - appProtocol: http
     name: otlp-http
-    port: 4318
+    port: 40004
     protocol: TCP
-    targetPort: 4318
+    targetPort: 40004
   type: ClusterIP

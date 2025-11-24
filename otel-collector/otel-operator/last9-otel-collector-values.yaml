@@ -170,9 +170,9 @@ config:
     otlp:
       protocols:
         grpc:
-          endpoint: ${env:MY_POD_IP}:4317
+          endpoint: ${env:MY_POD_IP}:40005
         http:
-          endpoint: ${env:MY_POD_IP}:4318
+          endpoint: ${env:MY_POD_IP}:40004
     # if internalTelemetryViaOTLP.metrics.enabled = true, prometheus receiver will be removed
     prometheus:
       config:
@@ -324,17 +324,17 @@ extraManifests: []
 ports:
   otlp:
     enabled: true
-    containerPort: 4317
-    servicePort: 4317
-    hostPort: 4317
+    containerPort: 40005
+    servicePort: 40005
+    hostPort: 40005
     protocol: TCP
     # nodePort: 30317
     appProtocol: grpc
   otlp-http:
     enabled: true
-    containerPort: 4318
-    servicePort: 4318
-    hostPort: 4318
+    containerPort: 40004
+    servicePort: 40004
+    hostPort: 40004
     protocol: TCP
   jaeger-compact:
     enabled: false
@@ -381,9 +381,14 @@ resources: {}
 #     cpu: 250m
 #     memory: 512Mi
 
-podAnnotations: {}
+podAnnotations:
+  last9.com/conflict-resolution: "enabled"
+  last9.com/high-ports: "40000+"
+  last9.com/otlp-grpc-port: "40005"
+  last9.com/otlp-http-port: "40004"
 
-podLabels: {}
+podLabels:
+  last9.com/conflict-resolution: "enabled"
 
 # Common labels to add to all otel-collector resources. Evaluated as a template.
 additionalLabels: {}

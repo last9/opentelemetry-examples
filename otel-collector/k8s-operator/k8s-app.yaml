@@ -1,37 +1,296 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: python-log-writer
+  name: last9-otel-operator
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+    app.kubernetes.io/component: operator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: python-log-writer
+      app: last9-otel-operator
   template:
     metadata:
       labels:
-        app: python-log-writer
+        app: last9-otel-operator
+        app.kubernetes.io/name: last9-otel-operator
+        app.kubernetes.io/component: operator
+      annotations:
+        last9.com/conflict-resolution: "enabled"
+        last9.com/high-ports: "40000+"
     spec:
+      serviceAccountName: last9-otel-operator
       containers:
-        - name: python-log-writer
+        - name: last9-operator
           image: python-log-writer:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: CLUSTER_NAME
+              value: "last9-cluster"
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: metrics
+              containerPort: 40007
+              protocol: TCP
+            - name: webhook
+              containerPort: 40006
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - "import requests; requests.get('http://localhost:40007/health', timeout=5)"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - "import os; exit(0 if os.path.exists('/log/operator-status.json') else 1)"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
           volumeMounts:
             - name: log-volume
               mountPath: /log
+            - name: operator-config
+              mountPath: /etc/operator-config.yaml
+              subPath: operator-config.yaml
+              readOnly: true
         - name: otel-collector
           image: otel/opentelemetry-collector-contrib:latest
           imagePullPolicy: IfNotPresent
           args: ["--config=/etc/otelcol-config.yaml"]
+          env:
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.name=last9-otel-collector,service.version=1.0.0,k8s.namespace.name=last9"
+          ports:
+            - name: otlp-http
+              containerPort: 40004
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: 40005
+              protocol: TCP
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8888
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8888
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 1
+              memory: 512Mi
+            requests:
+              cpu: 200m
+              memory: 256Mi
           volumeMounts:
             - name: log-volume
               mountPath: /log
+              readOnly: true
             - name: otelcol-config
               mountPath: /etc/otelcol-config.yaml
               subPath: otelcol-config.yaml
+              readOnly: true
       volumes:
         - name: log-volume
           emptyDir: {}
         - name: otelcol-config
           configMap:
-            name: otelcol-config 
+            name: last9-otelcol-config
+        - name: operator-config
+          configMap:
+            name: last9-operator-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: last9-otel-operator
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+    app.kubernetes.io/component: operator
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 40007
+      targetPort: 40007
+      protocol: TCP
+    - name: webhook
+      port: 40006
+      targetPort: 40006
+      protocol: TCP
+  selector:
+    app: last9-otel-operator
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: last9-otel-collector
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-collector
+    app.kubernetes.io/managed-by: last9-operator
+    app.kubernetes.io/component: collector
+  annotations:
+    last9.com/conflict-resolution: "high-ports-40000+"
+spec:
+  type: ClusterIP
+  ports:
+    - name: otlp-http
+      port: 40004
+      targetPort: 40004
+      protocol: TCP
+    - name: otlp-grpc
+      port: 40005
+      targetPort: 40005
+      protocol: TCP
+    - name: metrics
+      port: 8888
+      targetPort: 8888
+      protocol: TCP
+  selector:
+    app: last9-otel-operator
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: last9-otel-operator
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: last9-otel-operator
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+rules:
+  # OpenTelemetry CRD detection
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  # Operator detection
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  # OpenTelemetry resources (when CRDs exist)
+  - apiGroups: ["opentelemetry.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  # Config maps and secrets for configuration
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  # Pod and service information
+  - apiGroups: [""]
+    resources: ["pods", "services", "namespaces"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: last9-otel-operator
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: last9-otel-operator
+subjects:
+  - kind: ServiceAccount
+    name: last9-otel-operator
+    namespace: last9
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: last9-operator-config
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: last9-otel-operator
+    app.kubernetes.io/managed-by: last9-operator
+data:
+  operator-config.yaml: |
+    # Last9 OpenTelemetry Operator Configuration
+    # Conflict-free setup using high ports (40000+)
+
+    metadata:
+      name: "last9-otel-operator"
+      namespace: "last9"
+
+    ports:
+      nodeExporter: 40001
+      prometheus: 40002
+      kubeStateMetrics: 40003
+      collectorHttp: 40004
+      collectorGrpc: 40005
+      webhook: 40006
+      metrics: 40007
+
+    features:
+      conflictResolution: true
+      highPorts: true
+      smartCrdStrategy: true
+      autoDetection: true
+
+    cluster:
+      name: "${CLUSTER_NAME:-last9-cluster}"
+
+    logging:
+      level: "INFO"
+      format: "json"
+
+    healthCheck:
+      enabled: true
+      interval: 30
+      timeout: 5 
