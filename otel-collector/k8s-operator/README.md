@@ -1,234 +1,126 @@
-# Python Log Writer Example (Minikube)
+# Last9 OpenTelemetry Conflict-Free Installation
 
-This project demonstrates a simple Python application that continuously writes log entries to `/log/app.log` inside a container. The app is containerized with Docker and can be deployed to a Minikube Kubernetes cluster. It also demonstrates how to collect these logs using an OpenTelemetry Collector sidecar (manual, no operator required).
+Simple tools to eliminate common installation conflicts when setting up Last9 OpenTelemetry monitoring on Kubernetes.
 
----
+## 🎯 Problem Solved
 
-## ⚠️ Important Caveat: Do Not Mount Volumes at `/code`
+Customers frequently encountered these issues during Last9 setup:
 
-**Never mount a Kubernetes volume (such as `emptyDir`) at the same path as your application code (e.g., `/code`).**
+1. **CRD Ownership Conflicts**: When Dynatrace, New Relic, or other tools already installed OpenTelemetry operator
+2. **Port Conflicts**: node-exporter, Prometheus conflicting with existing monitoring infrastructure
+3. **Manual Patching**: Users had to manually run kubectl commands to resolve conflicts
 
-- If you mount a volume at `/code`, it will override the `/code` directory from your image, and your app will fail to start with:
-  ```
-  python: can't open file '/code/app.py': [Errno 2] No such file or directory
-  ```
-- **Best practice:**
-  - Keep your code in `/code` (from the image, no volume mount).
-  - Write logs to `/log` (mount a shared `emptyDir` volume at `/log` in both the app and sidecar containers).
+## ✅ Solution: High Ports + Smart CRD Strategy
 
----
+Our approach eliminates conflicts by:
 
-## How to Enable Log Collection with a Sidecar (Step-by-Step)
+### 1. **High Ports (40000+)**
+Following successful operators like Dash0, we use high ports that virtually never conflict:
 
-### 1. **Update Your App to Write Logs to `/log`**
+- Node Exporter: `40001` (instead of 8080/9100)
+- Prometheus: `40002` (instead of 9090)
+- Kube State Metrics: `40003` (instead of 8080)
+- OpenTelemetry Collector HTTP: `40004`
+- OpenTelemetry Collector gRPC: `40005`
 
-Change your log path in your app code:
+### 2. **Smart CRD Strategy**
+- Detects existing OpenTelemetry CRDs automatically
+- Uses `--skip-crds` if CRDs exist (100% safe, no ownership conflicts)
+- Installs CRDs normally if none exist
+- Compatible with ANY existing operator installation
 
-```python
-import os
-import time
+## 🚀 Quick Start
 
-def continuous_log_writer():
-    os.makedirs('/log', exist_ok=True)
-    with open('/log/app.log', 'a') as f:
-        while True:
-            f.write(f"Log entry at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.flush()
-            time.sleep(1)
+```bash
+# Download the enhanced tools
+curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/main/otel-collector/k8s-operator/last9-conflict-resolver.sh
+curl -O https://raw.githubusercontent.com/last9/opentelemetry-examples/main/otel-collector/k8s-operator/last9-enhanced-setup.sh
+chmod +x *.sh
 
-if __name__ == "__main__":
-    continuous_log_writer()
+# Run conflict-free setup
+./last9-enhanced-setup.sh --force-crd-takeover -- \
+  monitoring-endpoint="YOUR_METRICS_URL" \
+  username="YOUR_USERNAME" \
+  password="YOUR_PASSWORD"
 ```
 
-### 2. **Update Your Dockerfile (no change needed for log path)**
+## 📁 Files
 
-Just ensure your Dockerfile does not mount anything at `/code`:
+### `last9-conflict-resolver.sh`
+Core conflict detection and smart configuration:
+- Detects existing OpenTelemetry CRDs
+- Uses `--skip-crds` strategy when CRDs exist
+- Generates Helm values with high ports
+- Can be used standalone
 
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /code
-COPY app.py /code/app.py
-CMD ["python", "/code/app.py"]
+### `last9-enhanced-setup.sh`
+Complete setup wrapper:
+- Runs conflict detection automatically
+- Downloads and executes the main Last9 setup script
+- Uses conflict-free configuration
+
+## 🔧 Advanced Usage
+
+### Conflict Detection Only
+```bash
+# Just check for conflicts and generate config
+./last9-conflict-resolver.sh
+
+# Specify cluster name and output directory
+./last9-conflict-resolver.sh --cluster-name production --output-dir ./configs
 ```
 
-### 3. **Update Your Deployment to Mount `/log`**
+### Different Installation Modes
+```bash
+# Monitoring only (no traces)
+./last9-enhanced-setup.sh -- \
+  monitoring-only monitoring-endpoint="..." username="..." password="..."
 
-Add a shared `emptyDir` volume at `/log` for both containers:
-
-```yaml
-spec:
-  containers:
-    - name: python-log-writer
-      ...
-      volumeMounts:
-        - name: log-volume
-          mountPath: /log
-    - name: otel-collector
-      ...
-      volumeMounts:
-        - name: log-volume
-          mountPath: /log
-        - name: otelcol-config
-          mountPath: /etc/otelcol-config.yaml
-          subPath: otelcol-config.yaml
-  volumes:
-    - name: log-volume
-      emptyDir: {}
-    - name: otelcol-config
-      configMap:
-        name: otelcol-config
+# Full observability
+./last9-enhanced-setup.sh -- \
+  endpoint="..." token="..." \
+  monitoring-endpoint="..." username="..." password="..."
 ```
 
-### 4. **Create the OpenTelemetry Collector ConfigMap**
+## 🧪 Testing
 
-Create a file named `otelcol-config.yaml`:
+Both scripts can be tested safely:
 
-```yaml
-receivers:
-  filelog:
-    include: [ /log/*.log ]
-    start_at: beginning
-processors:
-  batch: {}
-exporters:
-  debug:
-    verbosity: detailed
-service:
-  pipelines:
-    logs:
-      receivers: [filelog]
-      processors: [batch]
-      exporters: [debug]
+```bash
+# Test help functionality
+./last9-conflict-resolver.sh --help
+./last9-enhanced-setup.sh --help
+
+# Test conflict detection (read-only)
+./last9-conflict-resolver.sh --cluster-name test --output-dir /tmp
 ```
 
-Create the ConfigMap:
+## 📋 Customer Impact
 
-```
-kubectl create configmap otelcol-config --from-file=otelcol-config.yaml
-```
+### Before:
+- ❌ Manual kubectl patches for CRD conflicts
+- ❌ Port conflicts causing installation failures
+- ❌ Multiple support tickets per installation
+- ❌ Manual troubleshooting for each environment
 
-### 5. **Build and Deploy**
+### After:
+- ✅ **Zero manual steps** for standard installations
+- ✅ **No port conflicts** (using high ports 40000+)
+- ✅ **No CRD conflicts** (smart --skip-crds strategy)
+- ✅ **Works with any existing operator** (Dynatrace, New Relic, etc.)
 
-1. **Build the Docker image inside Minikube:**
-   ```sh
-   eval $(minikube docker-env)
-   docker build -t python-log-writer:latest .
-   ```
-2. **Apply the deployment:**
-   ```sh
-   kubectl apply -f k8s-app.yaml
-   ```
+## 💡 Design Principles
 
-### 6. **Verify**
+1. **Conflict Avoidance**: Use high ports and `--skip-crds` to avoid conflicts entirely
+2. **Simple & Safe**: Never break existing installations, one command for most cases
+3. **Smart Detection**: Automatically adapt to existing infrastructure
+4. **Enterprise Ready**: Works with any existing operator setup
 
-- Check pod status:
-  ```sh
-  kubectl get pods -l app=python-log-writer
-  ```
-- Check app logs:
-  ```sh
-  kubectl exec -it <pod-name> -c python-log-writer -- tail -f /log/app.log
-  ```
-- Check collector logs:
-  ```sh
-  kubectl logs <pod-name> -c otel-collector
-  ```
+## 📞 Support
 
----
+If you encounter issues:
 
-## Prerequisites
-- Docker
-- Minikube installed and running
-- kubectl configured to access your Minikube cluster
-
-## 1. Start Minikube
-
-If Minikube is not already running, start it:
-
-```
-minikube start
-```
-
-## 2. Build the Docker Image Inside Minikube
-
-To make the image available to your Minikube cluster, build it using Minikube's Docker daemon:
-
-```
-eval $(minikube docker-env)
-docker build -t python-log-writer:latest .
-```
-
-## 3. Create the OpenTelemetry Collector ConfigMap
-
-Create a file named `otelcol-config.yaml` with the following content:
-
-```
-receivers:
-  filelog:
-    include: [ /log/*.log ]
-    start_at: beginning
-processors:
-  batch: {}
-exporters:
-  debug:
-    verbosity: detailed
-service:
-  pipelines:
-    logs:
-      receivers: [filelog]
-      processors: [batch]
-      exporters: [debug]
-```
-
-Create the ConfigMap in your cluster:
-
-```
-kubectl create configmap otelcol-config --from-file=otelcol-config.yaml
-```
-
-## 4. Deploy to Minikube (with manual sidecar)
-
-Apply the deployment manifest:
-
-```
-kubectl apply -f k8s-app.yaml
-```
-
-## 5. Verify the Deployment
-
-Check the pod status:
-
-```
-kubectl get pods -l app=python-log-writer
-```
-
-View logs (the app writes to a file, not stdout):
-
-```
-kubectl exec -it <pod-name> -c python-log-writer -- tail -f /log/app.log
-```
-
-Check the OpenTelemetry Collector sidecar logs:
-
-```
-kubectl logs <pod-name> -c otel-collector
-```
-
-Replace `<pod-name>` with the actual pod name from the previous command.
-
-## Cleanup
-
-To remove the deployment and configmap:
-
-```
-kubectl delete -f k8s-app.yaml
-kubectl delete configmap otelcol-config
-```
-
-## (Optional) Minikube Dashboard
-
-To open the Minikube dashboard for a visual overview:
-
-```
-minikube dashboard
-``` 
+1. Run conflict detection: `./last9-conflict-resolver.sh`
+2. Check the generated install script: `/tmp/last9-install-commands.sh`
+3. Verify kubectl access and cluster connectivity
+4. Contact Last9 support with the conflict resolver output
