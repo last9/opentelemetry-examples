@@ -1,0 +1,106 @@
+<div class="app">
+  <div class="container">
+    <h1 class="title">
+      Hello World! 👋
+    </h1>
+    <p class="subtitle">
+      Welcome to your Angular Demo App with API Tracing
+    </p>
+
+    <div class="card">
+      <h2 class="card-title">
+        Simple Counter Demo
+      </h2>
+      <div class="counter">
+        {{ count }}
+      </div>
+      <div class="button-group">
+        <button
+          (click)="handleCounterChange('decrease', count - 1)"
+          class="button button-decrease"
+        >
+          - Decrease
+        </button>
+        <button
+          (click)="handleCounterChange('reset', 0)"
+          class="button button-reset"
+        >
+          Reset
+        </button>
+        <button
+          (click)="handleCounterChange('increase', count + 1)"
+          class="button button-increase"
+        >
+          + Increase
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">
+        External API Calls (Auto-Traced)
+      </h2>
+      <p class="subtitle">
+        Third-party API calls for testing external service tracing
+      </p>
+      <div class="button-group">
+        <button
+          (click)="fetchUserData()"
+          class="button button-increase"
+          [disabled]="loading"
+        >
+          {{ loading ? 'Loading...' : 'External Users' }}
+        </button>
+        <button
+          (click)="fetchPosts()"
+          class="button button-increase"
+          [disabled]="loading"
+        >
+          {{ loading ? 'Loading...' : 'External Posts' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">
+        Backend API Calls (Context Propagation Test)
+      </h2>
+      <p class="subtitle">
+        Calls to our Node.js backend to test end-to-end tracing
+      </p>
+      <div class="button-group">
+        <button
+          (click)="fetchBackendUsers()"
+          class="button button-increase"
+          [disabled]="loading"
+        >
+          {{ loading ? 'Loading...' : 'Backend Users' }}
+        </button>
+        <button
+          (click)="fetchBackendPosts()"
+          class="button button-increase"
+          [disabled]="loading"
+        >
+          {{ loading ? 'Loading...' : 'Backend Posts' }}
+        </button>
+        <button
+          (click)="testBackendProcess()"
+          class="button button-increase"
+          [disabled]="loading"
+        >
+          {{ loading ? 'Processing...' : 'Slow Process' }}
+        </button>
+      </div>
+
+      <div *ngIf="apiData" class="api-response">
+        <h3>API Response:</h3>
+        <pre>{{ apiData | json }}</pre>
+      </div>
+    </div>
+
+    <p class="footer">
+      Ready for OpenTelemetry instrumentation! 🚀<br/>
+      Check your Last9 dashboard for HTTP request traces
+    </p>
+  </div>
+</div>
