@@ -45,3 +45,6 @@
 *.swo
 *~
 .DS_Store
+
+# Ignore Claude Code settings
+.claude/
