@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # OpenTelemetry Setup Automation Script
-# Usage: 
+# Usage:
 #    Show all options
 #    ./last9-otel-setup.sh
 
-#    Option 1: Install Everything (Recommended - Logs, Traces and Cluster Monitoring)
+#    Option 1: Install Everything (Recommended - Logs, Traces, Cluster Monitoring and Events)
 #    ./last9-otel-setup.sh token="your-token-here" endpoint="your-endpoint-here" monitoring-endpoint="your-metrics-endpoint" username="your-username" password="your-password"
 
 #    Option 2: For Traces alone --> Install OpenTelemetry Operator and collector
@@ -16,6 +16,9 @@
 
 #    Option 4: Install Only Cluster Monitoring (Using Metrics)
 #    ./last9-otel-setup.sh monitoring-only monitoring-endpoint="your-metrics-endpoint" username="your-username" password="your-password"
+
+#    Option 5: Install Only Kubernetes Events Agent
+#    ./last9-otel-setup.sh events-only
 
 #    Uninstall All components
 #    ./last9-otel-setup.sh uninstall-all
@@ -48,6 +51,7 @@ LAST9_PASSWORD=""
 OPERATOR_ONLY=false
 LOGS_ONLY=false
 MONITORING_ONLY=false
+EVENTS_ONLY=false
 TOLERATIONS_FILE=""
 USE_YQ=false
 DEPLOYMENT_ENV=""
@@ -789,6 +793,9 @@ parse_arguments() {
             monitoring-only)
                 MONITORING_ONLY=true
                 ;;
+            events-only)
+                EVENTS_ONLY=true
+                ;;
             logs-only)
                 LOGS_ONLY=true
                 ;;
@@ -892,10 +899,11 @@ show_examples() {
     echo "OpenTelemetry Setup Automation Script"
     echo ""
     echo "Quick Examples:"
-    echo "  $0 token=\"your-token-here\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
+    echo "  $0 token=\"your-token-here\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces, Metrics and Events) use this option"
     echo "  $0 operator-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Traces - Install OpenTelemetry Operator and Collector"
     echo "  $0 logs-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Logs - Install only Collector for logs (no operator)"
     echo "  $0 monitoring-only monitoring-endpoint=\"your-monitoring-endpoint\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
+    echo "  $0 events-only  # For Events - Install only Kubernetes Events Agent"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
     echo "With Environment and Cluster Override:"
@@ -915,10 +923,11 @@ show_help() {
     echo "OpenTelemetry Setup Automation Script"
     echo ""
     echo "Usage:"
-    echo "  $0 token=\"your-token-here\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces and Metrics) use this option"
+    echo "  $0 token=\"your-token-here\" endpoint=\"your-otel-endpoint\" monitoring-endpoint=\"your-monitoring-endpoint\" username=\"my-user\" password=\"my-pass\"  # For All Sources(Logs, Traces, Metrics and Events) use this option"
     echo "  $0 operator-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Traces - Install OpenTelemetry Operator and Collector"
     echo "  $0 logs-only token=\"your-token-here\" endpoint=\"your-otel-endpoint\"  # For Logs - Install only Collector for logs (no operator)"
     echo "  $0 monitoring-only monitoring-endpoint=\"your-monitoring-endpoint\" username=\"user\" password=\"pass\"  # For Metrics - Install only monitoring"
+    echo "  $0 events-only  # For Events - Install only Kubernetes Events Agent"
     echo "  $0 uninstall-all  # Use to Uninstall any components installed previously"
     echo ""
     echo "Advanced Options:"
@@ -960,17 +969,17 @@ show_help() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
-    # Skip token check for uninstall mode, logs-only mode, and monitoring-only mode
+    # Skip token check for uninstall mode, logs-only mode, monitoring-only mode, and events-only mode
     # Note: operator-only mode will check for token later in its specific section
-    if [ "$UNINSTALL_MODE" = false ] && [ "$LOGS_ONLY" = false ] && [ "$MONITORING_ONLY" = false ] && [ "$OPERATOR_ONLY" = false ] && [ -z "$AUTH_TOKEN" ]; then
+    if [ "$UNINSTALL_MODE" = false ] && [ "$LOGS_ONLY" = false ] && [ "$MONITORING_ONLY" = false ] && [ "$EVENTS_ONLY" = false ] && [ "$OPERATOR_ONLY" = false ] && [ -z "$AUTH_TOKEN" ]; then
         log_error "Auth token is required for installation."
         echo ""
         show_help
         exit 1
     fi
-    
-    # Check if endpoint is provided for non-monitoring modes
-    if [ "$UNINSTALL_MODE" = false ] && [ "$MONITORING_ONLY" = false ] && [ -z "$OTEL_ENDPOINT" ]; then
+
+    # Check if endpoint is provided for non-monitoring and non-events modes
+    if [ "$UNINSTALL_MODE" = false ] && [ "$MONITORING_ONLY" = false ] && [ "$EVENTS_ONLY" = false ] && [ -z "$OTEL_ENDPOINT" ]; then
         log_error "OTEL endpoint is required for installation."
         log_error "Please provide endpoint=<your-otel-endpoint> parameter."
         echo ""
@@ -1035,21 +1044,21 @@ check_prerequisites() {
 # Function to setup repository and files
 setup_repository() {
     log_info "Setting up repository and configuration files..."
-    
+
     # Create temporary work directory
     mkdir -p "$WORK_DIR"
     cd "$WORK_DIR"
-    
+
     # Clone repository with sparse checkout for only otel-collector/otel-operator
     log_info "Cloning repository with sparse checkout (otel-collector/otel-operator only): $REPO_URL"
-    
+
     # Check if URL contains branch specification (format: url#branch)
     if [[ "$REPO_URL" == *"#"* ]]; then
        # Split URL and branch
        ACTUAL_URL="${REPO_URL%#*}"
        BRANCH="${REPO_URL#*#}"
        log_info "Cloning branch '$BRANCH' from: $ACTUAL_URL"
-       
+
        # Initialize git repository
        git init
        git remote add origin "$ACTUAL_URL"
@@ -1059,7 +1068,7 @@ setup_repository() {
     else
       # Clone default branch
       log_info "Cloning default branch from: $REPO_URL"
-      
+
       # Initialize git repository
       git init
       git remote add origin "$REPO_URL"
@@ -1068,7 +1077,7 @@ setup_repository() {
       git pull origin main
     fi
 
-    
+
     # Navigate to the correct directory
     if [ -d "otel-collector/otel-operator" ]; then
         cd otel-collector/otel-operator
@@ -1138,12 +1147,9 @@ update_auth_token() {
         escaped_token=$(escape_for_sed "$AUTH_TOKEN")
         sed -i.tmp "s|{{ \.Values\.authToken }}|$escaped_token|g" last9-otel-collector-values.yaml
     else
-        log_error "No supported placeholder found in the file."
-        log_info "Please use one of these placeholders in your YAML file:"
-        echo "  - {{AUTH_TOKEN}}"
-        echo "  - \${AUTH_TOKEN}"
-        echo "  - {{ .Values.authToken }}"
-        exit 1
+        log_warn "⚠ No auth token placeholder found in the file."
+        log_warn "Assuming credentials are already configured in the YAML file."
+        log_warn "Skipping token replacement..."
     fi
     
     # Remove the temporary file created by sed -i
@@ -1194,13 +1200,9 @@ update_otel_endpoint() {
         escaped_endpoint=$(escape_for_sed "$OTEL_ENDPOINT")
         sed -i.tmp "s|https://<your_last9_endpoint>|$escaped_endpoint|g" last9-otel-collector-values.yaml
     else
-        log_error "No supported OTEL endpoint placeholder found in the file."
-        log_info "Please use one of these placeholders in your YAML file:"
-        echo "  - {{YOUR_OTEL_ENDPOINT}}"
-        echo "  - {{OTEL_ENDPOINT}}"
-        echo "  - \${OTEL_ENDPOINT}"
-        echo "  - https://<your_last9_endpoint> (old format)"
-        exit 1
+        log_warn "⚠ No OTEL endpoint placeholder found in the file."
+        log_warn "Assuming endpoint is already configured in the YAML file."
+        log_warn "Skipping endpoint replacement..."
     fi
     
     # Remove the temporary file created by sed -i
@@ -1315,6 +1317,59 @@ update_cluster_name_attribute() {
     fi
 
     log_info "✓ Cluster name attribute configuration completed"
+}
+
+# Function to add cluster name attribute to events agent values file
+update_events_agent_cluster_name() {
+    log_info "Adding cluster name attribute to events agent values file..."
+
+    # Detect cluster name from kubectl context
+    local cluster_name="${CLUSTER_NAME}"
+
+    if [ -z "$cluster_name" ]; then
+        log_info "Cluster name not provided, attempting to detect from kubectl..."
+        cluster_name=$(kubectl config current-context 2>/dev/null || echo "unknown-cluster")
+        log_info "Detected cluster name: $cluster_name"
+    else
+        log_info "Using provided cluster name: $cluster_name"
+    fi
+
+    # Update events agent values file (last9-kube-events-agent-values.yaml)
+    if [ -f "last9-kube-events-agent-values.yaml" ]; then
+        # Check if cluster.name attribute already exists
+        if grep -q "cluster\.name" last9-kube-events-agent-values.yaml; then
+            log_info "cluster.name attribute already exists, updating value..."
+            sed -i.tmp "s/cluster\.name\"], \"[^\"]*\"/cluster.name\"], \"$cluster_name\"/" last9-kube-events-agent-values.yaml
+            rm -f last9-kube-events-agent-values.yaml.tmp
+        else
+            log_info "Adding cluster.name attribute after deployment.environment..."
+            # Add the cluster.name attribute right after deployment.environment line
+            # Using awk to insert a new line after the deployment.environment line
+            awk -v cluster="$cluster_name" '
+            /set\(resource\.attributes\["deployment\.environment"\]/ {
+                print
+                # Match the indentation of the previous line
+                match($0, /^[[:space:]]*/);
+                indent = substr($0, RSTART, RLENGTH);
+                print indent "- set(resource.attributes[\"cluster.name\"], \"" cluster "\")"
+                next
+            }
+            {print}
+            ' last9-kube-events-agent-values.yaml > last9-kube-events-agent-values.yaml.tmp
+            mv last9-kube-events-agent-values.yaml.tmp last9-kube-events-agent-values.yaml
+        fi
+
+        # Verify the change
+        if grep -q "cluster.name\"], \"$cluster_name\"" last9-kube-events-agent-values.yaml; then
+            log_info "✓ Added/updated cluster.name=$cluster_name in events agent values file"
+        else
+            log_warn "⚠ Could not verify cluster.name addition in events agent values file"
+        fi
+    else
+        log_warn "⚠ last9-kube-events-agent-values.yaml not found, skipping cluster name update"
+    fi
+
+    log_info "✓ Events agent cluster name attribute configuration completed"
 }
 
 # Function to update monitoring endpoint in values file
@@ -1754,6 +1809,120 @@ setup_last9_monitoring() {
     echo "  kubectl get prometheus -n last9"
 }
 
+# Function to update auth token in events agent values file
+update_events_agent_auth_token() {
+    log_info "Updating auth token in last9-kube-events-agent-values.yaml..."
+
+    # Check if the values file exists
+    if [ ! -f "last9-kube-events-agent-values.yaml" ]; then
+        log_warn "⚠ last9-kube-events-agent-values.yaml not found, skipping token update"
+        return
+    fi
+
+    # Create backup of original file
+    cp last9-kube-events-agent-values.yaml last9-kube-events-agent-values.yaml.backup
+    log_info "Created backup: last9-kube-events-agent-values.yaml.backup"
+
+    # Replace placeholder with actual token
+    log_info "Using auth token: ${AUTH_TOKEN:0:20}..."
+
+    # Handle multiple placeholder formats
+    if grep -q '{{AUTH_TOKEN}}' last9-kube-events-agent-values.yaml; then
+        log_info "Found {{AUTH_TOKEN}} placeholder"
+        escaped_token=$(escape_for_sed "$AUTH_TOKEN")
+        sed -i.tmp "s|{{AUTH_TOKEN}}|$escaped_token|g" last9-kube-events-agent-values.yaml
+    elif grep -q '${AUTH_TOKEN}' last9-kube-events-agent-values.yaml; then
+        log_info "Found \${AUTH_TOKEN} placeholder"
+        escaped_token=$(escape_for_sed "$AUTH_TOKEN")
+        sed -i.tmp "s|\${AUTH_TOKEN}|$escaped_token|g" last9-kube-events-agent-values.yaml
+    else
+        log_warn "⚠ No auth token placeholder found in events agent values file."
+        log_warn "Assuming credentials are already configured."
+    fi
+
+    # Remove the temporary file created by sed -i
+    rm -f last9-kube-events-agent-values.yaml.tmp
+}
+
+# Function to update OTEL endpoint in events agent values file
+update_events_agent_endpoint() {
+    log_info "Updating OTEL endpoint in last9-kube-events-agent-values.yaml..."
+
+    # Check if the values file exists
+    if [ ! -f "last9-kube-events-agent-values.yaml" ]; then
+        log_warn "⚠ last9-kube-events-agent-values.yaml not found, skipping endpoint update"
+        return
+    fi
+
+    # Replace placeholder with actual endpoint
+    log_info "Using OTEL endpoint: ${OTEL_ENDPOINT:0:30}..."
+
+    # Handle multiple placeholder formats
+    if grep -q '{{OTEL_ENDPOINT}}' last9-kube-events-agent-values.yaml; then
+        log_info "Found {{OTEL_ENDPOINT}} placeholder"
+        escaped_endpoint=$(escape_for_sed "$OTEL_ENDPOINT")
+        sed -i.tmp "s|{{OTEL_ENDPOINT}}|$escaped_endpoint|g" last9-kube-events-agent-values.yaml
+    elif grep -q '\${OTEL_ENDPOINT}' last9-kube-events-agent-values.yaml; then
+        log_info "Found \${OTEL_ENDPOINT} placeholder"
+        escaped_endpoint=$(escape_for_sed "$OTEL_ENDPOINT")
+        sed -i.tmp "s|\${OTEL_ENDPOINT}|$escaped_endpoint|g" last9-kube-events-agent-values.yaml
+    else
+        log_warn "⚠ No OTEL endpoint placeholder found in events agent values file."
+        log_warn "Assuming endpoint is already configured."
+    fi
+
+    # Remove the temporary file created by sed -i
+    rm -f last9-kube-events-agent-values.yaml.tmp
+}
+
+# Function to install Kubernetes Events Agent
+install_events_agent() {
+    log_info "Setting up Kubernetes Events Agent..."
+
+    # Create the namespace first
+    log_info "Creating namespace: $NAMESPACE"
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    log_info "✓ Namespace $NAMESPACE created/verified"
+
+    # Check if last9-kube-events-agent-values.yaml exists
+    if [ ! -f "last9-kube-events-agent-values.yaml" ]; then
+        log_error "last9-kube-events-agent-values.yaml not found in current directory"
+        exit 1
+    fi
+
+    # Update auth token and endpoint in events agent values file
+    update_events_agent_auth_token
+    update_events_agent_endpoint
+
+    # Add cluster name attribute to events agent values file
+    update_events_agent_cluster_name
+
+    # Install/upgrade the events agent
+    log_info "Installing/upgrading Last9 Kubernetes Events Agent..."
+    helm upgrade --install last9-kube-events-agent open-telemetry/opentelemetry-collector \
+        --version 0.125.0 \
+        -n "$NAMESPACE" \
+        --create-namespace \
+        -f last9-kube-events-agent-values.yaml
+
+    log_info "✓ Last9 Kubernetes Events Agent deployed successfully!"
+
+    # Show the deployed resources
+    log_info "Events agent resources in $NAMESPACE namespace:"
+    kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=last9-kube-events-agent" 2>/dev/null || true
+
+    log_info "🎉 Kubernetes Events Agent setup completed!"
+    echo ""
+    echo "Summary:"
+    echo "  ✓ Deployed opentelemetry-collector for Kubernetes events"
+    echo "  ✓ Added cluster.name attribute to events agent configuration"
+    echo "  ✓ Events will be collected and sent to Last9"
+    echo ""
+    echo "To verify the deployment:"
+    echo "  kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=last9-kube-events-agent"
+    echo "  kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=last9-kube-events-agent"
+}
+
 # Function to uninstall Last9 monitoring stack
 uninstall_last9_monitoring() {
     log_info "🗑️  Starting Last9 monitoring stack uninstallation..."
@@ -1821,6 +1990,47 @@ uninstall_last9_monitoring() {
     echo "To verify cleanup, run:"
     echo "  helm list -n last9 | grep last9-k8s-monitoring  # Should return nothing"
     echo "  kubectl get secrets -n last9 last9-remote-write-secret  # Should return nothing"
+}
+
+# Function to uninstall Kubernetes Events Agent
+uninstall_events_agent() {
+    log_info "🗑️  Starting Kubernetes Events Agent uninstallation..."
+
+    # Ask for confirmation
+    echo ""
+    log_warn "This will remove the Kubernetes Events Agent"
+    echo "Components to be removed:"
+    echo "  - Helm chart: last9-kube-events-agent"
+    echo ""
+    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Uninstall cancelled."
+        exit 0
+    fi
+
+    log_info "Proceeding with uninstallation..."
+
+    # Remove the Helm chart
+    if helm list -n "$NAMESPACE" 2>/dev/null | grep -q "last9-kube-events-agent"; then
+        log_info "Uninstalling Kubernetes Events Agent..."
+        helm uninstall last9-kube-events-agent -n "$NAMESPACE" || log_warn "Failed to uninstall events agent chart"
+    else
+        log_info "Kubernetes Events Agent chart not found"
+    fi
+
+    # Wait for Helm resources to be cleaned up
+    log_info "Waiting for Helm resources to be cleaned up..."
+    sleep 5
+
+    log_info "🎉 Kubernetes Events Agent uninstallation completed!"
+    echo ""
+    echo "Summary of actions taken:"
+    echo "  ✓ Removed Helm chart: last9-kube-events-agent"
+    echo ""
+    echo "To verify cleanup, run:"
+    echo "  helm list -n $NAMESPACE | grep last9-kube-events-agent  # Should return nothing"
+    echo "  kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=last9-kube-events-agent  # Should return nothing"
 }
 
 # Function to uninstall OpenTelemetry components
@@ -1986,14 +2196,15 @@ uninstall_opentelemetry() {
 
 # Function to uninstall everything (OpenTelemetry + Monitoring)
 uninstall_all() {
-    log_info "🗑️  Starting complete uninstallation (OpenTelemetry + Monitoring)..."
-    
+    log_info "🗑️  Starting complete uninstallation (OpenTelemetry + Monitoring + Events)..."
+
     # Ask for confirmation
     echo ""
     log_warn "This will remove ALL components installed by this script"
     echo "Components to be removed:"
     echo "  - OpenTelemetry components (operator, collector, instrumentation)"
     echo "  - Last9 monitoring stack (kube-prometheus-stack)"
+    echo "  - Kubernetes Events Agent"
     echo "  - Last9 remote write secret"
     echo "  - Namespaces (if empty after cleanup)"
     echo ""
@@ -2005,15 +2216,19 @@ uninstall_all() {
     fi
     
     log_info "Proceeding with complete uninstallation..."
-    
+
     # First uninstall monitoring stack
     log_info "Step 1: Uninstalling Last9 monitoring stack..."
     uninstall_last9_monitoring
-    
-    # Then uninstall OpenTelemetry components
-    log_info "Step 2: Uninstalling OpenTelemetry components..."
+
+    # Then uninstall Kubernetes Events Agent
+    log_info "Step 2: Uninstalling Kubernetes Events Agent..."
+    uninstall_events_agent
+
+    # Finally uninstall OpenTelemetry components
+    log_info "Step 3: Uninstalling OpenTelemetry components..."
     uninstall_opentelemetry
-    
+
     log_info "🎉 Complete uninstallation finished!"
     echo ""
     echo "All components have been removed successfully!"
@@ -2068,6 +2283,10 @@ main() {
             uninstall_last9_monitoring)
                 log_info "Running monitoring-specific uninstall..."
                 uninstall_last9_monitoring
+                ;;
+            uninstall_events_agent)
+                log_info "Running events agent uninstall..."
+                uninstall_events_agent
                 ;;
             uninstall_all)
                 log_info "Running complete uninstall..."
@@ -2140,15 +2359,22 @@ main() {
             setup_last9_monitoring)
                 setup_last9_monitoring "$@"
                 ;;
+            install_events_agent)
+                setup_helm_repos
+                install_events_agent
+                ;;
             uninstall_last9_monitoring)
                 uninstall_last9_monitoring
+                ;;
+            uninstall_events_agent)
+                uninstall_events_agent
                 ;;
             uninstall_all)
                 uninstall_all
                 ;;
             *)
                 log_error "Unknown function: $FUNCTION_TO_EXECUTE"
-                echo "Available functions: setup_helm_repos, install_operator, install_collector, create_collector_service, create_instrumentation, verify_installation, setup_last9_monitoring, uninstall_last9_monitoring, uninstall_all"
+                echo "Available functions: setup_helm_repos, install_operator, install_collector, create_collector_service, create_instrumentation, verify_installation, setup_last9_monitoring, install_events_agent, uninstall_last9_monitoring, uninstall_events_agent, uninstall_all"
                 exit 1
                 ;;
         esac
@@ -2197,6 +2423,26 @@ main() {
         echo ""
         echo "To add OpenTelemetry later, run: $0 token=\"your-token\" endpoint=\"your-otel-endpoint\""
         echo "To uninstall later, run: $0 uninstall function=\"uninstall_last9_monitoring\""
+    elif [ "$EVENTS_ONLY" = true ]; then
+        # Install only Kubernetes Events Agent
+        log_info "Starting Kubernetes Events Agent installation..."
+
+        setup_repository
+        setup_helm_repos
+        install_events_agent
+
+        cleanup
+
+        log_info "🎉 Kubernetes Events Agent installation completed successfully!"
+        log_info "Next steps:"
+        echo "  1. Wait for events agent pod to be in Running state: kubectl get pods -n $NAMESPACE"
+        echo "  2. Check events agent logs: kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=last9-kube-events-agent"
+        echo "  3. Verify events agent service: kubectl get svc -n $NAMESPACE"
+        echo ""
+        echo "📝 Note: Kubernetes events will be collected and sent to Last9"
+        echo ""
+        echo "To add OpenTelemetry later, run: $0 token=\"your-token\" endpoint=\"your-otel-endpoint\""
+        echo "To uninstall later, run: $0 uninstall"
     elif [ "$LOGS_ONLY" = true ]; then
         # Install only Collector for logs
         log_info "Starting OpenTelemetry Collector for logs installation..."
@@ -2283,7 +2529,11 @@ main() {
             log_info "Installing Last9 monitoring stack..."
             setup_last9_monitoring cluster="$CLUSTER_NAME"
         fi
-        
+
+        # Install Kubernetes Events Agent
+        log_info "Installing Kubernetes Events Agent..."
+        install_events_agent
+
         cleanup
         
         log_info "🎉 OpenTelemetry setup completed successfully!"
