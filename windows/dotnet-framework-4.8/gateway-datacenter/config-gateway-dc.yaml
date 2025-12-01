@@ -1,0 +1,336 @@
+# OpenTelemetry Collector - Datacenter Gateway Configuration
+# Centralized collector in air-gapped datacenter
+# Receives from all agent collectors
+# Forwards to AWS gateway (which then sends to Last9)
+
+# Version: OpenTelemetry Collector Contrib v0.140.0
+# Environment: Air-gapped Windows Server 2019
+# Role: Gateway (datacenter aggregation point)
+
+receivers:
+  # OTLP Receiver - Receives from agent collectors
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 32  # Allow larger messages from agents
+
+        # mTLS Configuration - Verify agents
+        tls:
+          cert_file: C:\ProgramData\otel\certs\gateway-cert.pem
+          key_file: C:\ProgramData\otel\certs\gateway-key.pem
+          ca_file: C:\ProgramData\otel\certs\ca-cert.pem
+          client_ca_file: C:\ProgramData\otel\certs\ca-cert.pem  # Verify client certificates
+          require_client_cert: true  # Enforce client authentication
+
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Memory Limiter - Critical for gateway handling multiple agents
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 2048  # 2GB limit
+    spike_limit_mib: 512  # 512MB spike
+
+  # Batch Processor - Larger batches for efficiency
+  batch:
+    timeout: 30s  # Longer timeout for better batching
+    send_batch_size: 10000  # Larger batches
+    send_batch_max_size: 20000
+
+  # Attributes Processor - Remove sensitive data BEFORE leaving datacenter
+  attributes/remove_sensitive:
+    actions:
+      # Remove passwords
+      - key: password
+        action: delete
+      - key: db.password
+        action: delete
+      - key: sql.password
+        action: delete
+
+      # Remove credit card data
+      - key: credit_card
+        action: delete
+      - key: card_number
+        action: delete
+      - key: cvv
+        action: delete
+
+      # Remove PII
+      - key: ssn
+        action: delete
+      - key: social_security_number
+        action: delete
+      - key: email
+        action: delete  # Only if not needed for monitoring
+
+      # Remove API keys/tokens
+      - key: api_key
+        action: delete
+      - key: auth_token
+        action: delete
+      - key: bearer_token
+        action: delete
+
+  # Filter Processor - Drop unwanted telemetry
+  filter/drop_health_checks:
+    traces:
+      span:
+        # Drop health check spans (reduce noise)
+        - 'attributes["http.target"] == "/health"'
+        - 'attributes["http.target"] == "/healthz"'
+        - 'attributes["http.target"] == "/ping"'
+
+  # Tail Sampling - Keep interesting traces, sample others
+  tail_sampling:
+    decision_wait: 10s  # Wait for complete trace
+    num_traces: 100000  # Traces evaluated per second
+    expected_new_traces_per_sec: 1000
+
+    policies:
+      # Always keep errors
+      - name: errors
+        type: status_code
+        status_code: {status_codes: [ERROR]}
+
+      # Always keep slow requests (>1s)
+      - name: slow_requests
+        type: latency
+        latency: {threshold_ms: 1000}
+
+      # Keep all traces for critical services
+      - name: critical_services
+        type: string_attribute
+        string_attribute: {key: service.name, values: [order-api, payment-api]}
+
+      # Sample 10% of successful fast requests
+      - name: sample_success
+        type: probabilistic
+        probabilistic: {sampling_percentage: 10}
+
+  # Resource Processor - Add gateway context
+  resource/gateway:
+    attributes:
+      - key: gateway.name
+        value: "dc-gateway-01"  # CHANGE THIS
+        action: upsert
+
+      - key: gateway.location
+        value: "datacenter-primary"  # CHANGE THIS
+        action: upsert
+
+      - key: deployment.tier
+        value: "gateway-datacenter"
+        action: upsert
+
+exporters:
+  # OTLP Exporter - Forward to AWS Gateway
+  otlp/aws:
+    endpoint: "otel-gateway.aws.company.com:4317"  # CHANGE THIS: AWS NLB endpoint
+
+    # mTLS Configuration - Authenticate with AWS
+    tls:
+      insecure: false  # Always use TLS for cross-network communication
+      cert_file: C:\ProgramData\otel\certs\dc-to-aws-cert.pem
+      key_file: C:\ProgramData\otel\certs\dc-to-aws-key.pem
+      ca_file: C:\ProgramData\otel\certs\aws-ca-cert.pem
+
+    # Retry configuration - More aggressive for cross-network
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 300s  # Up to 5 minutes between retries
+      max_elapsed_time: 3600s  # Retry for 1 hour total
+
+    # Large sending queue - Critical for network outages
+    sending_queue:
+      enabled: true
+      num_consumers: 20  # More consumers for throughput
+      queue_size: 50000  # Large buffer - 50k batches
+      storage: file_storage  # Persist to disk
+
+    # Compression - Reduce bandwidth
+    compression: gzip
+
+    # Timeout
+    timeout: 60s  # Longer timeout for cross-network
+
+  # Debug Exporter - Local troubleshooting only
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 500
+
+  # File Exporter - Backup export (optional, for extreme outages)
+  # Uncomment if you want local backup during AWS connectivity issues
+  # file:
+  #   path: C:\ProgramData\otel\backup\traces.json
+  #   rotation:
+  #     max_megabytes: 100
+  #     max_days: 7
+  #     max_backups: 10
+
+extensions:
+  # File Storage - Large persistent queue
+  file_storage:
+    directory: C:\ProgramData\otel\gateway-queue
+    timeout: 10s
+    compaction:
+      on_start: true
+      directory: C:\ProgramData\otel\gateway-queue
+      max_transaction_size: 65536
+
+  # Health Check
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+
+  # pprof - Performance profiling
+  pprof:
+    endpoint: 127.0.0.1:1777
+
+  # zpages - Live debugging
+  zpages:
+    endpoint: 127.0.0.1:55679
+
+service:
+  extensions: [file_storage, health_check, pprof, zpages]
+
+  telemetry:
+    logs:
+      level: info  # Set to 'debug' for troubleshooting
+      initial_fields:
+        service: otelcol-gateway-dc
+
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888
+
+  pipelines:
+    # Traces Pipeline
+    traces:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - attributes/remove_sensitive  # Remove sensitive data FIRST
+        - filter/drop_health_checks    # Drop noise
+        - tail_sampling                # Smart sampling
+        - batch                        # Batch for efficiency
+        - resource/gateway             # Add gateway context
+      exporters: [otlp/aws]  # Remove 'debug' in production
+
+    # Metrics Pipeline
+    metrics:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - batch
+        - resource/gateway
+      exporters: [otlp/aws]  # Remove 'debug' in production
+
+    # Logs Pipeline
+    logs:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - attributes/remove_sensitive  # Remove sensitive data
+        - batch
+        - resource/gateway
+      exporters: [otlp/aws]  # Remove 'debug' in production
+
+# Configuration Notes:
+#
+# 1. REQUIRED CHANGES:
+#    - gateway.name: Unique identifier for this gateway instance
+#    - gateway.location: Your datacenter location
+#    - otlp/aws endpoint: AWS NLB address (VPN/Direct Connect endpoint)
+#    - Certificate paths: Update with actual locations
+#
+# 2. HIGH AVAILABILITY:
+#    For HA, deploy multiple gateways behind a load balancer:
+#    - Use DNS round-robin or hardware load balancer
+#    - Agents connect to: dc-gateway.internal (resolves to multiple IPs)
+#    - Each gateway has identical config
+#    - Shared persistent storage is NOT required (each has own queue)
+#
+# 3. TLS CERTIFICATES:
+#    This gateway needs TWO certificate sets:
+#    a) Server certificates (for receiving from agents):
+#       - gateway-cert.pem (server cert)
+#       - gateway-key.pem (server key)
+#       - ca-cert.pem (CA to verify agent certs)
+#
+#    b) Client certificates (for sending to AWS):
+#       - dc-to-aws-cert.pem (client cert)
+#       - dc-to-aws-key.pem (client key)
+#       - aws-ca-cert.pem (AWS gateway's CA)
+#
+# 4. NETWORK REQUIREMENTS:
+#    Inbound (from agents):
+#      - Port 4317 (gRPC) from all agent IPs
+#      - Port 4318 (HTTP) from all agent IPs
+#
+#    Outbound (to AWS):
+#      - Port 4317 to AWS gateway via VPN/Direct Connect
+#      - Verify firewall rules allow this traffic
+#
+# 5. PERSISTENT QUEUE MONITORING:
+#    Critical: Monitor queue size!
+#
+#    Windows Performance Counter:
+#    - Object: LogicalDisk
+#    - Counter: Free Megabytes
+#    - Instance: C:
+#
+#    PowerShell monitoring:
+#    $queueSize = (Get-ChildItem "C:\ProgramData\otel\gateway-queue" -Recurse |
+#                  Measure-Object -Property Length -Sum).Sum / 1GB
+#
+#    Alert thresholds:
+#    - Warning: > 5 GB (network degradation)
+#    - Critical: > 20 GB (prolonged AWS connectivity issues)
+#    - Emergency: > 50 GB (investigate AWS connectivity immediately)
+#
+# 6. SENSITIVE DATA FILTERING:
+#    Review and customize the attributes/remove_sensitive processor.
+#    Add any additional sensitive fields specific to your applications.
+#
+#    Example: Add custom app fields:
+#    - key: internal.customer.id
+#      action: delete
+#
+# 7. TAIL SAMPLING:
+#    Adjust policies based on your needs:
+#    - Increase sampling_percentage for more data
+#    - Add more critical service names
+#    - Adjust latency threshold
+#
+# 8. DEBUGGING:
+#    Check gateway health:
+#    Invoke-WebRequest http://localhost:13133
+#
+#    Check metrics:
+#    Invoke-WebRequest http://localhost:8888/metrics |
+#      Select-String "otelcol_exporter_sent_spans"
+#
+#    Check queue depth:
+#    Invoke-WebRequest http://localhost:8888/metrics |
+#      Select-String "otelcol_exporter_queue_size"
+#
+# 9. SECURITY:
+#    - Require client certificates from agents (require_client_cert: true)
+#    - Never disable TLS to AWS
+#    - Restrict access to metrics/health endpoints
+#    - Rotate certificates every 90 days
+#    - Monitor for unauthorized connection attempts
+#
+# 10. PERFORMANCE:
+#     Typical resource usage:
+#     - CPU: 2-4 cores
+#     - Memory: 2-4 GB
+#     - Disk: 100 GB for queue (SSD recommended)
+#     - Network: 10-100 Mbps (depends on agent count)
+#
+#     Scale vertically (more CPU/RAM) or horizontally (more gateways)

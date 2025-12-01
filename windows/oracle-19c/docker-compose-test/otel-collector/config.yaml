@@ -1,0 +1,183 @@
+# OpenTelemetry Collector Configuration for Docker Compose
+# Optimized for local Oracle 19c testing on Mac
+#
+# This config collects Oracle metrics and forwards to Last9
+
+receivers:
+  # Oracle Database Receiver
+  oracledb:
+    # Connect to oracle container
+    endpoint: ${ORACLE_ENDPOINT}
+    service: ${ORACLE_SERVICE}
+    username: ${ORACLE_USERNAME}
+    password: ${ORACLE_PASSWORD}
+    collection_interval: 60s
+
+    # Enable comprehensive metrics
+    metrics:
+      oracledb.cpu_time:
+        enabled: true
+      oracledb.execute_count:
+        enabled: true
+      oracledb.physical_reads:
+        enabled: true
+      oracledb.physical_writes:
+        enabled: true
+      oracledb.physical_read_io_requests:
+        enabled: true
+      oracledb.physical_write_io_requests:
+        enabled: true
+      oracledb.consistent_gets:
+        enabled: true
+      oracledb.db_block_gets:
+        enabled: true
+      oracledb.logical_reads:
+        enabled: true
+      oracledb.parse_count.hard:
+        enabled: true
+      oracledb.parse_count.total:
+        enabled: true
+      oracledb.sessions:
+        enabled: true
+      oracledb.session_count:
+        enabled: true
+      oracledb.processes:
+        enabled: true
+      oracledb.processes.limit:
+        enabled: true
+      oracledb.user_commits:
+        enabled: true
+      oracledb.user_rollbacks:
+        enabled: true
+      oracledb.transactions:
+        enabled: true
+      oracledb.tablespace_usage:
+        enabled: true
+      oracledb.tablespace_size:
+        enabled: true
+      oracledb.ddl_statements_parallelized:
+        enabled: true
+      oracledb.dml_statements_parallelized:
+        enabled: true
+      oracledb.parallel_operations_not_downgraded:
+        enabled: true
+      oracledb.queries_parallelized:
+        enabled: true
+
+processors:
+  # Batch processor
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Resource processor - Add context
+  resource:
+    attributes:
+      # Database information
+      - key: db.system
+        value: oracle
+        action: upsert
+      - key: db.name
+        value: ${DB_NAME}
+        action: upsert
+      - key: db.version
+        value: "19c"
+        action: upsert
+
+      # Environment context
+      - key: datacenter.name
+        value: ${DATACENTER_NAME}
+        action: upsert
+      - key: deployment.environment
+        value: ${ENVIRONMENT}
+        action: upsert
+      - key: deployment.tier
+        value: database
+        action: upsert
+
+      # Container context
+      - key: container.runtime
+        value: docker
+        action: upsert
+
+exporters:
+  # Export to Last9
+  otlp/last9:
+    endpoint: ${LAST9_OTLP_ENDPOINT}
+    headers:
+      authorization: ${LAST9_AUTH_HEADER}
+    compression: gzip
+
+  # Debug exporter - view in logs
+  debug:
+    verbosity: detailed
+    sampling_initial: 10
+    sampling_thereafter: 100
+
+  # Prometheus exporter - for local viewing
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+extensions:
+  # Health check
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+
+  # zpages for debugging
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+  # pprof for performance profiling
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+service:
+  extensions: [health_check, zpages, pprof]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888
+
+  pipelines:
+    metrics:
+      receivers: [oracledb]
+      processors: [batch, resource]
+      exporters: [otlp/last9, debug, prometheus]
+
+# Notes:
+#
+# 1. ENVIRONMENT VARIABLES:
+#    All ${VAR} are set via docker-compose.yml from .env file
+#
+# 2. DEBUGGING:
+#    View metrics locally:
+#    curl http://localhost:8888/metrics | grep oracledb
+#
+#    View in Prometheus format:
+#    curl http://localhost:8889/metrics
+#
+#    View zpages:
+#    http://localhost:55679/debug/tracez
+#
+# 3. EXPORTERS:
+#    - otlp/last9: Sends to Last9 (production)
+#    - debug: Logs to console (testing)
+#    - prometheus: Local Prometheus endpoint (optional)
+#
+#    For production, remove debug and prometheus exporters
+#
+# 4. COLLECTION INTERVAL:
+#    60s is a good balance for testing
+#    Adjust in docker-compose.yml: collection_interval
+#
+# 5. RESOURCE ATTRIBUTES:
+#    These tags help identify metrics in Last9:
+#    - db.system=oracle
+#    - db.name=ORCL
+#    - datacenter.name=docker-test-mac
+#    - deployment.environment=development
+#
+#    Query in Last9: oracledb_sessions{datacenter_name="docker-test-mac"}

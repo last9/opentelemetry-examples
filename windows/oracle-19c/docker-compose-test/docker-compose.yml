@@ -1,0 +1,271 @@
+# Docker Compose for Oracle 19c Monitoring - Local Testing on Mac
+# Complete stack: Oracle Database + OpenTelemetry Collector + Last9 integration
+#
+# Prerequisites:
+#   - Docker Desktop for Mac
+#   - 8GB RAM available for Docker
+#   - 50GB disk space
+#   - Oracle Container Registry account (free): https://container-registry.oracle.com
+#
+# Usage:
+#   1. Copy .env.example to .env and configure
+#   2. docker-compose up -d
+#   3. Wait 2-3 minutes for Oracle to initialize
+#   4. Verify: curl http://localhost:8888/metrics | grep oracledb
+
+version: '3.8'
+
+services:
+  # Oracle 19c Enterprise Edition
+  oracle:
+    image: container-registry.oracle.com/database/enterprise:19.3.0.0
+    container_name: oracle-19c-test
+    hostname: oracle-db
+
+    # Environment variables for Oracle setup
+    environment:
+      # Oracle instance configuration
+      ORACLE_SID: ${ORACLE_SID:-ORCL}
+      ORACLE_PDB: ${ORACLE_PDB:-ORCLPDB1}
+      ORACLE_PWD: ${ORACLE_PWD:-OraclePassword123}
+      ORACLE_CHARACTERSET: ${ORACLE_CHARACTERSET:-AL32UTF8}
+
+      # Memory configuration
+      INIT_SGA_SIZE: 2048
+      INIT_PGA_SIZE: 512
+
+      # Enable archivelog mode (optional)
+      ENABLE_ARCHIVELOG: "false"
+
+    # Port mappings
+    ports:
+      - "1521:1521"    # Oracle listener
+      - "5500:5500"    # Oracle Enterprise Manager
+
+    # Volumes for persistence
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./oracle/init-scripts:/docker-entrypoint-initdb.d:ro
+      - ./oracle/setup-scripts:/opt/oracle/scripts/setup:ro
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 6G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s sys/${ORACLE_PWD}@//localhost:1521/ORCL as sysdba | grep -q 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+    # Shared memory
+    shm_size: 2gb
+
+    networks:
+      - otel-network
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    container_name: otel-collector-oracle
+    hostname: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+
+    # Mount configuration
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otel-collector-config.yaml:ro
+      - otel-queue:/var/lib/otelcol/queue
+
+    # Environment variables
+    environment:
+      # Oracle connection
+      ORACLE_ENDPOINT: oracle:1521
+      ORACLE_SERVICE: ${ORACLE_SID:-ORCL}
+      ORACLE_USERNAME: last9_monitor
+      ORACLE_PASSWORD: ${ORACLE_MONITOR_PASSWORD:-MonitorPassword123}
+
+      # Last9 configuration
+      LAST9_OTLP_ENDPOINT: ${LAST9_OTLP_ENDPOINT}
+      LAST9_AUTH_HEADER: ${LAST9_AUTH_HEADER}
+
+      # Resource attributes
+      DATACENTER_NAME: ${DATACENTER_NAME:-docker-test}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DB_NAME: ${ORACLE_SID:-ORCL}
+
+    # Port mappings
+    ports:
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+      - "13133:13133"  # Health check
+      - "8888:8888"    # Prometheus metrics
+      - "55679:55679"  # zpages
+
+    # Depends on Oracle being healthy
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+    networks:
+      - otel-network
+
+  # Oracle Setup Helper (runs once to create monitoring user)
+  oracle-setup:
+    image: container-registry.oracle.com/database/instantclient:19
+    container_name: oracle-setup
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo "Waiting for Oracle to be ready..."
+        until sqlplus -s sys/${ORACLE_PWD}@oracle:1521/ORCL as sysdba <<< "SELECT 1 FROM DUAL;" | grep -q 1; do
+          echo "Oracle not ready, waiting..."
+          sleep 10
+        done
+
+        echo "✓ Oracle is ready"
+        echo "Creating monitoring user..."
+
+        sqlplus -s sys/${ORACLE_PWD}@oracle:1521/ORCL as sysdba <<EOF
+        -- Create monitoring user
+        CREATE USER last9_monitor IDENTIFIED BY ${ORACLE_MONITOR_PASSWORD} DEFAULT TABLESPACE USERS TEMPORARY TABLESPACE TEMP ACCOUNT UNLOCK;
+
+        -- Grant privileges
+        GRANT CREATE SESSION TO last9_monitor;
+        GRANT CONNECT TO last9_monitor;
+        GRANT SELECT_CATALOG_ROLE TO last9_monitor;
+
+        -- Grant SELECT on V$ views
+        GRANT SELECT ON V_\$SESSION TO last9_monitor;
+        GRANT SELECT ON V_\$PROCESS TO last9_monitor;
+        GRANT SELECT ON V_\$SYSSTAT TO last9_monitor;
+        GRANT SELECT ON V_\$SYSTEM_EVENT TO last9_monitor;
+        GRANT SELECT ON V_\$RESOURCE_LIMIT TO last9_monitor;
+        GRANT SELECT ON V_\$INSTANCE TO last9_monitor;
+        GRANT SELECT ON V_\$DATABASE TO last9_monitor;
+        GRANT SELECT ON V_\$SQL TO last9_monitor;
+        GRANT SELECT ON V_\$SQLAREA TO last9_monitor;
+        GRANT SELECT ON V_\$SQLSTATS TO last9_monitor;
+        GRANT SELECT ON DBA_TABLESPACES TO last9_monitor;
+        GRANT SELECT ON DBA_DATA_FILES TO last9_monitor;
+        GRANT SELECT ON DBA_TABLESPACE_USAGE_METRICS TO last9_monitor;
+
+        -- Verify
+        SELECT 'User created: ' || username FROM dba_users WHERE username = 'LAST9_MONITOR';
+        EOF
+
+        echo "✓ Monitoring user setup complete"
+
+        # Keep container running for logs
+        sleep 30
+        echo "Setup complete, container exiting"
+
+    environment:
+      ORACLE_PWD: ${ORACLE_PWD:-OraclePassword123}
+      ORACLE_MONITOR_PASSWORD: ${ORACLE_MONITOR_PASSWORD:-MonitorPassword123}
+
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+    networks:
+      - otel-network
+
+networks:
+  otel-network:
+    driver: bridge
+
+volumes:
+  oracle-data:
+    driver: local
+  otel-queue:
+    driver: local
+
+# Notes:
+#
+# 1. FIRST TIME SETUP:
+#    Oracle container pulls are large (~8GB) and initialization takes 2-3 minutes.
+#    Be patient!
+#
+#    docker-compose logs -f oracle
+#    # Wait for: "DATABASE IS READY TO USE!"
+#
+# 2. ORACLE CONTAINER REGISTRY LOGIN:
+#    You need to accept Oracle's terms:
+#    - Visit: https://container-registry.oracle.com
+#    - Sign in (free account)
+#    - Search for "database/enterprise"
+#    - Accept terms and conditions
+#
+#    Then login:
+#    docker login container-registry.oracle.com
+#    Username: your-email@example.com
+#    Password: your-password
+#
+# 3. MEMORY REQUIREMENTS:
+#    Oracle requires significant resources:
+#    - Minimum: 4GB RAM, 2 CPUs
+#    - Recommended: 6GB RAM, 4 CPUs
+#
+#    Check Docker Desktop settings:
+#    Preferences → Resources → Advanced
+#
+# 4. PERSISTENCE:
+#    Oracle data persists in named volume `oracle-data`.
+#    To start fresh:
+#    docker-compose down -v  # WARNING: Deletes all data!
+#
+# 5. ACCESSING ORACLE:
+#    From host:
+#    sqlplus system/OraclePassword123@localhost:1521/ORCL
+#
+#    From container:
+#    docker-compose exec oracle sqlplus system/OraclePassword123@ORCL as sysdba
+#
+# 6. MONITORING:
+#    Health check: http://localhost:13133
+#    Metrics: http://localhost:8888/metrics
+#    Oracle metrics: curl http://localhost:8888/metrics | grep oracledb
+#    zpages: http://localhost:55679/debug/tracez
+#
+# 7. TROUBLESHOOTING:
+#    Oracle won't start:
+#    - Check Docker Desktop has enough resources
+#    - Check disk space: df -h
+#    - View logs: docker-compose logs oracle
+#
+#    Collector can't connect to Oracle:
+#    - Wait for oracle-setup container to finish
+#    - Check logs: docker-compose logs oracle-setup
+#    - Verify user: docker-compose exec oracle sqlplus last9_monitor/MonitorPassword123@ORCL
+#
+#    No metrics in Last9:
+#    - Verify LAST9_AUTH_HEADER in .env
+#    - Check collector logs: docker-compose logs otel-collector
+#    - Test locally: curl http://localhost:8888/metrics | grep oracledb
+#
+# 8. STOPPING:
+#    docker-compose down         # Stop but keep data
+#    docker-compose down -v      # Stop and delete data
+#
+# 9. PERFORMANCE:
+#    This is for TESTING only. Production Oracle requires:
+#    - Dedicated server (not containerized typically)
+#    - Proper storage (SAN, EBS, etc.)
+#    - Backup strategy
+#    - High availability setup
