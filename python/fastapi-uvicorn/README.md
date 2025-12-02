@@ -1,242 +1,410 @@
-# Auto instrumentating FastAPI application using OpenTelemetry
+# FastAPI with OpenTelemetry and Last9 GenAI Tracking
 
-This example demonstrates how to instrument a simple FastAPI application with
-OpenTelemetry.
+This example demonstrates how to instrument a FastAPI application with OpenTelemetry and the Last9 GenAI SDK for comprehensive LLM cost tracking and observability.
 
-1. Create a virtual environment and install the dependencies:
+## Features
+
+- **Standard OpenTelemetry instrumentation** for FastAPI endpoints
+- **Last9 GenAI SDK integration** for LLM cost tracking
+- **Automatic cost calculation** for Claude, GPT-4, Gemini, and other models
+- **Workflow-level cost aggregation** across multi-step processes
+- **Multi-turn conversation tracking** with context preservation
+- **Tool/function call tracking** with performance metrics
+- **Content events** for prompt/completion tracking
+
+## Prerequisites
+
+1. **Python 3.7+** installed
+2. **Last9 account** - Get your OTLP credentials from [Last9 Dashboard](https://app.last9.io)
+3. **Anthropic API key** - Get from [Anthropic Console](https://console.anthropic.com/)
+
+## Quick Start
+
+### 1. Create virtual environment and install dependencies
 
 ```bash
-python -m venv .venv
+cd /home/karthikeyan/Documents/last9/opentelemetry-examples/python/fastapi-uvicorn
+
+# Create and activate virtual environment
+python3 -m venv .venv
 source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-2. Install the Auto Instrumentation packages using the `opentelemetry-bootstrap`
-   tool:
+### 2. Configure environment variables
+
+Copy the example environment file and fill in your credentials:
 
 ```bash
-opentelemetry-bootstrap -a requirements
-```
-It will output the packages that you can add to `requirements.txt`.
-
-```bash
-opentelemetry-api>=1.15.0
-opentelemetry-sdk>=1.15.0
-opentelemetry-instrumentation-fastapi>=0.36b0
-opentelemetry-exporter-otlp>=1.15.0
-opentelemetry-instrumentation-requests>=0.36b0
-opentelemetry-distro==0.48b0
+cp .env.example .env
 ```
 
-Additionally, install these optional packages for enhanced functionality:
+Edit `.env` and set:
 
 ```bash
-# AWS SDK extension for better AWS resource detection
-pip install opentelemetry-sdk-extension-aws
+# Last9 Configuration
+OTEL_SERVICE_NAME=fastapi-genai-app
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20<YOUR_BASE64_ENCODED_CREDENTIALS>
+OTEL_TRACES_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 
-# Container ID resource detector for containerized environments
-pip install opentelemetry-resource-detector-containerid
+# Anthropic API Key
+ANTHROPIC_API_KEY=<YOUR_ANTHROPIC_API_KEY>
 ```
 
-For more details on the container ID resource detector, see: https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/resource/opentelemetry-resource-detector-containerid
+**Important:** The `OTEL_EXPORTER_OTLP_HEADERS` value must be URL encoded. Replace spaces with `%20`.
 
-Copy these packages to your `requirements.txt` file and run the command again to install the packages.
+#### How to get Last9 credentials:
+
+1. Go to [Last9 Dashboard](https://app.last9.io)
+2. Navigate to Settings → OTLP
+3. Copy the Basic Auth header
+4. URL encode it (replace spaces with `%20`)
+
+Example:
+- Original: `Basic dXNlcjpwYXNz`
+- Encoded: `Basic%20dXNlcjpwYXNz`
+
+For more details: [Python OTEL SDK - Whitespace in OTLP Headers](https://last9.io/blog/whitespace-in-otlp-headers-and-opentelemetry-python-sdk/)
+
+### 3. Run the application
+
+Load environment variables and start:
 
 ```bash
-pip install -r requirements.txt
+# Load environment variables
+source .env  # or: export $(cat .env | xargs)
+
+# Start the application
+./start.sh
 ```
 
-3. Obtain the OTLP Auth Header from the [Last9 dashboard](https://app.last9.io).
-   The Auth header is required in the next step.
+The script will automatically:
+- Use Gunicorn + Uvicorn workers in production mode (if `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
+- Use simple Uvicorn for local development (if endpoint not set)
 
-4. Next, run the commands below to set the environment variables.
+### 4. Test the API
+
+**Check health:**
+```bash
+curl http://localhost:8000/health
+```
+
+**Simple chat (with cost tracking):**
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is the capital of France?",
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 100
+  }'
+```
+
+Response:
+```json
+{
+  "response": "The capital of France is Paris...",
+  "model": "claude-sonnet-4-5-20250929",
+  "cost": 0.000045,
+  "input_tokens": 15,
+  "output_tokens": 25
+}
+```
+
+**Multi-step workflow (with cost aggregation):**
+```bash
+curl -X POST http://localhost:8000/workflow \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "Analyze the benefits of serverless architecture"
+  }'
+```
+
+Response:
+```json
+{
+  "result": "Based on the analysis, serverless architecture offers...",
+  "workflow_id": "workflow_1234567890",
+  "total_cost": 0.000123,
+  "llm_calls": 2,
+  "tool_calls": 1
+}
+```
+
+**Multi-turn conversation:**
+```bash
+curl -X POST http://localhost:8000/conversation \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "conv_user123_session456",
+    "message": "Hello, how are you?"
+  }'
+
+# Second turn
+curl -X POST http://localhost:8000/conversation \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "conv_user123_session456",
+    "message": "Tell me about AI"
+  }'
+```
+
+### 5. View traces in Last9
+
+1. Go to [Last9 Dashboard](https://app.last9.io)
+2. Navigate to APM → Traces
+3. You should see traces with:
+   - Cost attributes for each LLM call
+   - Workflow-level cost aggregation
+   - Conversation tracking
+   - Content events (prompts/completions)
+   - Tool call events
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API information and available endpoints |
+| `/health` | GET | Health check |
+| `/chat` | POST | Simple LLM chat with cost tracking |
+| `/workflow` | POST | Multi-step workflow with cost aggregation |
+| `/conversation` | POST | Multi-turn conversation tracking |
+
+## Last9 GenAI SDK Features
+
+The `last9_genai_attributes.py` file provides:
+
+### 1. Automatic Cost Tracking
+
+```python
+cost_breakdown = last9_genai.add_llm_cost_attributes(
+    span=span,
+    model="claude-sonnet-4-5-20250929",
+    usage={
+        "input_tokens": 100,
+        "output_tokens": 200
+    }
+)
+```
+
+Supports 20+ models:
+- Anthropic: Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku
+- OpenAI: GPT-4o, GPT-4, GPT-3.5 Turbo
+- Google: Gemini Pro, Gemini 1.5 Pro/Flash
+- Cohere: Command R, Command R+
+
+### 2. Workflow Cost Aggregation
+
+```python
+# Initialize workflow
+last9_genai.add_workflow_attributes(
+    span=span,
+    workflow_id="workflow_123",
+    workflow_type="customer_support"
+)
+
+# Add costs from multiple LLM calls
+last9_genai.add_llm_cost_attributes(
+    span=span1,
+    model="claude-sonnet-4-5-20250929",
+    usage=usage1,
+    workflow_id="workflow_123"
+)
+
+last9_genai.add_llm_cost_attributes(
+    span=span2,
+    model="claude-3-haiku-20240307",
+    usage=usage2,
+    workflow_id="workflow_123"
+)
+
+# Get total cost
+workflow_cost = global_workflow_tracker.get_workflow_cost("workflow_123")
+# Returns: {total_cost: 0.000123, llm_call_count: 2, tool_call_count: 0}
+```
+
+### 3. Conversation Tracking
+
+```python
+# Start conversation
+global_conversation_tracker.start_conversation(
+    conversation_id="conv_123",
+    user_id="user_456"
+)
+
+# Add turns
+global_conversation_tracker.add_turn(
+    conversation_id="conv_123",
+    user_message="Hello",
+    assistant_message="Hi there!",
+    model="claude-sonnet-4-5-20250929",
+    usage=usage,
+    cost=0.000012
+)
+
+# Get stats
+stats = global_conversation_tracker.get_conversation_stats("conv_123")
+# Returns: {turn_count: 5, total_cost: 0.000234, ...}
+```
+
+### 4. Tool/Function Call Tracking
+
+```python
+last9_genai.add_tool_attributes(
+    span=span,
+    tool_name="database_query",
+    function_name="get_user_profile",
+    arguments={"user_id": "123"},
+    result={"name": "John", "email": "john@example.com"},
+    workflow_id="workflow_123"
+)
+```
+
+### 5. Content Events
+
+```python
+# Add prompt/completion as span events
+last9_genai.add_content_events(
+    span=span,
+    prompt="What is AI?",
+    completion="Artificial Intelligence is...",
+    truncate_at=1000  # Optional truncation
+)
+```
+
+## Last9 Attributes Reference
+
+The SDK adds these custom attributes to your traces:
+
+| Attribute | Description | Example |
+|-----------|-------------|---------|
+| `gen_ai.l9.span.kind` | Span classification | `llm`, `tool`, `prompt` |
+| `gen_ai.l9.cost.input` | Input cost in USD | `0.000015` |
+| `gen_ai.l9.cost.output` | Output cost in USD | `0.000030` |
+| `gen_ai.l9.cost.total` | Total cost in USD | `0.000045` |
+| `gen_ai.l9.workflow.id` | Workflow identifier | `workflow_123` |
+| `gen_ai.l9.workflow.type` | Workflow type | `customer_support` |
+| `gen_ai.l9.workflow.cost.total` | Total workflow cost | `0.000234` |
+| `gen_ai.l9.conversation.id` | Conversation ID | `conv_user123` |
+| `gen_ai.l9.conversation.turn` | Turn number | `3` |
+| `gen_ai.l9.tool.name` | Tool/function name | `database_query` |
+| `gen_ai.l9.performance.response_time` | Response time (seconds) | `1.234` |
+
+## Architecture
+
+```
+FastAPI Application
+    ↓
+OpenTelemetry Auto-Instrumentation
+    ↓
+Last9 GenAI SDK (Manual Instrumentation)
+    ├─→ Cost Calculation
+    ├─→ Workflow Tracking
+    ├─→ Conversation Tracking
+    └─→ Content Events
+    ↓
+OTLP Exporter → Last9 Backend
+```
+
+## Local Development (Console Exporter)
+
+For local testing without sending to Last9:
 
 ```bash
-export OTEL_SERVICE_NAME=fastapi-app
+# Don't set OTEL_EXPORTER_OTLP_ENDPOINT
+unset OTEL_EXPORTER_OTLP_ENDPOINT
+
+# Set console exporter
+export OTEL_TRACES_EXPORTER=console
+export OTEL_SERVICE_NAME=fastapi-genai-app
+
+# Set Anthropic key
+export ANTHROPIC_API_KEY=<your-key>
+
+# Run
+./start.sh
+```
+
+This will print traces to console instead of sending to Last9.
+
+## Production Deployment
+
+### Using Gunicorn + Circus
+
+The included configuration supports production deployment with:
+
+- **Gunicorn** with Uvicorn workers (2 workers by default)
+- **Circus** process manager for monitoring and restarts
+- **OpenTelemetry auto-instrumentation** via `opentelemetry-instrument` wrapper
+- **Graceful worker lifecycle management**
+
+Configuration files:
+- `gunicorn.conf.py` - Gunicorn configuration (workers, timeouts, etc.)
+- `circus.ini` - Circus process manager configuration
+- `start.sh` - Startup script with conditional logic
+
+### Start in production mode:
+
+```bash
+# Ensure OTEL_EXPORTER_OTLP_ENDPOINT is set
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<BASIC_AUTH_HEADER>"
-export OTEL_TRACES_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
-```
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20<credentials>"
+export ANTHROPIC_API_KEY=<your-key>
 
-> Note: `BASIC_AUTH_HEADER` should be replaced with the URL encoded value of the
-> basic authorization header. Read this post to know how
-> [Python Otel SDK](https://last9.io/blog/whitespace-in-otlp-headers-and-opentelemetry-python-sdk/)
-> handles whitespace in headers for more details.
-
-5. Run the FastAPI application:
-
-**Local Development (Simple Uvicorn):**
-```bash
+# Start
 ./start.sh
 ```
 
-**Production (Gunicorn + Auto Instrumentation):**
+## Troubleshooting
+
+### Issue: "Anthropic client not configured"
+
+**Solution:** Set the `ANTHROPIC_API_KEY` environment variable:
 ```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./start.sh
+export ANTHROPIC_API_KEY=<your-anthropic-api-key>
 ```
 
-The start script automatically detects the presence of `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable:
-- **If set**: Uses gunicorn with uvicorn workers and full OpenTelemetry auto instrumentation
-- **If not set**: Uses simple uvicorn for local development
+### Issue: Traces not showing in Last9
 
-6. Once the server is running, you can access the application at
-   `http://127.0.0.1:8000` by default. The API endpoints are:
+**Solutions:**
+1. Check `OTEL_EXPORTER_OTLP_ENDPOINT` is set correctly
+2. Verify `OTEL_EXPORTER_OTLP_HEADERS` is URL encoded
+3. Check Last9 credentials are valid
+4. Look for errors in application logs
 
-- GET `/` - Hello World
-- GET `/items/:id` - Get items by ID
+### Issue: Import error for `last9_genai_attributes`
 
-7. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
-   dashboard to see the traces in action.
+**Solution:** Ensure `last9_genai_attributes.py` is in the same directory as `app.py`
 
-![Traces](./traces.png)
+### Issue: Cost calculation seems wrong
 
-## How the Conditional Startup Works
+**Solution:** Check model name matches exactly. The SDK uses model name to look up pricing.
 
-The `app.py` file contains a simple FastAPI application with a main function:
+## Additional Resources
 
-```python
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-```
+- [Last9 Documentation](https://docs.last9.io/)
+- [OpenTelemetry Python Docs](https://opentelemetry.io/docs/instrumentation/python/)
+- [Anthropic API Reference](https://docs.anthropic.com/)
+- [Last9 GenAI SDK Repository](https://github.com/last9/ai/tree/master/sdk/python)
 
-**Important**: This main function only executes during local development when you run `python app.py` directly. In production:
-
-- Gunicorn imports the `app` object from `app.py` 
-- When imported, `__name__ == "app"` (not `"__main__"`)
-- The main function block is **never executed**
-- Gunicorn manages server startup using uvicorn workers
-- OpenTelemetry initialization happens via the `post_fork` hook in `gunicorn.conf.py`
-
-## Running with Circus and Gunicorn for Production
-
-For production deployments with multiple workers and process management, you can use Circus + Gunicorn instead of running Uvicorn directly. This setup properly handles OpenTelemetry auto-instrumentation with forked worker processes.
-
-### Why Circus + Gunicorn?
-
-- **Process Management**: Circus provides robust process monitoring and management
-- **Multi-Worker Support**: Gunicorn handles multiple workers better than Uvicorn's `--workers` option
-- **OpenTelemetry Compatibility**: Auto-instrumentation works correctly with Gunicorn's worker forking model
-- **Production Ready**: Better resource management and fault tolerance
-
-### Setup Steps
-
-1. **Update requirements.txt** to include Gunicorn:
-```bash
-# Add to your requirements.txt
-gunicorn>=20.0.0
-circus>=0.18.0
-```
-
-2. **Create gunicorn.conf.py** configuration:
-```python
-import os
-
-# Server socket
-bind = "0.0.0.0:8000"
-backlog = 2048
-
-# Worker processes
-workers = 2
-worker_class = "uvicorn.workers.UvicornWorker"
-worker_connections = 1000
-timeout = 60
-keepalive = 2
-
-# Restart workers after this many requests, to prevent memory leaks
-max_requests = 5000
-max_requests_jitter = 1000
-
-# Logging
-loglevel = "info"
-errorlog = "-"
-accesslog = "-"
-
-# Process naming
-proc_name = "fastapi-otel-app"
-
-# Server mechanics
-daemon = False
-pidfile = "/tmp/gunicorn.pid"
-preload_app = False
+## Project Structure
 
 ```
-
-3. **Create circus.ini** configuration:
-```ini
-[circus]
-check_delay = 5
-endpoint = tcp://127.0.0.1:5555
-pubsub_endpoint = tcp://127.0.0.1:5556
-stats_endpoint = tcp://127.0.0.1:5557
-
-[watcher:fastapi-app]
-cmd = opentelemetry-instrument gunicorn -c gunicorn.conf.py app:app
-numprocesses = 1
-copy_env = True
-
-[env:fastapi-app]
-OTEL_EXPORTER_OTLP_TRACES_EXPORTER = console
-OTEL_SERVICE_NAME = fastapi-gunicorn-app
-OTEL_SERVICE_VERSION = 1.0.0
+fastapi-uvicorn/
+├── app.py                      # FastAPI application with GenAI endpoints
+├── last9_genai_attributes.py   # Last9 GenAI SDK (single file utility)
+├── requirements.txt            # Python dependencies
+├── .env.example               # Environment configuration template
+├── start.sh                   # Startup script
+├── gunicorn.conf.py          # Gunicorn configuration
+├── circus.ini                # Circus process manager config
+└── README.md                 # This file
 ```
 
-4. **Create start.sh** script:
-```bash
-#!/bin/bash
+## License
 
-# Set OpenTelemetry environment variables
-export OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-fastapi-gunicorn-app}"
-export OTEL_SERVICE_VERSION="${OTEL_SERVICE_VERSION:-1.0.0}"
-export OTEL_RESOURCE_ATTRIBUTES="service.name=${OTEL_SERVICE_NAME},service.version=${OTEL_SERVICE_VERSION}"
-export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}"
-
-# Start Circus with the configuration
-echo "Starting FastAPI application with Circus (Gunicorn 2 workers) and OpenTelemetry auto-instrumentation..."
-circusd circus.ini
-```
-
-5. **Simplify your app.py** (remove manual instrumentation):
-```python
-from fastapi import FastAPI
-
-# Create a FastAPI application
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return {"message": "Hello World from FastAPI with auto-instrumentation!"}
-
-@app.get("/items/{item_id}")
-async def read_item(item_id: int):
-    return {"item_id": item_id}
-```
-
-6. **Start the application**:
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-### Key Differences from Uvicorn
-
-| Aspect | Uvicorn Direct | Circus + Gunicorn |
-|--------|----------------|-------------------|
-| **Workers** | `uvicorn --workers 2` (problematic with OTEL) | Gunicorn manages 2 workers properly |
-| **Process Management** | Basic process handling | Circus provides monitoring, restart, scaling |
-| **OpenTelemetry** | Auto-instrumentation breaks with `--workers` | Works correctly with worker forking |
-| **Production Ready** | Basic development server | Full production deployment setup |
-| **Resource Management** | Limited control | Fine-grained worker lifecycle management |
-
-### Benefits
-
-- ✅ **Full OpenTelemetry auto-instrumentation** works with multiple workers
-- ✅ **Process monitoring** and automatic restarts via Circus  
-- ✅ **Load balancing** across multiple Gunicorn workers
-- ✅ **Production-grade** setup with proper resource management
-- ✅ **Easy scaling** by adjusting worker count in configuration
-- ✅ **macOS Compatibility** - Automatically sets `NO_PROXY=*` to prevent proxy-related crashes on macOS
-
-### Testing
-
-After starting, you should see traces being generated for each request, with different worker processes handling the load balancing.
+MIT
