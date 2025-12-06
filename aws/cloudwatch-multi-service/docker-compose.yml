@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # LocalStack - AWS service emulation for local testing
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack-aws-services
+    ports:
+      - "4566:4566"  # LocalStack gateway
+      - "4571:4571"  # LocalStack web UI (optional)
+    environment:
+      # Enable AWS services needed for testing
+      - SERVICES=logs,lambda,s3,apigateway,events
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - LAMBDA_EXECUTOR=docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - "${TMPDIR:-/tmp}/localstack:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./localstack-init:/docker-entrypoint-initaws.d"  # Initialization scripts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.118.0
+    container_name: otel-collector-multi-service
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "13133:13133" # Health check
+      - "8888:8888"   # Metrics endpoint
+      - "55679:55679" # zPages monitoring
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT:-https://otlp.last9.io:443}
+      - LAST9_AUTH_HEADER=${LAST9_AUTH_HEADER:-Basic dGVzdDp0ZXN0}
+      - OTEL_SERVICE_NAME=aws-cloudwatch-collector-test
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=local,test=true
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Log generator - simulates logs from various AWS services
+  log-generator:
+    image: amazon/aws-cli:latest
+    container_name: aws-log-generator
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        # Wait for LocalStack to be ready
+        echo "Waiting for LocalStack..."
+        sleep 15
+
+        # Create CloudWatch log groups for all services
+        echo "Creating CloudWatch log groups..."
+
+        # Amazon Connect log groups (17 flows)
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/connect/aha_prod || true
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/connect/aha_underscore_main || true
+
+        # Lambda function log groups (4-5 functions)
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/lambda/aha_prod_auth_handler || true
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/lambda/aha_prod_data_processor || true
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/lambda/aha_prod_webhook_handler || true
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/lambda/aha_prod_integration_service || true
+
+        # Lex bot log groups (3 bots)
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/lex/aha_prod_main_bot || true
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/lex/aha_prod_fallback_bot || true
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/lex/aha_prod_assistant_bot || true
+
+        # API Gateway log group
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/apigateway/aha_prod_api || true
+
+        # EventBridge log group
+        aws --endpoint-url=http://localstack:4566 logs create-log-group \
+          --log-group-name /aws/events/aha_prod_event_bus || true
+
+        echo "✅ Log groups created successfully!"
+
+        # Generate sample log events in a loop
+        echo "Generating sample log events..."
+        counter=0
+        while true; do
+          counter=$$((counter + 1))
+          timestamp=$$(date +%s%3N)
+
+          # Connect logs
+          aws --endpoint-url=http://localstack:4566 logs put-log-events \
+            --log-group-name /aws/connect/aha_prod \
+            --log-stream-name contact-flow-1 \
+            --log-events timestamp=$$timestamp,message="{\"contactId\":\"contact-$$counter\",\"event\":\"CustomerConnected\",\"timestamp\":\"$$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" \
+            2>/dev/null || true
+
+          # Lambda logs
+          aws --endpoint-url=http://localstack:4566 logs put-log-events \
+            --log-group-name /aws/lambda/aha_prod_auth_handler \
+            --log-stream-name 2024/01/01/[\$$LATEST]abcd1234 \
+            --log-events timestamp=$$timestamp,message="[INFO] Processing authentication request $$counter" \
+            2>/dev/null || true
+
+          aws --endpoint-url=http://localstack:4566 logs put-log-events \
+            --log-group-name /aws/lambda/aha_prod_data_processor \
+            --log-stream-name 2024/01/01/[\$$LATEST]efgh5678 \
+            --log-events timestamp=$$timestamp,message="{\"level\":\"info\",\"msg\":\"Processing data batch\",\"batch_id\":$$counter,\"records\":42}" \
+            2>/dev/null || true
+
+          # Lex logs
+          aws --endpoint-url=http://localstack:4566 logs put-log-events \
+            --log-group-name /aws/lex/aha_prod_main_bot \
+            --log-stream-name bot-session-$$counter \
+            --log-events timestamp=$$timestamp,message="{\"userId\":\"user-$$counter\",\"intent\":\"GetHelp\",\"confidence\":0.95}" \
+            2>/dev/null || true
+
+          # API Gateway logs
+          aws --endpoint-url=http://localstack:4566 logs put-log-events \
+            --log-group-name /aws/apigateway/aha_prod_api \
+            --log-stream-name api-gateway-execution-logs \
+            --log-events timestamp=$$timestamp,message="$$(date -u +%Y-%m-%dT%H:%M:%SZ) - GET /api/users - 200 OK - 45ms" \
+            2>/dev/null || true
+
+          echo "📝 Generated log batch $$counter ($(date))"
+          sleep 30  # Generate logs every 30 seconds
+        done
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+networks:
+  default:
+    name: aws-multi-service-network

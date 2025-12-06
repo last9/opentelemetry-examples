@@ -1,0 +1,64 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+# AWS Configuration
+aws_region = "us-east-1"
+name_prefix = "aha-chatbot-otel"
+
+# VPC Configuration (optional - leave empty to use default VPC)
+vpc_id    = ""
+subnet_id = ""
+
+# EC2 Configuration
+instance_type     = "t3.small"  # Recommended for production workloads
+root_volume_size  = 20
+
+# Network Security
+allowed_cidr_blocks = ["10.0.0.0/8"]  # Adjust to your VPC CIDR
+enable_ssh_access   = false            # Set to true only for debugging
+ssh_cidr_blocks     = []               # Your IP address if SSH enabled
+
+# Last9 Configuration (REQUIRED)
+last9_otlp_endpoint = "https://otlp.last9.io:443"
+last9_auth_header   = "Basic <YOUR_BASE64_ENCODED_CREDENTIALS>"
+
+# OTEL Collector Configuration
+otel_service_name       = "aha-chatbot-cloudwatch-collector"
+otel_resource_attributes = "deployment.environment=production,customer=aha_chatbot,team=platform"
+
+# CloudWatch Log Groups
+cloudwatch_log_group_prefix = "/aws/"
+cloudwatch_log_group_names = [
+  # Amazon Connect
+  "/aws/connect/aha_prod",
+  "/aws/connect/aha_underscore_main",
+
+  # Lambda Functions
+  "/aws/lambda/aha_prod_auth_handler",
+  "/aws/lambda/aha_prod_data_processor",
+  "/aws/lambda/aha_prod_webhook_handler",
+  "/aws/lambda/aha_prod_integration_service",
+
+  # Lex Bots
+  "/aws/lex/aha_prod_main_bot",
+  "/aws/lex/aha_prod_fallback_bot",
+  "/aws/lex/aha_prod_assistant_bot",
+
+  # API Gateway
+  "/aws/apigateway/aha_prod_api",
+
+  # EventBridge
+  "/aws/events/aha_prod_event_bus"
+]
+
+# Monitoring
+enable_cloudwatch_alarms = true
+alarm_sns_topic_arn      = ""  # Optional: SNS topic for alarms
+
+# Tags
+tags = {
+  ManagedBy   = "Terraform"
+  Purpose     = "Last9-OTEL-Collector"
+  Environment = "production"
+  Customer    = "AHA-Chatbot"
+  Team        = "Platform"
+}

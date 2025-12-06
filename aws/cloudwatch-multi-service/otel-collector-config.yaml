@@ -1,0 +1,224 @@
+# OpenTelemetry Collector Configuration
+# For collecting logs from multiple AWS services (Connect, Lambda, Lex, API Gateway, EventBridge, S3)
+# and forwarding to Last9
+
+receivers:
+  # OTLP receiver for any application-level instrumentation
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # AWS CloudWatch Logs receiver
+  # Polls CloudWatch for logs from multiple log groups
+  awscloudwatch:
+    # AWS region where your services are deployed
+    region: ${AWS_REGION:us-east-1}
+
+    logs:
+      # Poll interval - how often to check for new logs
+      # 2 minutes provides good balance between freshness and API costs
+      poll_interval: 2m
+
+      groups:
+        # Autodiscovery: automatically find log groups matching prefixes
+        autodiscover:
+          # Maximum number of log groups to discover
+          limit: 100
+
+          # Discover all AWS service logs
+          # This will match: /aws/connect/*, /aws/lambda/*, /aws/lex/*, etc.
+          prefix: /aws/
+
+        # Named log groups: explicitly specify customer's log groups
+        # Replace these with actual log group names from customer's AWS account
+        # Format: /aws/<service>/<resource-name>
+        named:
+          # Amazon Connect logs (17 flows with aha_prod prefix)
+          /aws/connect/aha_prod
+          /aws/connect/aha_underscore_main
+
+          # Lambda function logs (4-5 functions)
+          /aws/lambda/aha_prod_auth_handler
+          /aws/lambda/aha_prod_data_processor
+          /aws/lambda/aha_prod_webhook_handler
+          /aws/lambda/aha_prod_integration_service
+          /aws/lambda/aha_underscore_legacy
+
+          # Lex bot logs (3 bots)
+          /aws/lex/aha_prod_main_bot
+          /aws/lex/aha_prod_fallback_bot
+          /aws/lex/aha_prod_assistant_bot
+
+          # API Gateway logs
+          /aws/apigateway/aha_prod_api
+          /aws/apigateway/welcome
+
+          # EventBridge (if custom event bus logs enabled)
+          /aws/events/aha_prod_event_bus
+
+          # S3 access logs (if enabled)
+          # Note: S3 access logs are usually stored in S3, not CloudWatch
+          # Include only if customer has CloudWatch integration enabled
+
+processors:
+  # Batch processor: groups logs before sending to reduce API calls
+  batch:
+    timeout: 40s
+    send_batch_size: 100000
+    send_batch_max_size: 100000
+
+  # Memory limiter: prevents OOM issues
+  # Important for long-running collectors
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Add timestamp to logs that don't have one
+  transform/add_timestamp:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        conditions:
+          - time_unix_nano == 0
+        statements:
+          - set(observed_time, Now())
+          - set(time_unix_nano, observed_time_unix_nano)
+
+  # Transform logs: add service metadata and source tags
+  transform/logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Set service name from log group if not already set
+          # Extracts service type from log group path: /aws/<service>/<name>
+          - set(resource.attributes["service.name"], "cloudwatch-logs") where resource.attributes["service.name"] == nil
+
+          # Tag logs with source for easier filtering in Last9
+          - set(attributes["source"], "cloudwatch")
+
+          # Extract AWS service type from log group name
+          # Example: /aws/lambda/aha_prod_auth -> service.type = "lambda"
+          - set(attributes["aws.service"], ExtractPatterns(resource.attributes["aws.log.group.names"], "^\\/aws\\/([^\\/]+)"))
+
+          # Extract resource name (e.g., function name, bot name)
+          - set(attributes["aws.resource.name"], ExtractPatterns(resource.attributes["aws.log.group.names"], "^\\/aws\\/[^\\/]+\\/(.+)$"))
+
+          # Tag customer-specific resources with aha_prod prefix
+          - set(attributes["customer.platform"], "aha_chatbot") where attributes["aws.resource.name"] != nil and (IsMatch(attributes["aws.resource.name"], "aha_prod.*") or IsMatch(attributes["aws.resource.name"], "aha_underscore.*"))
+
+  # Resource detection: automatically detect EC2/container metadata
+  resourcedetection/system:
+    detectors: [env, system, ec2, ecs, docker]
+    timeout: 5s
+    override: false
+    ec2:
+      # Add EC2 instance metadata
+      tags:
+        - ^Name
+        - ^Environment
+    ecs:
+      # Add ECS task/container metadata
+      resource_attributes:
+        aws.ecs.cluster.arn: true
+        aws.ecs.task.arn: true
+
+exporters:
+  # Debug exporter: useful for troubleshooting
+  # Logs to stdout - check with: journalctl -u otelcol-contrib -f
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # Last9 OTLP exporter
+  otlp/last9:
+    # Last9 OTLP endpoint - replace with your endpoint
+    # Example: https://otlp.last9.io
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+
+    # Authentication header - use Basic auth with your Last9 token
+    # Format: "Basic <base64-encoded-credentials>"
+    headers:
+      Authorization: "${LAST9_AUTH_HEADER}"
+
+    # Compression reduces bandwidth usage
+    compression: gzip
+
+    # Timeout for export requests
+    timeout: 30s
+
+    # Retry configuration
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+    # Queue configuration for buffering during network issues
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+
+# Extensions: health check and monitoring
+extensions:
+  # Health check endpoint
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # Performance profiling endpoint (optional, for debugging)
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  # Prometheus metrics endpoint for collector itself
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+# Service definition: wire everything together
+service:
+  # Enable extensions
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    # Logs pipeline: CloudWatch -> Last9
+    logs:
+      receivers: [awscloudwatch, otlp]
+      processors:
+        - memory_limiter
+        - resourcedetection/system
+        - transform/add_timestamp
+        - transform/logs
+        - batch
+      exporters: [otlp/last9, debug]
+
+    # Traces pipeline (if using ADOT Lambda layers)
+    traces:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resourcedetection/system
+        - batch
+      exporters: [otlp/last9]
+
+    # Metrics pipeline (optional)
+    metrics:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resourcedetection/system
+        - batch
+      exporters: [otlp/last9]
+
+  # Telemetry configuration for collector itself
+  telemetry:
+    logs:
+      level: info
+      encoding: json
+    metrics:
+      address: 0.0.0.0:8888
+      level: detailed
