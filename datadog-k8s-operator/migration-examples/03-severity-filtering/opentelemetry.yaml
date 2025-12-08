@@ -1,0 +1,132 @@
+# OpenTelemetry: Severity-Based Filtering
+# Equivalent to Datadog's include_at_match/exclude_at_match for severity
+#
+# Uses filter processor with severity_number or pattern matching
+
+processors:
+  # ============================================
+  # Option 1: Filter by severity_number (preferred)
+  # Uses OpenTelemetry's standard severity levels
+  # ============================================
+  filter/severity_number:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop logs below WARNING level
+        # Severity levels: TRACE=1, DEBUG=5, INFO=9, WARN=13, ERROR=17, FATAL=21
+        - 'severity_number < SEVERITY_NUMBER_WARN'  # Drops TRACE, DEBUG, INFO
+
+  # ============================================
+  # Option 2: Keep only ERROR and above
+  # ============================================
+  filter/errors_only:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop anything below ERROR
+        - 'severity_number < SEVERITY_NUMBER_ERROR'  # Drops TRACE, DEBUG, INFO, WARN
+
+  # ============================================
+  # Option 3: Pattern-based filtering (for unstructured logs)
+  # Use when severity_number is not set
+  # ============================================
+  filter/severity_pattern:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop DEBUG logs (various formats)
+        - 'IsMatch(body, "^\\[DEBUG\\].*")'
+        - 'IsMatch(body, ".*level=debug.*")'
+        - 'IsMatch(body, ".*\"level\":\\s*\"debug\".*")'
+        - 'IsMatch(body, ".*DEBUG:.*")'
+
+        # Drop TRACE logs
+        - 'IsMatch(body, "^\\[TRACE\\].*")'
+        - 'IsMatch(body, ".*level=trace.*")'
+        - 'IsMatch(body, ".*\"level\":\\s*\"trace\".*")'
+        - 'IsMatch(body, ".*TRACE:.*")'
+
+  # ============================================
+  # Option 4: Inverse logic - keep only important (include_at_match equivalent)
+  # Note: Filter processor drops matching, so we use NOT logic
+  # ============================================
+  filter/keep_important:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop logs that DON'T match important patterns
+        # This effectively keeps only ERROR/WARN/FATAL
+        - 'not IsMatch(body, "(?i)(error|warn|fatal|critical|exception|traceback)")'
+
+  # ============================================
+  # Transform: Set severity_number from log content
+  # Use this BEFORE filtering if severity is in log body
+  # ============================================
+  transform/parse_severity:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Parse severity from log body and set severity_number
+          - set(severity_number, SEVERITY_NUMBER_FATAL) where IsMatch(body, "(?i)(fatal|critical)")
+          - set(severity_number, SEVERITY_NUMBER_ERROR) where IsMatch(body, "(?i)(error|exception|traceback)")
+          - set(severity_number, SEVERITY_NUMBER_WARN) where IsMatch(body, "(?i)(warn|warning)")
+          - set(severity_number, SEVERITY_NUMBER_INFO) where IsMatch(body, "(?i)(info)")
+          - set(severity_number, SEVERITY_NUMBER_DEBUG) where IsMatch(body, "(?i)(debug)")
+          - set(severity_number, SEVERITY_NUMBER_TRACE) where IsMatch(body, "(?i)(trace)")
+
+          # Also set severity_text
+          - set(severity_text, "FATAL") where severity_number == SEVERITY_NUMBER_FATAL
+          - set(severity_text, "ERROR") where severity_number == SEVERITY_NUMBER_ERROR
+          - set(severity_text, "WARN") where severity_number == SEVERITY_NUMBER_WARN
+          - set(severity_text, "INFO") where severity_number == SEVERITY_NUMBER_INFO
+          - set(severity_text, "DEBUG") where severity_number == SEVERITY_NUMBER_DEBUG
+          - set(severity_text, "TRACE") where severity_number == SEVERITY_NUMBER_TRACE
+
+# ============================================
+# Complete pipeline example
+# ============================================
+service:
+  pipelines:
+    logs:
+      receivers:
+        - filelog
+        - otlp
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - transform/parse_severity  # 1. Parse severity from log content
+        - filter/severity_number    # 2. Filter by severity level
+        - transform/enrich
+        - batch
+      exporters:
+        - otlp/last9
+
+# ============================================
+# Severity number reference:
+# ============================================
+# SEVERITY_NUMBER_UNSPECIFIED = 0
+# SEVERITY_NUMBER_TRACE  = 1
+# SEVERITY_NUMBER_TRACE2 = 2
+# SEVERITY_NUMBER_TRACE3 = 3
+# SEVERITY_NUMBER_TRACE4 = 4
+# SEVERITY_NUMBER_DEBUG  = 5
+# SEVERITY_NUMBER_DEBUG2 = 6
+# SEVERITY_NUMBER_DEBUG3 = 7
+# SEVERITY_NUMBER_DEBUG4 = 8
+# SEVERITY_NUMBER_INFO   = 9
+# SEVERITY_NUMBER_INFO2  = 10
+# SEVERITY_NUMBER_INFO3  = 11
+# SEVERITY_NUMBER_INFO4  = 12
+# SEVERITY_NUMBER_WARN   = 13
+# SEVERITY_NUMBER_WARN2  = 14
+# SEVERITY_NUMBER_WARN3  = 15
+# SEVERITY_NUMBER_WARN4  = 16
+# SEVERITY_NUMBER_ERROR  = 17
+# SEVERITY_NUMBER_ERROR2 = 18
+# SEVERITY_NUMBER_ERROR3 = 19
+# SEVERITY_NUMBER_ERROR4 = 20
+# SEVERITY_NUMBER_FATAL  = 21
+# SEVERITY_NUMBER_FATAL2 = 22
+# SEVERITY_NUMBER_FATAL3 = 23
+# SEVERITY_NUMBER_FATAL4 = 24

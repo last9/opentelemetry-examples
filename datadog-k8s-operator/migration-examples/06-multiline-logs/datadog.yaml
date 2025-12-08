@@ -1,0 +1,166 @@
+# Datadog: Multi-line Log Aggregation
+# Combine multi-line logs (stack traces, etc.) into single log entries
+#
+# Uses multi_line log processing rule type
+
+# Method 1: Pod Annotation with multi_line rule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: java-app
+  annotations:
+    # Java application with stack traces
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "java",
+        "service": "payment-service",
+        "log_processing_rules": [
+          {
+            "type": "multi_line",
+            "name": "java_stacktrace",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}|^\\[\\d{4}-\\d{2}-\\d{2}"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: openjdk:17
+
+---
+# Method 2: Python traceback aggregation
+apiVersion: v1
+kind: Pod
+metadata:
+  name: python-app
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "python",
+        "service": "ml-service",
+        "log_processing_rules": [
+          {
+            "type": "multi_line",
+            "name": "python_traceback",
+            "pattern": "^Traceback|^\\d{4}-\\d{2}-\\d{2}|^[A-Z][a-z]+Error:|^\\s+File"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: python:3.11
+
+---
+# Method 3: Go panic stack traces
+apiVersion: v1
+kind: Pod
+metadata:
+  name: go-app
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "go",
+        "service": "api-gateway",
+        "log_processing_rules": [
+          {
+            "type": "multi_line",
+            "name": "go_panic",
+            "pattern": "^\\d{4}/\\d{2}/\\d{2}|^panic:|^goroutine \\d+"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: golang:1.21
+
+---
+# Method 4: Generic timestamp-based aggregation
+apiVersion: v1
+kind: Pod
+metadata:
+  name: generic-app
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "custom",
+        "service": "backend",
+        "log_processing_rules": [
+          {
+            "type": "multi_line",
+            "name": "timestamp_start",
+            "pattern": "^\\[?\\d{4}[-/]\\d{2}[-/]\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: busybox
+
+---
+# Method 5: Auto multi-line detection (DatadogAgent CRD)
+apiVersion: datadoghq.com/v2alpha1
+kind: DatadogAgent
+metadata:
+  name: datadog
+  namespace: datadog
+spec:
+  features:
+    logCollection:
+      enabled: true
+      containerCollectAll: true
+      # Enable automatic multi-line detection
+      # Datadog will automatically detect common patterns
+      autoMultiLineDetection: true
+
+---
+# Method 6: JSON multi-line (pretty-printed JSON)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: json-app
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "nodejs",
+        "service": "frontend",
+        "log_processing_rules": [
+          {
+            "type": "multi_line",
+            "name": "json_multiline",
+            "pattern": "^\\{"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: node:20
+
+---
+# Common multi-line patterns reference:
+#
+# Java/Kotlin:
+#   pattern: "^\\d{4}-\\d{2}-\\d{2}"           # 2024-01-15 10:30:00
+#   pattern: "^\\[\\d{4}-\\d{2}-\\d{2}"        # [2024-01-15 10:30:00]
+#
+# Python:
+#   pattern: "^Traceback|^\\d{4}-\\d{2}-\\d{2}"
+#   pattern: "^[A-Z][a-z]+Error:"              # ValueError:, TypeError:
+#
+# Go:
+#   pattern: "^\\d{4}/\\d{2}/\\d{2}"           # 2024/01/15
+#   pattern: "^panic:|^goroutine"
+#
+# Node.js/JavaScript:
+#   pattern: "^\\{"                            # JSON logs
+#   pattern: "^Error:|^    at "                # Stack traces
+#
+# Ruby:
+#   pattern: "^[A-Z], \\["                     # D, [2024-01-15...]
+#
+# Generic ISO timestamp:
+#   pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"

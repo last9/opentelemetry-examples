@@ -1,0 +1,370 @@
+# Vector/VRL: Log Transformation Examples
+# Datadog Observability Pipelines uses Vector under the hood
+# VRL (Vector Remap Language) provides powerful log transformation capabilities
+#
+# This file shows common VRL patterns and their use cases
+# See opentelemetry.yaml for OTTL equivalents
+
+# ============================================
+# Source: Kubernetes logs
+# ============================================
+[sources.kubernetes]
+type = "kubernetes_logs"
+auto_partial_merge = true
+exclude_paths_glob_patterns = ["/var/log/pods/kube-system_*/**"]
+
+# ============================================
+# Transform 1: Parse JSON Logs
+# ============================================
+[transforms.parse_json]
+type = "remap"
+inputs = ["kubernetes"]
+source = '''
+  # Try to parse message as JSON
+  structured, err = parse_json(.message)
+  if err == null {
+    . = merge(., structured)
+    del(.message)
+  }
+'''
+
+# ============================================
+# Transform 2: Parse Syslog
+# ============================================
+[transforms.parse_syslog]
+type = "remap"
+inputs = ["kubernetes"]
+source = '''
+  # Parse syslog format
+  parsed, err = parse_syslog(.message)
+  if err == null {
+    .severity = parsed.severity
+    .facility = parsed.facility
+    .hostname = parsed.hostname
+    .appname = parsed.appname
+    .message = parsed.message
+  }
+'''
+
+# ============================================
+# Transform 3: Parse Apache/Nginx Logs
+# ============================================
+[transforms.parse_apache]
+type = "remap"
+inputs = ["kubernetes"]
+source = '''
+  # Parse Apache Combined Log Format
+  parsed, err = parse_apache_log(.message, format: "combined")
+  if err == null {
+    .http = {
+      "client_ip": parsed.host,
+      "method": parsed.method,
+      "path": parsed.path,
+      "status": parsed.status,
+      "size": parsed.size,
+      "referer": parsed.referrer,
+      "user_agent": parsed.agent
+    }
+    .timestamp = parsed.timestamp
+  }
+'''
+
+# ============================================
+# Transform 4: Grok Parsing
+# ============================================
+[transforms.parse_grok]
+type = "remap"
+inputs = ["kubernetes"]
+source = '''
+  # Parse custom log format using Grok
+  # Pattern: [2024-01-15 10:30:42] [INFO] [req-123] Message here
+  parsed, err = parse_grok(.message, "[%{TIMESTAMP_ISO8601:timestamp}] [%{WORD:level}] [%{NOTSPACE:request_id}] %{GREEDYDATA:msg}")
+  if err == null {
+    .timestamp = parsed.timestamp
+    .level = parsed.level
+    .request_id = parsed.request_id
+    .message = parsed.msg
+  }
+'''
+
+# ============================================
+# Transform 5: Field Manipulation
+# ============================================
+[transforms.manipulate_fields]
+type = "remap"
+inputs = ["parse_json"]
+source = '''
+  # Add new fields
+  .environment = "production"
+  .processed_at = now()
+
+  # Rename fields
+  if exists(.msg) {
+    .message = del(.msg)
+  }
+
+  # Delete sensitive fields
+  del(.password)
+  del(.secret)
+  del(.api_key)
+
+  # Uppercase field value
+  if exists(.level) {
+    .level = upcase(string!(.level))
+  }
+
+  # Convert types
+  if exists(.duration) {
+    .duration_ms = to_float(.duration) ?? 0.0
+  }
+
+  # Set nested fields
+  .metadata.source = "kubernetes"
+  .metadata.collector = "vector"
+'''
+
+# ============================================
+# Transform 6: Conditional Logic
+# ============================================
+[transforms.conditional]
+type = "remap"
+inputs = ["manipulate_fields"]
+source = '''
+  # Set severity based on level
+  if .level == "ERROR" || .level == "FATAL" {
+    .severity = "high"
+    .alert = true
+  } else if .level == "WARN" {
+    .severity = "medium"
+    .alert = false
+  } else {
+    .severity = "low"
+    .alert = false
+  }
+
+  # Tag based on content
+  if contains(string!(.message), "payment") {
+    .tags.domain = "payments"
+    .pci_relevant = true
+  }
+
+  # Check for patterns
+  if match(string!(.message), r'error|exception|fail') {
+    .needs_attention = true
+  }
+'''
+
+# ============================================
+# Transform 7: PII Redaction
+# ============================================
+[transforms.redact_pii]
+type = "remap"
+inputs = ["conditional"]
+source = '''
+  # Redact SSN
+  .message = replace(.message, r'\d{3}-\d{2}-\d{4}', "[SSN_REDACTED]")
+
+  # Redact credit cards
+  .message = replace(.message, r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14})\b', "[CARD_REDACTED]")
+
+  # Redact email addresses
+  .message = replace(.message, r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', "[EMAIL_REDACTED]")
+
+  # Redact IP addresses
+  .message = replace(.message, r'\b(?:\d{1,3}\.){3}\d{1,3}\b', "[IP_REDACTED]")
+
+  # Using built-in redact function with multiple patterns
+  .message = redact(.message, filters: [
+    r'\d{3}-\d{2}-\d{4}',           # SSN
+    r'Bearer\s+[a-zA-Z0-9._-]+',    # Bearer tokens
+    r'api[_-]?key[=:]\s*\S+',       # API keys
+  ])
+
+  # Redact specific fields entirely
+  if exists(.user.email) {
+    .user.email = "[REDACTED]"
+  }
+  if exists(.user.phone) {
+    .user.phone = "[REDACTED]"
+  }
+'''
+
+# ============================================
+# Transform 8: Enrichment
+# ============================================
+[transforms.enrich]
+type = "remap"
+inputs = ["redact_pii"]
+source = '''
+  # Add geo information based on IP (example)
+  # In production, use enrichment tables
+  .geo.country = "unknown"
+
+  # Parse user agent
+  if exists(.http.user_agent) {
+    ua = parse_user_agent(string!(.http.user_agent)) ?? {}
+    .browser = ua.browser
+    .os = ua.os
+    .device = ua.device
+  }
+
+  # Calculate request duration category
+  if exists(.duration_ms) {
+    if .duration_ms > 5000 {
+      .performance = "very_slow"
+    } else if .duration_ms > 1000 {
+      .performance = "slow"
+    } else if .duration_ms > 100 {
+      .performance = "normal"
+    } else {
+      .performance = "fast"
+    }
+  }
+
+  # Add timestamp if missing
+  if !exists(.timestamp) {
+    .timestamp = now()
+  }
+'''
+
+# ============================================
+# Transform 9: Drop/Filter Logs
+# ============================================
+[transforms.filter_noisy]
+type = "remap"
+inputs = ["enrich"]
+drop_on_abort = true
+source = '''
+  # Drop health check logs
+  if match(string!(.message), r'(?i)health|readiness|liveness') {
+    abort
+  }
+
+  # Drop debug logs in production
+  if .level == "DEBUG" && .environment == "production" {
+    abort
+  }
+
+  # Drop static asset requests
+  if exists(.http.path) && match(string!(.http.path), r'\.(css|js|png|jpg|gif|ico|woff)$') {
+    abort
+  }
+
+  # Drop logs from specific pods
+  if exists(.kubernetes.pod_name) && starts_with(string!(.kubernetes.pod_name), "datadog-") {
+    abort
+  }
+'''
+
+# Alternative: Use filter transform type
+[transforms.filter_by_level]
+type = "filter"
+inputs = ["filter_noisy"]
+condition = '.level != "DEBUG"'
+
+# ============================================
+# Transform 10: Route to Multiple Outputs
+# ============================================
+[transforms.route]
+type = "route"
+inputs = ["filter_by_level"]
+
+[transforms.route.route]
+  errors = '.level == "ERROR" || .level == "FATAL"'
+  warnings = '.level == "WARN"'
+  audit = 'exists(.audit) && .audit == true'
+
+# ============================================
+# Transform 11: Aggregate/Sample
+# ============================================
+[transforms.sample]
+type = "sample"
+inputs = ["route._unmatched"]
+rate = 10  # Keep 1 in 10 logs
+
+# ============================================
+# Transform 12: Reduce (Aggregate)
+# ============================================
+[transforms.aggregate_errors]
+type = "reduce"
+inputs = ["route.errors"]
+group_by = [".service", ".error_type"]
+merge_strategies.message = "concat_newline"
+merge_strategies.count = "sum"
+ends_when = "true"  # Flush every batch
+expire_after_ms = 30000
+
+# ============================================
+# Sinks: Send to destinations
+# ============================================
+[sinks.last9]
+type = "http"
+inputs = ["filter_by_level"]
+uri = "${LAST9_OTLP_ENDPOINT}"
+encoding.codec = "json"
+auth.strategy = "bearer"
+auth.token = "${LAST9_AUTH_TOKEN}"
+compression = "gzip"
+batch.max_bytes = 1048576
+batch.timeout_secs = 5
+
+[sinks.errors_to_pagerduty]
+type = "http"
+inputs = ["route.errors"]
+uri = "https://events.pagerduty.com/v2/enqueue"
+encoding.codec = "json"
+
+[sinks.audit_to_s3]
+type = "aws_s3"
+inputs = ["route.audit"]
+bucket = "audit-logs"
+key_prefix = "logs/%Y/%m/%d/"
+compression = "gzip"
+encoding.codec = "json"
+
+# ============================================
+# VRL Function Reference
+# ============================================
+#
+# String Functions:
+#   upcase(s), downcase(s), capitalize(s)
+#   contains(s, substr), starts_with(s, prefix), ends_with(s, suffix)
+#   replace(s, pattern, replacement), strip_whitespace(s)
+#   slice(s, start, end), split(s, delimiter)
+#   match(s, regex), match_any(s, patterns)
+#
+# Type Conversion:
+#   to_string(v), to_int(v), to_float(v), to_bool(v)
+#   string!(v), int!(v), float!(v), bool!(v)  # Infallible versions
+#   type_of(v), is_string(v), is_integer(v), is_float(v), is_boolean(v)
+#
+# Object/Array:
+#   exists(path), del(path), set(obj, path, value)
+#   keys(obj), values(obj), merge(obj1, obj2)
+#   push(arr, value), flatten(arr), compact(arr)
+#   map_keys(obj, fn), map_values(obj, fn)
+#
+# Parsing:
+#   parse_json(s), parse_syslog(s), parse_apache_log(s, format)
+#   parse_grok(s, pattern), parse_regex(s, pattern)
+#   parse_key_value(s), parse_xml(s), parse_csv(s)
+#   parse_timestamp(s, format), parse_duration(s)
+#   parse_url(s), parse_user_agent(s)
+#
+# Encoding:
+#   encode_json(v), encode_base64(s), decode_base64(s)
+#   sha256(s), md5(s), uuid_v4()
+#
+# Date/Time:
+#   now(), format_timestamp(ts, format)
+#   to_unix_timestamp(ts), from_unix_timestamp(i)
+#
+# Cryptographic:
+#   sha256(s), sha512(s), md5(s), hmac(s, key, algo)
+#
+# Flow Control:
+#   abort, assert(condition, message)
+#   if/else, ??  (null coalescing), ! (not)
+#
+# Redaction:
+#   redact(s, filters: [patterns])

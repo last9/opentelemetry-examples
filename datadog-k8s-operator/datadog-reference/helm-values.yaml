@@ -1,0 +1,174 @@
+# Datadog Helm Chart Values - Reference Configuration
+# Shows log processing rules configured via Helm values
+#
+# Install: helm install datadog datadog/datadog -f helm-values.yaml
+# Documentation: https://github.com/DataDog/helm-charts/tree/main/charts/datadog
+
+datadog:
+  # API and App keys (use secrets in production)
+  apiKeyExistingSecret: datadog-secret
+  appKeyExistingSecret: datadog-secret
+
+  # Cluster name
+  clusterName: my-k8s-cluster
+
+  # Site (US, EU, etc.)
+  site: datadoghq.com
+
+  # ============================================
+  # LOG COLLECTION CONFIGURATION
+  # ============================================
+  logs:
+    # Enable log collection
+    enabled: true
+
+    # Collect all container logs
+    containerCollectAll: true
+
+    # Use file-based collection (more efficient)
+    containerCollectUsingFiles: true
+
+    # Auto-detect multi-line logs
+    autoMultiLineDetection:
+      enabled: true
+
+  # ============================================
+  # ENVIRONMENT VARIABLES FOR PROCESSING RULES
+  # ============================================
+  env:
+    # Global processing rules - applied to ALL logs
+    - name: DD_LOGS_CONFIG_PROCESSING_RULES
+      value: >-
+        [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_healthcheck",
+            "pattern": "(GET|HEAD) /(health|healthz|ready|readyz|live|livez|ping)"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_metrics_endpoint",
+            "pattern": "(GET|POST) /metrics"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_debug_logs",
+            "pattern": "^\\[DEBUG\\]|level=debug|\"level\":\"debug\""
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_ssn",
+            "pattern": "\\d{3}-\\d{2}-\\d{4}",
+            "replace_placeholder": "[SSN_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_credit_card",
+            "pattern": "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\\b",
+            "replace_placeholder": "[CARD_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_email",
+            "pattern": "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+            "replace_placeholder": "[EMAIL_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_ip_address",
+            "pattern": "\\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\b",
+            "replace_placeholder": "[IP_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_bearer_token",
+            "pattern": "Bearer\\s+[a-zA-Z0-9._-]+",
+            "replace_placeholder": "Bearer [TOKEN_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_password_field",
+            "pattern": "(password|passwd|pwd)[=:\\s]+[^\\s,}\"']+",
+            "replace_placeholder": "$1=[REDACTED]"
+          }
+        ]
+
+    # Exclude logs from system namespaces
+    - name: DD_CONTAINER_EXCLUDE_LOGS
+      value: >-
+        kube_namespace:kube-system
+        kube_namespace:kube-public
+        kube_namespace:kube-node-lease
+        kube_namespace:cert-manager
+        kube_namespace:ingress-nginx
+        image:k8s.gcr.io/pause
+        image:registry.k8s.io/pause
+
+    # Include specific containers (overrides exclusion)
+    - name: DD_CONTAINER_INCLUDE_LOGS
+      value: "name:critical-* name:payment-*"
+
+    # Exclude specific images
+    - name: DD_CONTAINER_EXCLUDE
+      value: "image:fluent-bit image:fluentd image:datadog/agent"
+
+# ============================================
+# AGENT CONFIGURATION
+# ============================================
+agents:
+  # Run as DaemonSet on all nodes
+  enabled: true
+
+  # Resource limits
+  containers:
+    agent:
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "200m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+
+  # Volume mounts for log collection
+  volumeMounts:
+    - name: var-log
+      mountPath: /var/log
+      readOnly: true
+    - name: var-lib-docker-containers
+      mountPath: /var/lib/docker/containers
+      readOnly: true
+    - name: pod-logs
+      mountPath: /var/log/pods
+      readOnly: true
+
+  volumes:
+    - name: var-log
+      hostPath:
+        path: /var/log
+    - name: var-lib-docker-containers
+      hostPath:
+        path: /var/lib/docker/containers
+    - name: pod-logs
+      hostPath:
+        path: /var/log/pods
+
+# ============================================
+# CLUSTER AGENT (for cluster-level features)
+# ============================================
+clusterAgent:
+  enabled: true
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+
+# ============================================
+# TOLERATIONS (to run on all nodes)
+# ============================================
+agents:
+  tolerations:
+    - operator: Exists

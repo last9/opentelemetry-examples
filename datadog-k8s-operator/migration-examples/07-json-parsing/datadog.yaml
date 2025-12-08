@@ -1,0 +1,131 @@
+# Datadog: JSON Log Parsing
+# Automatically parse JSON-formatted logs and extract fields
+#
+# Datadog auto-detects JSON and parses it automatically
+# Additional processing can be done via Log Pipelines (cloud-side)
+
+# Method 1: Pod Annotation - JSON source auto-detection
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: json-app
+  annotations:
+    # Datadog automatically detects and parses JSON logs
+    # Just specify source and service for metadata
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "nodejs",
+        "service": "api-service"
+      }]
+spec:
+  containers:
+    - name: app
+      image: node:20
+
+---
+# Method 2: Structured logging with custom attributes
+apiVersion: v1
+kind: Pod
+metadata:
+  name: structured-app
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "python",
+        "service": "ml-pipeline",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_debug",
+            "pattern": "\"level\":\\s*\"debug\""
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: python:3.11
+
+---
+# Method 3: Multiple JSON formats in same pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-format
+  annotations:
+    # Main app - structured JSON
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "go",
+        "service": "backend",
+        "log_processing_rules": [
+          {
+            "type": "mask_sequences",
+            "name": "mask_user_id",
+            "pattern": "\"user_id\":\\s*\"[^\"]+\"",
+            "replace_placeholder": "\"user_id\": \"[REDACTED]\""
+          }
+        ]
+      }]
+    # Sidecar - access logs
+    ad.datadoghq.com/nginx.logs: |
+      [{
+        "source": "nginx",
+        "service": "backend-nginx"
+      }]
+spec:
+  containers:
+    - name: app
+      image: golang:1.21
+    - name: nginx
+      image: nginx:latest
+
+---
+# Datadog Cloud-side JSON Pipeline (for reference)
+# This is configured in Datadog UI, not in K8s
+#
+# Pipeline: api-service
+#   Processor 1: JSON Parser
+#     - Parse JSON from message attribute
+#     - Extract: level, timestamp, request_id, user_id, duration_ms
+#
+#   Processor 2: Status Remapper
+#     - Map "level" field to log status
+#     - debug -> debug, info -> info, warn -> warning, error -> error
+#
+#   Processor 3: Date Remapper
+#     - Use "timestamp" field as official timestamp
+#
+#   Processor 4: Attribute Remapper
+#     - Map "request_id" to "trace_id" for APM correlation
+
+---
+# Common JSON log formats that Datadog auto-parses:
+#
+# 1. Standard JSON:
+#    {"level": "info", "message": "Request processed", "duration": 42}
+#
+# 2. Bunyan (Node.js):
+#    {"name": "app", "level": 30, "msg": "Request", "time": "2024-01-15T10:30:00Z"}
+#
+# 3. Zap (Go):
+#    {"level": "info", "ts": 1705312200, "msg": "Request", "caller": "main.go:42"}
+#
+# 4. Logrus (Go):
+#    {"level": "info", "msg": "Request", "time": "2024-01-15T10:30:00Z"}
+#
+# 5. structlog (Python):
+#    {"event": "Request processed", "level": "info", "timestamp": "2024-01-15T10:30:00"}
+#
+# 6. Log4j2 JSON (Java):
+#    {"timeMillis": 1705312200000, "level": "INFO", "message": "Request"}
+#
+# Reserved attributes that Datadog recognizes:
+# - message, msg: Main log message
+# - level, severity: Log level
+# - timestamp, time, ts, @timestamp: Log timestamp
+# - error, err, exception: Error information
+# - trace_id, span_id, dd.trace_id: APM correlation
+# - host, hostname: Source host
+# - service: Service name override

@@ -1,0 +1,153 @@
+# OpenTelemetry: Namespace Exclusion
+# Equivalent to Datadog's DD_CONTAINER_EXCLUDE_LOGS
+#
+# Uses filter processor with resource attribute conditions
+
+processors:
+  # ============================================
+  # Filter by namespace name
+  # ============================================
+  filter/namespace:
+    error_mode: ignore
+    logs:
+      log_record:
+        # System namespaces
+        - 'resource.attributes["k8s.namespace.name"] == "kube-system"'
+        - 'resource.attributes["k8s.namespace.name"] == "kube-public"'
+        - 'resource.attributes["k8s.namespace.name"] == "kube-node-lease"'
+
+        # Infrastructure namespaces
+        - 'resource.attributes["k8s.namespace.name"] == "cert-manager"'
+        - 'resource.attributes["k8s.namespace.name"] == "ingress-nginx"'
+        - 'resource.attributes["k8s.namespace.name"] == "nginx-ingress"'
+
+        # Service mesh
+        - 'resource.attributes["k8s.namespace.name"] == "istio-system"'
+        - 'resource.attributes["k8s.namespace.name"] == "linkerd"'
+
+        # Monitoring/Logging (to avoid recursion)
+        - 'resource.attributes["k8s.namespace.name"] == "monitoring"'
+        - 'resource.attributes["k8s.namespace.name"] == "logging"'
+        - 'resource.attributes["k8s.namespace.name"] == "datadog"'
+        - 'resource.attributes["k8s.namespace.name"] == "last9"'
+
+  # ============================================
+  # Filter by namespace pattern (regex)
+  # ============================================
+  filter/namespace_pattern:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Match namespaces starting with "kube-"
+        - 'IsMatch(resource.attributes["k8s.namespace.name"], "^kube-.*")'
+
+        # Match infrastructure namespaces
+        - 'IsMatch(resource.attributes["k8s.namespace.name"], "^(cert-manager|ingress-nginx|istio-system)$")'
+
+        # Match test/dev namespaces
+        - 'IsMatch(resource.attributes["k8s.namespace.name"], "^(test|dev|staging)-.*")'
+
+  # ============================================
+  # Filter by pod name pattern
+  # ============================================
+  filter/pod_pattern:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Exclude collector pods
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^otel-collector.*")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^fluent.*")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^datadog.*")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^promtail.*")'
+
+        # Exclude infrastructure pods
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^coredns.*")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^kube-proxy.*")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^calico.*")'
+
+  # ============================================
+  # Filter by container name
+  # ============================================
+  filter/container:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Exclude sidecar containers
+        - 'resource.attributes["k8s.container.name"] == "istio-proxy"'
+        - 'resource.attributes["k8s.container.name"] == "envoy"'
+        - 'resource.attributes["k8s.container.name"] == "linkerd-proxy"'
+
+        # Exclude init containers (usually named with "init-" prefix)
+        - 'IsMatch(resource.attributes["k8s.container.name"], "^init-.*")'
+
+  # ============================================
+  # Combined filter (namespace AND pod patterns)
+  # ============================================
+  filter/combined:
+    error_mode: ignore
+    logs:
+      log_record:
+        # System namespaces
+        - 'resource.attributes["k8s.namespace.name"] == "kube-system"'
+        - 'resource.attributes["k8s.namespace.name"] == "kube-public"'
+
+        # Monitoring namespace (avoid recursion)
+        - 'resource.attributes["k8s.namespace.name"] == "last9"'
+
+        # Infrastructure pods in any namespace
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^(otel|fluent|datadog)-.*")'
+
+        # Sidecar containers
+        - 'resource.attributes["k8s.container.name"] == "istio-proxy"'
+
+  # ============================================
+  # Include override (keep specific containers even if namespace excluded)
+  # Use routing connector for complex include/exclude logic
+  # ============================================
+  # Note: For include overrides, you may need to use routing connector
+  # or structure your filter conditions carefully
+
+  # Simple approach: Exclude from filter if it's a critical app
+  filter/with_include_override:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Exclude kube-system UNLESS it's a critical pod
+        - |
+          resource.attributes["k8s.namespace.name"] == "kube-system" and
+          not IsMatch(resource.attributes["k8s.pod.name"], "^(critical-app|payment-service).*")
+
+# ============================================
+# Alternative: Filelog receiver exclusion
+# Exclude at the source level (more efficient)
+# ============================================
+receivers:
+  filelog:
+    include:
+      - /var/log/pods/*/*/*.log
+    exclude:
+      # Exclude at file path level
+      - /var/log/pods/kube-system_*/*/*.log
+      - /var/log/pods/kube-public_*/*/*.log
+      - /var/log/pods/kube-node-lease_*/*/*.log
+      - /var/log/pods/last9_*/*/*.log
+      - /var/log/pods/*/istio-proxy/*.log
+    # ... rest of filelog config
+
+# Complete pipeline
+service:
+  pipelines:
+    logs:
+      receivers:
+        - filelog
+        - otlp
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - filter/namespace       # Exclude namespaces early
+        - filter/pod_pattern     # Then pods
+        - filter/container       # Then containers
+        - transform/enrich
+        - batch
+      exporters:
+        - otlp/last9

@@ -1,0 +1,76 @@
+# Datadog: Health Check Exclusion
+# Drop logs from health check, readiness, and liveness endpoints
+#
+# These logs are typically high-volume noise from K8s probes
+
+# Method 1: Pod Annotation (per-container)
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-app
+  annotations:
+    ad.datadoghq.com/nginx.logs: |
+      [{
+        "source": "nginx",
+        "service": "web-frontend",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_health_endpoints",
+            "pattern": "(GET|HEAD|POST) /(health|healthz|ready|readyz|live|livez|ping)"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_kube_probes",
+            "pattern": "kube-probe"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_metrics",
+            "pattern": "(GET|POST) /metrics"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+      ports:
+        - containerPort: 80
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 80
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 80
+
+---
+# Method 2: Global Agent Configuration (all containers)
+# Applied via DatadogAgent CRD or Helm values
+
+# In DatadogAgent CRD:
+# apiVersion: datadoghq.com/v2alpha1
+# kind: DatadogAgent
+# spec:
+#   override:
+#     nodeAgent:
+#       env:
+#         - name: DD_LOGS_CONFIG_PROCESSING_RULES
+#           value: |
+#             [
+#               {
+#                 "type": "exclude_at_match",
+#                 "name": "exclude_health_endpoints",
+#                 "pattern": "(GET|HEAD|POST) /(health|healthz|ready|readyz|live|livez|ping)"
+#               }
+#             ]
+
+# In Helm values.yaml:
+# datadog:
+#   env:
+#     - name: DD_LOGS_CONFIG_PROCESSING_RULES
+#       value: >-
+#         [{"type":"exclude_at_match","name":"exclude_health","pattern":"(GET|HEAD) /(health|ready|live)"}]

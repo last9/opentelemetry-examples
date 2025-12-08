@@ -1,0 +1,118 @@
+# OpenTelemetry: PII Masking (Sensitive Data Redaction)
+# Equivalent to Datadog's mask_sequences
+#
+# Uses the transform processor with replace_pattern function
+
+processors:
+  # Transform processor modifies log content
+  transform/pii:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # ============================================
+          # PERSONAL IDENTIFIERS
+          # ============================================
+
+          # SSN (US Social Security Number: XXX-XX-XXXX)
+          - replace_pattern(body, "\\d{3}-\\d{2}-\\d{4}", "[SSN_REDACTED]")
+
+          # Email addresses
+          - replace_pattern(body, "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "[EMAIL_REDACTED]")
+
+          # Phone numbers (US format: XXX-XXX-XXXX or variations)
+          - replace_pattern(body, "\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b", "[PHONE_REDACTED]")
+
+          # IP addresses (IPv4)
+          - replace_pattern(body, "\\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\b", "[IP_REDACTED]")
+
+          # ============================================
+          # FINANCIAL DATA
+          # ============================================
+
+          # Credit Card - Visa (starts with 4)
+          - replace_pattern(body, "\\b4[0-9]{12}(?:[0-9]{3})?\\b", "[VISA_REDACTED]")
+
+          # Credit Card - Mastercard (starts with 51-55)
+          - replace_pattern(body, "\\b5[1-5][0-9]{14}\\b", "[MC_REDACTED]")
+
+          # Credit Card - American Express (starts with 34 or 37)
+          - replace_pattern(body, "\\b3[47][0-9]{13}\\b", "[AMEX_REDACTED]")
+
+          # Credit Card - Discover (starts with 6011 or 65)
+          - replace_pattern(body, "\\b6(?:011|5[0-9]{2})[0-9]{12}\\b", "[DISCOVER_REDACTED]")
+
+          # Generic 16-digit number (likely card number)
+          - replace_pattern(body, "\\b[0-9]{16}\\b", "[CARD_REDACTED]")
+
+          # Bank account numbers (8-17 digits)
+          - replace_pattern(body, "\\b[0-9]{8,17}\\b", "[ACCOUNT_REDACTED]")
+
+          # ============================================
+          # AUTHENTICATION & SECRETS
+          # ============================================
+
+          # Bearer tokens
+          - replace_pattern(body, "Bearer\\s+[a-zA-Z0-9._-]+", "Bearer [TOKEN_REDACTED]")
+
+          # Authorization headers
+          - replace_pattern(body, "Authorization:\\s*[^\\s,}\"]+", "Authorization: [REDACTED]")
+
+          # Basic auth (base64)
+          - replace_pattern(body, "Basic\\s+[a-zA-Z0-9+/=]+", "Basic [REDACTED]")
+
+          # API keys (various formats)
+          - replace_pattern(body, "(api_key|apikey|api-key|API_KEY)[=:]\\s*[^\\s,}\"']+", "$1=[REDACTED]")
+
+          # Secret fields
+          - replace_pattern(body, "(secret|SECRET)[=:]\\s*[^\\s,}\"']+", "$1=[REDACTED]")
+
+          # Token fields
+          - replace_pattern(body, "(token|TOKEN)[=:]\\s*[^\\s,}\"']+", "$1=[REDACTED]")
+
+          # Password fields
+          - replace_pattern(body, "(password|passwd|pwd|PASSWORD)[=:]\\s*[^\\s,}\"']+", "$1=[REDACTED]")
+
+          # ============================================
+          # CLOUD PROVIDER CREDENTIALS
+          # ============================================
+
+          # AWS Access Key ID
+          - replace_pattern(body, "AKIA[0-9A-Z]{16}", "[AWS_ACCESS_KEY_REDACTED]")
+
+          # AWS Secret Key (40 char base64)
+          - replace_pattern(body, "(?i)aws_secret[_-]?access[_-]?key[=:]\\s*[a-zA-Z0-9+/]{40}", "aws_secret_access_key=[REDACTED]")
+
+          # GCP Service Account Key
+          - replace_pattern(body, "\"private_key\":\\s*\"-----BEGIN [^\"]+-----\"", "\"private_key\":\"[REDACTED]\"")
+
+          # Azure Connection String
+          - replace_pattern(body, "DefaultEndpointsProtocol=[^;]+;AccountName=[^;]+;AccountKey=[^;]+", "[AZURE_CONN_REDACTED]")
+
+          # ============================================
+          # DATABASE CREDENTIALS
+          # ============================================
+
+          # Connection strings with password
+          - replace_pattern(body, "(mongodb|mysql|postgres|redis)://[^:]+:[^@]+@", "$1://[USER]:[REDACTED]@")
+
+          # JDBC URLs with password
+          - replace_pattern(body, "jdbc:[^:]+://[^?]+\\?.*password=[^&]+", "[JDBC_URL_REDACTED]")
+
+# Complete service pipeline configuration
+service:
+  pipelines:
+    logs:
+      receivers:
+        - filelog
+        - otlp
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - filter/namespace
+        - filter/healthcheck
+        - transform/pii          # Apply PII masking
+        - transform/enrich
+        - batch
+      exporters:
+        - otlp/last9

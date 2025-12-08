@@ -1,0 +1,313 @@
+# OpenTelemetry: Log Parsing (Grok-equivalent)
+# Equivalent to Datadog's Grok Parser using regex_parser operator
+#
+# OpenTelemetry doesn't have native Grok support, but regex_parser with
+# named capture groups provides equivalent functionality
+#
+# Documentation:
+# - Regex Parser: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/operators/regex_parser.md
+# - Transform Processor: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor
+# - OTTL Functions: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs
+
+receivers:
+  # ============================================
+  # Nginx Access Log Parsing
+  # Equivalent to: %{COMBINEDAPACHELOG}
+  # ============================================
+  filelog/nginx:
+    include:
+      - /var/log/pods/*/nginx-*/*.log
+      - /var/log/nginx/access.log
+    include_file_path: true
+    operators:
+      # Parse CRI format first
+      - type: regex_parser
+        id: cri-parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+        output: nginx-parser
+
+      # Parse Nginx Combined Log Format
+      # Sample: 192.168.1.100 - - [15/Jan/2024:10:30:42 +0000] "GET /api/users HTTP/1.1" 200 1234 "https://example.com" "Mozilla/5.0"
+      - type: regex_parser
+        id: nginx-parser
+        regex: '^(?P<http_client_ip>[^ ]+) (?P<http_ident>[^ ]+) (?P<http_auth>[^ ]+) \[(?P<timestamp>[^\]]+)\] "(?P<http_method>[A-Z]+) (?P<http_url>[^ ]+) HTTP/(?P<http_version>[^"]+)" (?P<http_status_code>\d+) (?P<http_bytes_written>\d+) "(?P<http_referer>[^"]*)" "(?P<http_useragent>[^"]*)"'
+        parse_from: attributes.log
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%d/%b/%Y:%H:%M:%S %z'
+
+      # Add semantic convention attribute names
+      - type: move
+        from: attributes.http_client_ip
+        to: attributes["client.address"]
+      - type: move
+        from: attributes.http_method
+        to: attributes["http.request.method"]
+      - type: move
+        from: attributes.http_url
+        to: attributes["url.path"]
+      - type: move
+        from: attributes.http_status_code
+        to: attributes["http.response.status_code"]
+      - type: move
+        from: attributes.http_useragent
+        to: attributes["user_agent.original"]
+
+  # ============================================
+  # Apache Common/Combined Log Format
+  # ============================================
+  filelog/apache:
+    include:
+      - /var/log/apache2/access.log
+      - /var/log/httpd/access_log
+    include_file_path: true
+    operators:
+      # Common Log Format (CLF)
+      # Sample: 192.168.1.100 - admin [15/Jan/2024:10:30:42 +0000] "POST /login HTTP/1.1" 302 512
+      - type: regex_parser
+        regex: '^(?P<client_ip>[^ ]+) (?P<ident>[^ ]+) (?P<user>[^ ]+) \[(?P<timestamp>[^\]]+)\] "(?P<method>[A-Z]+) (?P<path>[^ ]+) HTTP/(?P<version>[^"]+)" (?P<status>\d+) (?P<bytes>\d+|-)'
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%d/%b/%Y:%H:%M:%S %z'
+
+      - type: severity_parser
+        parse_from: attributes.status
+        preset: none
+        mapping:
+          info: ["200", "201", "204", "301", "302", "304"]
+          warn: ["400", "401", "403", "404", "405"]
+          error: ["500", "501", "502", "503", "504"]
+
+  # ============================================
+  # PostgreSQL Log Parsing
+  # ============================================
+  filelog/postgresql:
+    include:
+      - /var/log/postgresql/*.log
+      - /var/log/pods/*/postgres-*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        id: cri-parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        if: body matches "^\\d{4}-\\d{2}-\\d{2}T"
+
+      # PostgreSQL log format
+      # Sample: 2024-01-15 10:30:42.123 UTC [12345] LOG:  duration: 42.123 ms  statement: SELECT * FROM users
+      - type: regex_parser
+        regex: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) (?P<timezone>\w+) \[(?P<pid>\d+)\] (?P<level>\w+):\s+(?P<message>.*)$'
+        parse_from: attributes.log
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%Y-%m-%d %H:%M:%S.%L'
+
+      # Extract duration from slow query logs
+      - type: regex_parser
+        regex: 'duration: (?P<duration_ms>[\d.]+) ms\s+statement: (?P<query>.*)'
+        parse_from: attributes.message
+        if: attributes.message matches "duration:"
+
+      - type: severity_parser
+        parse_from: attributes.level
+        preset: none
+        mapping:
+          debug: ["DEBUG", "DEBUG1", "DEBUG2", "DEBUG3", "DEBUG4", "DEBUG5"]
+          info: ["LOG", "INFO", "NOTICE"]
+          warn: ["WARNING"]
+          error: ["ERROR"]
+          fatal: ["FATAL", "PANIC"]
+
+  # ============================================
+  # MySQL Slow Query Log
+  # ============================================
+  filelog/mysql_slow:
+    include:
+      - /var/log/mysql/slow.log
+    include_file_path: true
+    multiline:
+      line_start_pattern: '^# Time:'
+    operators:
+      # Parse multi-line slow query log
+      # Sample:
+      # # Time: 2024-01-15T10:30:42.123456Z
+      # # User@Host: app[app] @ localhost []  Id:    12
+      # # Query_time: 2.500000  Lock_time: 0.000100 Rows_sent: 1  Rows_examined: 100000
+      # SELECT * FROM large_table WHERE id > 1000;
+      - type: regex_parser
+        regex: '# Time: (?P<timestamp>[^\n]+)\n# User@Host: (?P<user>[^\[]+)\[[^\]]*\] @ (?P<host>\S+)[^\n]*Id:\s*(?P<id>\d+)\n# Query_time: (?P<query_time>[\d.]+)\s+Lock_time: (?P<lock_time>[\d.]+)\s+Rows_sent: (?P<rows_sent>\d+)\s+Rows_examined: (?P<rows_examined>\d+)\n(?P<query>[\s\S]*)'
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+  # ============================================
+  # Custom Application Log
+  # ============================================
+  filelog/custom_app:
+    include:
+      - /var/log/pods/*/app-*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Custom log format
+      # Sample: [2024-01-15 10:30:42] [INFO] [RequestId:abc-123] Processing payment for user_id=456 amount=99.99
+      - type: regex_parser
+        regex: '\[(?P<timestamp>[^\]]+)\] \[(?P<level>\w+)\] \[RequestId:(?P<request_id>[^\]]+)\] (?P<message>.*)'
+        parse_from: attributes.log
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%Y-%m-%d %H:%M:%S'
+
+      # Extract key-value pairs from message
+      - type: key_value_parser
+        parse_from: attributes.message
+        parse_to: attributes
+        delimiter: '='
+        pair_delimiter: ' '
+
+      - type: severity_parser
+        parse_from: attributes.level
+        preset: none
+        mapping:
+          debug: ["DEBUG", "TRACE"]
+          info: ["INFO"]
+          warn: ["WARN", "WARNING"]
+          error: ["ERROR"]
+          fatal: ["FATAL", "CRITICAL"]
+
+  # ============================================
+  # Syslog Parsing
+  # ============================================
+  filelog/syslog:
+    include:
+      - /var/log/syslog
+      - /var/log/messages
+    operators:
+      # RFC 3164 Syslog format
+      # Sample: Jan 15 10:30:42 hostname app[12345]: Application started
+      - type: regex_parser
+        regex: '^(?P<timestamp>\w{3}\s+\d{1,2} \d{2}:\d{2}:\d{2}) (?P<hostname>\S+) (?P<app_name>[^\[]+)\[(?P<pid>\d+)\]: (?P<message>.*)$'
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%b %d %H:%M:%S'
+
+      # RFC 5424 Syslog format
+      # Sample: <34>1 2024-01-15T10:30:42.123456Z hostname app 12345 ID47 - Message
+      - type: regex_parser
+        regex: '^<(?P<priority>\d+)>(?P<version>\d+) (?P<timestamp>\S+) (?P<hostname>\S+) (?P<app_name>\S+) (?P<pid>\S+) (?P<msg_id>\S+) (?P<structured_data>\S+) (?P<message>.*)$'
+        if: body matches "^<\\d+>1 "
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+processors:
+  k8sattributes:
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.container.name
+
+  # Transform parsed fields
+  transform/parsed:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Convert string numbers to integers
+          - set(attributes["http.response.status_code"], Int(attributes["http.response.status_code"])) where attributes["http.response.status_code"] != nil
+          - set(attributes["duration_ms"], Double(attributes["duration_ms"])) where attributes["duration_ms"] != nil
+          - set(attributes["bytes"], Int(attributes["bytes"])) where attributes["bytes"] != nil
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+
+exporters:
+  otlp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${LAST9_AUTH_TOKEN}"
+    compression: gzip
+
+service:
+  pipelines:
+    logs/nginx:
+      receivers: [filelog/nginx]
+      processors: [memory_limiter, k8sattributes, transform/parsed, batch]
+      exporters: [otlp/last9]
+
+    logs/postgresql:
+      receivers: [filelog/postgresql]
+      processors: [memory_limiter, k8sattributes, transform/parsed, batch]
+      exporters: [otlp/last9]
+
+    logs/app:
+      receivers: [filelog/custom_app]
+      processors: [memory_limiter, k8sattributes, transform/parsed, batch]
+      exporters: [otlp/last9]
+
+# ============================================
+# Grok to Regex Conversion Reference
+# ============================================
+#
+# | Grok Pattern          | Regex Equivalent                           |
+# |-----------------------|--------------------------------------------|
+# | %{WORD}               | \w+                                        |
+# | %{NUMBER}             | (?:\d+(?:\.\d+)?)                          |
+# | %{INT}                | \d+                                        |
+# | %{NOTSPACE}           | \S+                                        |
+# | %{GREEDYDATA}         | .*                                         |
+# | %{DATA}               | .*?                                        |
+# | %{QUOTEDSTRING}       | "(?:[^"\\]|\\.)*"                          |
+# | %{IP}                 | (?:\d{1,3}\.){3}\d{1,3}                    |
+# | %{IPV4}               | (?:\d{1,3}\.){3}\d{1,3}                    |
+# | %{HOSTNAME}           | \b(?:[a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+\b      |
+# | %{IPORHOST}           | (?:\d{1,3}\.){3}\d{1,3}|(?:[a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+ |
+# | %{TIMESTAMP_ISO8601}  | \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})? |
+# | %{HTTPDATE}           | \d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4} |
+# | %{LOGLEVEL}           | (?:DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|CRITICAL) |
+# | %{PATH}               | (?:/[^\s/]+)+/?                            |
+# | %{URI}                | \S+://\S+                                  |
+#
+# Named capture syntax:
+#   Grok: %{PATTERN:field_name}
+#   Regex: (?P<field_name>pattern)
+#
+# Type conversion:
+#   Grok: %{NUMBER:duration:float}
+#   OTel: Use transform processor with Double() or Int()
+#
+# ============================================
+# Common Regex Patterns for Logs
+# ============================================
+#
+# UUID:
+#   [a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}
+#
+# Email:
+#   [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
+#
+# IPv4:
+#   (?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)
+#
+# HTTP Method:
+#   GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE
+#
+# HTTP Status:
+#   [1-5][0-9]{2}
+#
+# Duration with unit:
+#   [\d.]+\s*(?:ms|s|m|h)

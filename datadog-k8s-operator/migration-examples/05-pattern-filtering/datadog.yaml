@@ -1,0 +1,148 @@
+# Datadog: Custom Pattern Filtering
+# Use exclude_at_match to drop logs matching specific patterns
+#
+# Common patterns: static assets, noisy endpoints, internal calls
+
+# Method 1: Pod Annotation with multiple patterns
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-server
+  annotations:
+    ad.datadoghq.com/nginx.logs: |
+      [{
+        "source": "nginx",
+        "service": "web-frontend",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_static_assets",
+            "pattern": "\\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\\s"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_favicon",
+            "pattern": "favicon\\.ico"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_robots",
+            "pattern": "robots\\.txt"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_sitemap",
+            "pattern": "sitemap\\.xml"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_status_200",
+            "pattern": "\" 200 "
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_bots",
+            "pattern": "(Googlebot|bingbot|Baiduspider|YandexBot|AhrefsBot)"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+
+---
+# Method 2: Application-specific patterns
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-server
+  annotations:
+    ad.datadoghq.com/api.logs: |
+      [{
+        "source": "go",
+        "service": "api-gateway",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_connection_reset",
+            "pattern": "connection reset by peer"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_context_canceled",
+            "pattern": "context canceled"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_broken_pipe",
+            "pattern": "broken pipe"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_eof",
+            "pattern": "unexpected EOF"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_internal_calls",
+            "pattern": "internal-service-call"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_heartbeat",
+            "pattern": "heartbeat|keepalive"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: api
+      image: golang:1.21
+
+---
+# Method 3: Database query logging filter
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-app
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "postgresql",
+        "service": "db-service",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_select_1",
+            "pattern": "SELECT 1"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_pg_stat",
+            "pattern": "pg_stat_"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_slow_query_below_threshold",
+            "pattern": "duration: [0-9]\\.[0-9]{1,3} ms"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: postgres:15
+
+---
+# Method 4: Global patterns via Helm
+# datadog:
+#   env:
+#     - name: DD_LOGS_CONFIG_PROCESSING_RULES
+#       value: >-
+#         [
+#           {"type":"exclude_at_match","name":"exclude_static","pattern":"\\.(css|js|png|jpg|gif|ico)"},
+#           {"type":"exclude_at_match","name":"exclude_bots","pattern":"(Googlebot|bingbot)"},
+#           {"type":"exclude_at_match","name":"exclude_connection_errors","pattern":"(connection reset|broken pipe|context canceled)"}
+#         ]
