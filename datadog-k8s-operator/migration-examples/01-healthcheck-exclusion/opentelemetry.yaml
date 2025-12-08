@@ -1,0 +1,79 @@
+# OpenTelemetry: Health Check Exclusion
+# Equivalent to Datadog's exclude_at_match for health endpoints
+#
+# Uses the filter processor with OTTL (OpenTelemetry Transformation Language)
+
+# Add this processor to your collector config
+processors:
+  # Filter processor drops logs matching ANY condition (OR logic)
+  filter/healthcheck:
+    error_mode: ignore  # Continue processing if condition errors
+    logs:
+      log_record:
+        # Health check endpoints - various patterns
+        - 'IsMatch(body, ".*(GET|HEAD|POST) /(health|healthz).*")'
+        - 'IsMatch(body, ".*(GET|HEAD|POST) /(ready|readyz).*")'
+        - 'IsMatch(body, ".*(GET|HEAD|POST) /(live|livez).*")'
+        - 'IsMatch(body, ".*(GET|HEAD|POST) /ping.*")'
+
+        # Kubernetes probe user agent
+        - 'IsMatch(body, ".*kube-probe.*")'
+
+        # Metrics endpoint
+        - 'IsMatch(body, ".*(GET|POST) /metrics.*")'
+
+        # Common load balancer health checks
+        - 'IsMatch(body, ".*(GET|HEAD) /__health.*")'
+        - 'IsMatch(body, ".*ELB-HealthChecker.*")'
+        - 'IsMatch(body, ".*GoogleHC.*")'
+
+        # Internal health checks
+        - 'IsMatch(body, ".*health_check.*")'
+
+# Alternative: More specific container-based filtering
+# (similar to Datadog's per-container annotations)
+processors:
+  filter/nginx_healthcheck:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Only filter health checks from nginx containers
+        - 'resource.attributes["k8s.container.name"] == "nginx" and IsMatch(body, ".*(GET|HEAD) /(health|ready|live).*")'
+
+# Complete service pipeline configuration
+service:
+  pipelines:
+    logs:
+      receivers:
+        - filelog
+        - otlp
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - filter/healthcheck      # Drop health checks early in pipeline
+        - transform/enrich
+        - batch
+      exporters:
+        - otlp/last9
+
+---
+# Full collector config snippet showing integration
+# Copy relevant sections to your main collector-config.yaml
+
+# receivers:
+#   filelog:
+#     include: [/var/log/pods/*/*/*.log]
+#     # ... filelog config ...
+#
+# processors:
+#   filter/healthcheck:
+#     error_mode: ignore
+#     logs:
+#       log_record:
+#         - 'IsMatch(body, ".*(GET|HEAD) /(health|ready|live).*")'
+#         - 'IsMatch(body, ".*kube-probe.*")'
+#
+# service:
+#   pipelines:
+#     logs:
+#       processors: [memory_limiter, filter/healthcheck, batch]

@@ -1,0 +1,102 @@
+# Datadog: Namespace Exclusion
+# Exclude logs from specific Kubernetes namespaces
+#
+# Uses DD_CONTAINER_EXCLUDE_LOGS and DD_CONTAINER_INCLUDE_LOGS
+
+# Method 1: DatadogAgent CRD
+---
+apiVersion: datadoghq.com/v2alpha1
+kind: DatadogAgent
+metadata:
+  name: datadog
+  namespace: datadog
+spec:
+  features:
+    logCollection:
+      enabled: true
+      containerCollectAll: true
+
+  override:
+    nodeAgent:
+      env:
+        # Exclude logs from system namespaces
+        - name: DD_CONTAINER_EXCLUDE_LOGS
+          value: >-
+            kube_namespace:kube-system
+            kube_namespace:kube-public
+            kube_namespace:kube-node-lease
+            kube_namespace:cert-manager
+            kube_namespace:ingress-nginx
+            kube_namespace:monitoring
+            kube_namespace:logging
+            kube_namespace:istio-system
+
+        # Include specific containers even if namespace is excluded
+        - name: DD_CONTAINER_INCLUDE_LOGS
+          value: >-
+            name:critical-app
+            name:payment-service
+
+        # Exclude by image name
+        - name: DD_CONTAINER_EXCLUDE
+          value: >-
+            image:k8s.gcr.io/pause
+            image:registry.k8s.io/pause
+            image:fluent-bit
+            image:fluentd
+            image:datadog/agent
+
+---
+# Method 2: Helm values
+# datadog:
+#   logs:
+#     enabled: true
+#     containerCollectAll: true
+#
+#   env:
+#     - name: DD_CONTAINER_EXCLUDE_LOGS
+#       value: >-
+#         kube_namespace:kube-system
+#         kube_namespace:kube-public
+#         kube_namespace:kube-node-lease
+#
+#     - name: DD_CONTAINER_INCLUDE_LOGS
+#       value: "name:critical-*"
+
+---
+# Method 3: Exclude specific pod using annotation
+apiVersion: v1
+kind: Pod
+metadata:
+  name: noisy-pod
+  namespace: default
+  annotations:
+    # Completely disable log collection for this pod
+    ad.datadoghq.com/logs: "false"
+spec:
+  containers:
+    - name: noisy-container
+      image: busybox
+      command: ["sh", "-c", "while true; do echo 'noisy log'; sleep 1; done"]
+
+---
+# Method 4: Exclude specific container in multi-container pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-container-pod
+  namespace: default
+  annotations:
+    # Disable logs for sidecar, enable for main app
+    ad.datadoghq.com/sidecar.logs: "false"
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "python",
+        "service": "main-app"
+      }]
+spec:
+  containers:
+    - name: app
+      image: python:3.11
+    - name: sidecar
+      image: busybox

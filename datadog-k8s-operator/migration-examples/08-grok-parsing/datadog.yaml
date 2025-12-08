@@ -1,0 +1,155 @@
+# Datadog: Grok Pattern Parsing
+# Parse unstructured logs using Grok patterns
+#
+# Grok parsing is done via Datadog Log Pipelines (cloud-side)
+# The Agent collects logs; parsing happens in Datadog's backend
+#
+# This file shows the Grok patterns used in Datadog Log Pipelines
+
+# Pod annotation to collect logs (parsing happens cloud-side)
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-server
+  annotations:
+    ad.datadoghq.com/nginx.logs: |
+      [{
+        "source": "nginx",
+        "service": "web-frontend"
+      }]
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+
+---
+# Datadog Log Pipeline Configuration (Cloud-side)
+# These are configured in Datadog UI: Logs > Configuration > Pipelines
+#
+# ============================================
+# Pipeline: nginx-access-logs
+# Filter: source:nginx
+# ============================================
+#
+# Processor 1: Grok Parser
+# Name: Parse Nginx Access Log
+# Sample log:
+#   192.168.1.100 - - [15/Jan/2024:10:30:42 +0000] "GET /api/users HTTP/1.1" 200 1234 "https://example.com" "Mozilla/5.0"
+#
+# Grok pattern:
+#   %{IPORHOST:network.client.ip} %{NOTSPACE:http.ident} %{NOTSPACE:http.auth} \[%{HTTPDATE:timestamp}\] "%{WORD:http.method} %{NOTSPACE:http.url} HTTP/%{NUMBER:http.version}" %{NUMBER:http.status_code} %{NUMBER:network.bytes_written} "%{NOTSPACE:http.referer}" "%{GREEDYDATA:http.useragent}"
+#
+# ============================================
+# Pipeline: apache-access-logs
+# Filter: source:apache
+# ============================================
+#
+# Processor 1: Grok Parser
+# Name: Parse Apache Combined Log
+# Sample log:
+#   192.168.1.100 - admin [15/Jan/2024:10:30:42 +0000] "POST /login HTTP/1.1" 302 512
+#
+# Grok pattern (Common Log Format):
+#   %{COMMONAPACHELOG}
+#
+# Grok pattern (Combined Log Format):
+#   %{COMBINEDAPACHELOG}
+#
+# ============================================
+# Pipeline: postgres-logs
+# Filter: source:postgresql
+# ============================================
+#
+# Processor 1: Grok Parser
+# Name: Parse PostgreSQL Log
+# Sample log:
+#   2024-01-15 10:30:42.123 UTC [12345] LOG:  duration: 42.123 ms  statement: SELECT * FROM users
+#
+# Grok pattern:
+#   %{TIMESTAMP_ISO8601:timestamp} %{WORD:timezone} \[%{NUMBER:pid}\] %{WORD:level}:\s+duration: %{NUMBER:duration:float} ms\s+statement: %{GREEDYDATA:query}
+#
+# ============================================
+# Pipeline: mysql-slow-query
+# Filter: source:mysql
+# ============================================
+#
+# Processor 1: Grok Parser
+# Name: Parse MySQL Slow Query Log
+# Sample log:
+#   # Time: 2024-01-15T10:30:42.123456Z
+#   # User@Host: app[app] @ localhost []  Id:    12
+#   # Query_time: 2.500000  Lock_time: 0.000100 Rows_sent: 1  Rows_examined: 100000
+#   SELECT * FROM large_table WHERE id > 1000;
+#
+# Grok pattern:
+#   # Time: %{TIMESTAMP_ISO8601:timestamp}\n# User@Host: %{USER:user}\[%{USER}\] @ %{HOSTNAME:host}.*Id:\s+%{NUMBER:id}\n# Query_time: %{NUMBER:query_time:float}\s+Lock_time: %{NUMBER:lock_time:float}\s+Rows_sent: %{NUMBER:rows_sent:integer}\s+Rows_examined: %{NUMBER:rows_examined:integer}\n%{GREEDYDATA:query}
+#
+# ============================================
+# Pipeline: application-logs
+# Filter: source:custom-app
+# ============================================
+#
+# Processor 1: Grok Parser
+# Name: Parse Custom Application Log
+# Sample log:
+#   [2024-01-15 10:30:42] [INFO] [RequestId:abc-123] Processing payment for user_id=456 amount=99.99
+#
+# Grok pattern:
+#   \[%{TIMESTAMP_ISO8601:timestamp}\] \[%{WORD:level}\] \[RequestId:%{NOTSPACE:request_id}\] %{GREEDYDATA:message}
+#
+# ============================================
+# Datadog Built-in Grok Patterns Reference
+# ============================================
+#
+# Basic Patterns:
+#   %{WORD}         - Word characters [a-zA-Z0-9_]
+#   %{NUMBER}       - Integer or float
+#   %{INT}          - Integer
+#   %{NOTSPACE}     - Non-whitespace
+#   %{GREEDYDATA}   - Match everything (.*)
+#   %{DATA}         - Non-greedy match (.*?)
+#   %{QUOTEDSTRING} - Quoted string
+#
+# Network Patterns:
+#   %{IP}           - IPv4 or IPv6
+#   %{IPV4}         - IPv4 only
+#   %{IPV6}         - IPv6 only
+#   %{IPORHOST}     - IP or hostname
+#   %{HOSTNAME}     - Hostname
+#   %{MAC}          - MAC address
+#   %{PORT}         - Port number
+#
+# Date/Time Patterns:
+#   %{TIMESTAMP_ISO8601}  - 2024-01-15T10:30:42Z
+#   %{HTTPDATE}           - 15/Jan/2024:10:30:42 +0000
+#   %{DATE}               - Various date formats
+#   %{TIME}               - HH:MM:SS
+#
+# Log Patterns:
+#   %{COMMONAPACHELOG}    - Apache common log format
+#   %{COMBINEDAPACHELOG}  - Apache combined log format
+#   %{SYSLOGBASE}         - Syslog header
+#   %{LOGLEVEL}           - Common log levels
+#
+# Path Patterns:
+#   %{PATH}         - Unix or Windows path
+#   %{UNIXPATH}     - Unix path
+#   %{WINPATH}      - Windows path
+#   %{URI}          - URI
+#   %{URIPATH}      - URI path component
+#
+# Named Capture Syntax:
+#   %{PATTERN:field_name}              - Extract to field
+#   %{PATTERN:field_name:integer}      - Extract as integer
+#   %{PATTERN:field_name:float}        - Extract as float
+#   %{PATTERN:field_name:boolean}      - Extract as boolean
+#   %{PATTERN:field_name:array("/")}   - Extract as array (split by /)
+#
+# Custom Pattern Definition:
+#   You can define custom patterns in the Grok Parser processor:
+#   custom_patterns:
+#     REQUEST_ID: "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+#     DURATION_MS: "[0-9]+(?:\\.[0-9]+)?\\s*ms"
+#
+#   Then use: %{REQUEST_ID:request_id}

@@ -1,0 +1,279 @@
+# OpenTelemetry: JSON Log Parsing
+# Equivalent to Datadog's automatic JSON parsing
+#
+# Uses the `json_parser` operator in the filelog receiver
+#
+# Documentation:
+# - JSON Parser Operator: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/operators/json_parser.md
+# - Transform Processor: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor
+# - OTTL Functions: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs
+
+receivers:
+  # ============================================
+  # Basic JSON Parsing
+  # ============================================
+  filelog/json:
+    include:
+      - /var/log/pods/*/*/*.log
+    exclude:
+      - /var/log/pods/kube-system_*/*/*.log
+      - /var/log/pods/last9_*/*/*.log
+    include_file_path: true
+    include_file_name: true
+    operators:
+      # Step 1: Parse CRI container format
+      - type: regex_parser
+        id: parser-cri
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Step 2: Route JSON vs non-JSON logs
+      - type: router
+        routes:
+          - output: json-parser
+            expr: 'attributes.log matches "^\\s*\\{"'
+        default: move-body
+
+      # Step 3a: Parse JSON logs
+      - type: json_parser
+        id: json-parser
+        parse_from: attributes.log
+        parse_to: attributes
+        output: severity-parser
+
+      # Step 3b: Move non-JSON to body
+      - type: move
+        id: move-body
+        from: attributes.log
+        to: body
+        output: noop
+
+      - type: noop
+        id: noop
+
+      # Step 4: Extract severity from JSON fields
+      - type: severity_parser
+        id: severity-parser
+        parse_from: attributes.level
+        preset: none
+        mapping:
+          debug: ["debug", "DEBUG", "10", "20"]
+          info: ["info", "INFO", "30"]
+          warn: ["warn", "warning", "WARN", "WARNING", "40"]
+          error: ["error", "ERROR", "50"]
+          fatal: ["fatal", "FATAL", "critical", "CRITICAL", "60"]
+
+  # ============================================
+  # JSON with nested fields extraction
+  # ============================================
+  filelog/json_nested:
+    include:
+      - /var/log/pods/*/api-*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Parse JSON and flatten to attributes
+      - type: json_parser
+        parse_from: attributes.log
+        parse_to: attributes
+
+      # Extract nested fields using json_parser on specific fields
+      # If you have: {"request": {"method": "GET", "path": "/api"}}
+      - type: json_parser
+        parse_from: attributes.request
+        parse_to: attributes.http
+        if: attributes.request != nil
+
+      - type: severity_parser
+        parse_from: attributes.level
+        preset: none
+        mapping:
+          debug: ["debug", "DEBUG"]
+          info: ["info", "INFO"]
+          warn: ["warn", "warning", "WARN"]
+          error: ["error", "ERROR"]
+          fatal: ["fatal", "FATAL"]
+
+  # ============================================
+  # JSON with custom timestamp parsing
+  # ============================================
+  filelog/json_custom_time:
+    include:
+      - /var/log/pods/*/backend-*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+
+      - type: json_parser
+        parse_from: attributes.log
+        parse_to: attributes
+
+      # Parse timestamp from JSON field
+      # Supports various formats
+      - type: time_parser
+        parse_from: attributes.timestamp
+        layout_type: gotime
+        # Common layouts:
+        # layout: '2006-01-02T15:04:05.000Z07:00'  # ISO8601
+        # layout: '2006-01-02 15:04:05'            # Simple
+        layout: '%Y-%m-%dT%H:%M:%S.%LZ'  # strptime format
+        if: attributes.timestamp != nil
+
+      # Alternative: Unix timestamp
+      - type: time_parser
+        parse_from: attributes.ts
+        layout_type: epoch
+        layout: s  # seconds, ms for milliseconds
+        if: attributes.ts != nil
+
+processors:
+  # ============================================
+  # Transform JSON attributes
+  # ============================================
+  transform/json:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Move message field to body
+          - set(body, attributes["message"]) where attributes["message"] != nil
+          - set(body, attributes["msg"]) where attributes["msg"] != nil and body == nil
+
+          # Extract trace context for correlation
+          - set(trace_id.string, attributes["trace_id"]) where attributes["trace_id"] != nil
+          - set(span_id.string, attributes["span_id"]) where attributes["span_id"] != nil
+
+          # Rename common fields to semantic conventions
+          - set(attributes["http.method"], attributes["method"]) where attributes["method"] != nil
+          - set(attributes["http.url"], attributes["url"]) where attributes["url"] != nil
+          - set(attributes["http.status_code"], attributes["status"]) where attributes["status"] != nil
+          - set(attributes["http.response_time_ms"], attributes["duration"]) where attributes["duration"] != nil
+          - set(attributes["http.response_time_ms"], attributes["duration_ms"]) where attributes["duration_ms"] != nil
+
+          # Clean up original fields after remapping
+          - delete_key(attributes, "message") where attributes["message"] != nil
+          - delete_key(attributes, "msg") where attributes["msg"] != nil
+          - delete_key(attributes, "method") where attributes["http.method"] != nil
+          - delete_key(attributes, "url") where attributes["http.url"] != nil
+          - delete_key(attributes, "status") where attributes["http.status_code"] != nil
+          - delete_key(attributes, "duration") where attributes["http.response_time_ms"] != nil
+
+  # ============================================
+  # Filter by JSON field values
+  # ============================================
+  filter/json_level:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop debug logs (after JSON parsing, level is in attributes)
+        - 'attributes["level"] == "debug"'
+        - 'attributes["level"] == "DEBUG"'
+        # Drop health check logs based on JSON field
+        - 'attributes["path"] == "/health"'
+        - 'attributes["path"] == "/healthz"'
+
+  # ============================================
+  # Mask PII in JSON fields
+  # ============================================
+  transform/json_pii:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Mask email in JSON attributes
+          - replace_pattern(attributes["email"], "^.*$", "[EMAIL_REDACTED]") where attributes["email"] != nil
+          # Mask user_id
+          - set(attributes["user_id"], "[REDACTED]") where attributes["user_id"] != nil
+          # Mask in body if it contains JSON-like patterns
+          - replace_pattern(body, "\"email\":\\s*\"[^\"]+\"", "\"email\": \"[REDACTED]\"")
+          - replace_pattern(body, "\"user_id\":\\s*\"[^\"]+\"", "\"user_id\": \"[REDACTED]\"")
+
+  # Standard processors
+  k8sattributes:
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.container.name
+        - k8s.deployment.name
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+
+exporters:
+  otlp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${LAST9_AUTH_TOKEN}"
+    compression: gzip
+
+  # Debug exporter for testing
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 100
+
+service:
+  pipelines:
+    logs:
+      receivers:
+        - filelog/json
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - transform/json
+        - filter/json_level
+        - transform/json_pii
+        - batch
+      exporters:
+        - otlp/last9
+
+# ============================================
+# JSON Parsing Options Reference
+# ============================================
+#
+# json_parser operator options:
+#   parse_from: Source field to parse (e.g., attributes.log, body)
+#   parse_to: Destination for parsed fields (e.g., attributes, body)
+#   timestamp: Extract and parse timestamp
+#   severity: Extract severity
+#
+# Common JSON formats and their field mappings:
+#
+# | Format    | Level Field | Message Field | Timestamp Field |
+# |-----------|-------------|---------------|-----------------|
+# | Bunyan    | level (int) | msg           | time            |
+# | Zap       | level       | msg           | ts (unix)       |
+# | Logrus    | level       | msg           | time            |
+# | structlog | level       | event         | timestamp       |
+# | Log4j2    | level       | message       | timeMillis      |
+# | Winston   | level       | message       | timestamp       |
+#
+# Bunyan level numbers: 10=trace, 20=debug, 30=info, 40=warn, 50=error, 60=fatal
+# Zap uses lowercase strings: debug, info, warn, error, dpanic, panic, fatal
+#
+# ============================================
+# OTTL Functions for JSON manipulation
+# ============================================
+#
+# - ParseJSON(string): Parse JSON string into map
+# - set(target, value): Set attribute value
+# - delete_key(map, key): Remove key from map
+# - merge_maps(target, source, strategy): Merge maps ("insert", "update", "upsert")
+# - flatten(map, prefix, depth): Flatten nested structures
+#
+# Docs: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs

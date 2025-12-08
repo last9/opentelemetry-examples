@@ -1,0 +1,397 @@
+# OpenTelemetry: Log Transformations (VRL Equivalents)
+# OTTL (OpenTelemetry Transformation Language) equivalents for Vector VRL
+#
+# Documentation:
+# - OTTL Functions: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs
+# - OTTL Contexts: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/contexts/README.md
+# - Transform Processor: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor
+# - Filter Processor: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor
+# - Attributes Processor: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/attributesprocessor
+
+receivers:
+  filelog:
+    include:
+      - /var/log/pods/*/*/*.log
+    exclude:
+      - /var/log/pods/kube-system_*/*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Route JSON vs non-JSON
+      - type: router
+        routes:
+          - output: json-parser
+            expr: 'attributes.log matches "^\\s*\\{"'
+        default: move-log
+
+      - type: json_parser
+        id: json-parser
+        parse_from: attributes.log
+        parse_to: attributes
+        output: severity-parser
+
+      - type: move
+        id: move-log
+        from: attributes.log
+        to: body
+        output: severity-parser
+
+      - type: severity_parser
+        id: severity-parser
+        parse_from: attributes.level
+        preset: none
+        mapping:
+          debug: ["debug", "DEBUG"]
+          info: ["info", "INFO"]
+          warn: ["warn", "warning", "WARN", "WARNING"]
+          error: ["error", "ERROR"]
+          fatal: ["fatal", "FATAL", "critical", "CRITICAL"]
+
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # ============================================
+  # VRL: Field Manipulation
+  # .environment = "production"
+  # .processed_at = now()
+  # del(.password)
+  # ============================================
+  transform/fields:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Add new fields (VRL: .environment = "production")
+          - set(attributes["environment"], "production")
+          - set(attributes["processed_at"], Now())
+
+          # Rename fields (VRL: .message = del(.msg))
+          - set(body, attributes["msg"]) where attributes["msg"] != nil
+          - delete_key(attributes, "msg") where body != nil
+
+          # Delete sensitive fields (VRL: del(.password))
+          - delete_key(attributes, "password")
+          - delete_key(attributes, "secret")
+          - delete_key(attributes, "api_key")
+          - delete_key(attributes, "apiKey")
+          - delete_key(attributes, "token")
+
+          # Uppercase field value (VRL: .level = upcase(.level))
+          - set(attributes["level"], ConvertCase(attributes["level"], "upper")) where attributes["level"] != nil
+
+          # Set nested fields (VRL: .metadata.source = "kubernetes")
+          - set(attributes["metadata.source"], "kubernetes")
+          - set(attributes["metadata.collector"], "opentelemetry")
+
+      - context: resource
+        statements:
+          # Add resource-level attributes
+          - set(attributes["deployment.environment"], "production")
+
+  # ============================================
+  # VRL: Conditional Logic
+  # if .level == "ERROR" { .severity = "high" }
+  # if contains(.message, "payment") { .tags.domain = "payments" }
+  # ============================================
+  transform/conditional:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Set severity based on level (VRL: if .level == "ERROR" { .severity = "high" })
+          - set(attributes["custom_severity"], "high") where severity_text == "ERROR" or severity_text == "FATAL"
+          - set(attributes["custom_severity"], "medium") where severity_text == "WARN"
+          - set(attributes["custom_severity"], "low") where attributes["custom_severity"] == nil
+
+          # Set alert flag
+          - set(attributes["alert"], true) where severity_text == "ERROR" or severity_text == "FATAL"
+          - set(attributes["alert"], false) where attributes["alert"] == nil
+
+          # Tag based on content (VRL: if contains(.message, "payment") { .tags.domain = "payments" })
+          - set(attributes["tags.domain"], "payments") where IsMatch(body, "(?i)payment")
+          - set(attributes["pci_relevant"], true) where IsMatch(body, "(?i)payment|credit|card")
+
+          # Check for error patterns (VRL: if match(.message, r'error|exception|fail') { ... })
+          - set(attributes["needs_attention"], true) where IsMatch(body, "(?i)error|exception|fail")
+
+  # ============================================
+  # VRL: PII Redaction
+  # .message = replace(.message, r'\d{3}-\d{2}-\d{4}', "[SSN_REDACTED]")
+  # .message = redact(.message, filters: [...])
+  # ============================================
+  transform/pii:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Redact SSN (VRL: replace(.message, r'\d{3}-\d{2}-\d{4}', "[SSN]"))
+          - replace_pattern(body, "\\d{3}-\\d{2}-\\d{4}", "[SSN_REDACTED]")
+
+          # Redact credit cards (Visa, Mastercard)
+          - replace_pattern(body, "\\b4[0-9]{12}(?:[0-9]{3})?\\b", "[CARD_REDACTED]")
+          - replace_pattern(body, "\\b5[1-5][0-9]{14}\\b", "[CARD_REDACTED]")
+
+          # Redact email addresses
+          - replace_pattern(body, "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "[EMAIL_REDACTED]")
+
+          # Redact IP addresses
+          - replace_pattern(body, "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b", "[IP_REDACTED]")
+
+          # Redact Bearer tokens
+          - replace_pattern(body, "Bearer\\s+[a-zA-Z0-9._-]+", "Bearer [REDACTED]")
+
+          # Redact API keys in various formats
+          - replace_pattern(body, "api[_-]?key[=:]\\s*['\"]?[a-zA-Z0-9_-]+['\"]?", "api_key=[REDACTED]")
+          - replace_pattern(body, "apikey[=:]\\s*['\"]?[a-zA-Z0-9_-]+['\"]?", "apikey=[REDACTED]")
+
+          # Redact specific attribute values entirely
+          - set(attributes["user.email"], "[REDACTED]") where attributes["user.email"] != nil
+          - set(attributes["user.phone"], "[REDACTED]") where attributes["user.phone"] != nil
+          - set(attributes["email"], "[REDACTED]") where attributes["email"] != nil
+
+  # ============================================
+  # VRL: Enrichment
+  # .performance = "slow" where .duration_ms > 1000
+  # ============================================
+  transform/enrich:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Calculate performance category (VRL: if .duration_ms > 5000 { .performance = "very_slow" })
+          - set(attributes["performance"], "very_slow") where attributes["duration_ms"] != nil and Double(attributes["duration_ms"]) > 5000
+          - set(attributes["performance"], "slow") where attributes["duration_ms"] != nil and Double(attributes["duration_ms"]) > 1000 and attributes["performance"] == nil
+          - set(attributes["performance"], "normal") where attributes["duration_ms"] != nil and Double(attributes["duration_ms"]) > 100 and attributes["performance"] == nil
+          - set(attributes["performance"], "fast") where attributes["duration_ms"] != nil and attributes["performance"] == nil
+
+          # Add timestamp if missing
+          - set(time_unix_nano, Now()) where time_unix_nano == nil
+
+          # Semantic conventions mapping
+          - set(attributes["http.request.method"], attributes["method"]) where attributes["method"] != nil
+          - set(attributes["url.path"], attributes["path"]) where attributes["path"] != nil
+          - set(attributes["http.response.status_code"], Int(attributes["status"])) where attributes["status"] != nil
+
+  # ============================================
+  # VRL: Drop/Filter Logs
+  # if match(.message, r'health') { abort }
+  # if .level == "DEBUG" { abort }
+  # ============================================
+  filter/drop_noisy:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop health check logs (VRL: if match(.message, r'health') { abort })
+        - 'IsMatch(body, "(?i)health|healthz|readiness|liveness")'
+
+        # Drop debug logs (VRL: if .level == "DEBUG" { abort })
+        - 'severity_text == "DEBUG"'
+        - 'attributes["level"] == "debug"'
+        - 'attributes["level"] == "DEBUG"'
+
+        # Drop static asset requests
+        - 'IsMatch(attributes["http.url"], "\\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$")'
+        - 'IsMatch(attributes["path"], "\\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$")'
+
+        # Drop logs from specific pods (VRL: if starts_with(.kubernetes.pod_name, "datadog-") { abort })
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^datadog-")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^fluent")'
+
+  # ============================================
+  # VRL: Route to Multiple Outputs
+  # Using routing connector
+  # ============================================
+  # Note: For routing in OTel, use multiple pipelines with filters
+  # or the routing connector (experimental)
+
+  filter/errors_only:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Keep only ERROR/FATAL (inverse of drop - drop everything except errors)
+        - 'severity_text != "ERROR" and severity_text != "FATAL"'
+
+  filter/warnings_only:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'severity_text != "WARN" and severity_text != "WARNING"'
+
+  filter/audit_only:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'attributes["audit"] != true'
+
+  # ============================================
+  # VRL: Type Conversion
+  # .duration_ms = to_float(.duration)
+  # ============================================
+  transform/types:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Convert string to int (VRL: to_int(.status))
+          - set(attributes["http.status_code"], Int(attributes["status"])) where attributes["status"] != nil
+
+          # Convert string to float (VRL: to_float(.duration))
+          - set(attributes["duration_ms"], Double(attributes["duration"])) where attributes["duration"] != nil
+
+          # Convert to string
+          - set(attributes["request_id_str"], Concat([attributes["request_id"]], "")) where attributes["request_id"] != nil
+
+  # ============================================
+  # VRL: String Manipulation
+  # upcase(), downcase(), replace(), split()
+  # ============================================
+  transform/strings:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Uppercase (VRL: upcase(.level))
+          - set(attributes["level_upper"], ConvertCase(attributes["level"], "upper")) where attributes["level"] != nil
+
+          # Lowercase (VRL: downcase(.method))
+          - set(attributes["method_lower"], ConvertCase(attributes["method"], "lower")) where attributes["method"] != nil
+
+          # Replace (VRL: replace(.message, "old", "new"))
+          - replace_pattern(body, "localhost", "127.0.0.1")
+
+          # Truncate long messages (VRL: slice(.message, 0, 1000))
+          - truncate_all(body, 10000)
+
+  # Standard processors
+  k8sattributes:
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.pod.uid
+        - k8s.container.name
+        - k8s.deployment.name
+        - k8s.node.name
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+exporters:
+  otlp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${LAST9_AUTH_TOKEN}"
+    compression: gzip
+
+  # For error alerts (equivalent to VRL routing to different sinks)
+  otlp/errors:
+    endpoint: "${ALERTS_ENDPOINT}"
+    headers:
+      Authorization: "${ALERTS_TOKEN}"
+
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 100
+
+service:
+  pipelines:
+    # Main logs pipeline
+    logs:
+      receivers: [filelog, otlp]
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - transform/fields
+        - transform/conditional
+        - transform/pii
+        - transform/enrich
+        - filter/drop_noisy
+        - transform/types
+        - batch
+      exporters: [otlp/last9]
+
+    # Errors-only pipeline (equivalent to VRL route.errors)
+    logs/errors:
+      receivers: [filelog]
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - transform/fields
+        - filter/errors_only
+        - batch
+      exporters: [otlp/errors]
+
+# ============================================
+# VRL to OTTL Function Mapping
+# ============================================
+#
+# | VRL Function              | OTTL Equivalent                              |
+# |---------------------------|----------------------------------------------|
+# | del(.field)               | delete_key(attributes, "field")              |
+# | .field = value            | set(attributes["field"], value)              |
+# | exists(.field)            | attributes["field"] != nil                   |
+# | upcase(s)                 | ConvertCase(s, "upper")                      |
+# | downcase(s)               | ConvertCase(s, "lower")                      |
+# | contains(s, sub)          | IsMatch(s, ".*sub.*")                        |
+# | starts_with(s, pre)       | IsMatch(s, "^pre")                           |
+# | ends_with(s, suf)         | IsMatch(s, "suf$")                           |
+# | replace(s, pat, rep)      | replace_pattern(s, "pat", "rep")             |
+# | match(s, regex)           | IsMatch(s, "regex")                          |
+# | to_int(v)                 | Int(v)                                       |
+# | to_float(v)               | Double(v)                                    |
+# | to_string(v)              | Concat([v], "")                              |
+# | now()                     | Now()                                        |
+# | parse_json(s)             | ParseJSON(s) (limited support)               |
+# | merge(obj1, obj2)         | merge_maps(obj1, obj2, "upsert")             |
+# | abort                     | Use filter processor                         |
+# | if/else                   | where clause                                 |
+# | sha256(s)                 | SHA256(s)                                    |
+# | uuid_v4()                 | UUID()                                       |
+# | slice(s, start, end)      | Substring(s, start, end)                     |
+# | split(s, delim)           | Split(s, delim)                              |
+# | flatten(arr)              | flatten() (in some contexts)                 |
+#
+# ============================================
+# OTTL Functions Reference
+# ============================================
+#
+# Docs: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs
+#
+# Converters:
+#   Int(value), Double(value), String(value), Bool(value)
+#   Concat(values, delimiter), ConvertCase(string, toCase)
+#   Split(target, delimiter), Substring(target, start, length)
+#   SHA256(value), SHA1(value), FNV(value)
+#   UUID(), Now(), UnixSeconds(), UnixMicros(), UnixNanos()
+#   ParseJSON(target), ParseCSV(target, headers, mode)
+#   Time(target, format), TruncateTime(time, duration)
+#
+# Editors:
+#   set(target, value), delete_key(target, key), delete_match(target, pattern)
+#   keep_keys(target, keys...), replace_pattern(target, regex, replacement)
+#   replace_match(target, pattern, replacement), replace_all_matches(...)
+#   truncate_all(target, limit), merge_maps(target, source, strategy)
+#   flatten(target, prefix, depth), limit(target, limit, priority)
+#
+# Conditions:
+#   IsMatch(target, pattern), IsString(value), IsInt(value)
+#   HasAttrKeyOnDatapoint(key), HasAttrOnDatapoint(key, value)
+#   TraceID(), SpanID()

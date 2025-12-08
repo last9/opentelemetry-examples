@@ -1,0 +1,353 @@
+# OpenTelemetry Collector Configuration for Log Processing
+# Migrated from Datadog K8s Operator
+#
+# This configuration includes all common processing rules:
+# - Health check exclusion
+# - PII masking
+# - Severity filtering
+# - Namespace exclusion
+# - Pattern filtering
+
+receivers:
+  # Collect logs from container files
+  filelog:
+    include:
+      - /var/log/pods/*/*/*.log
+    exclude:
+      - /var/log/pods/*/otel-collector/*.log
+    start_at: end
+    include_file_path: true
+    include_file_name: false
+    operators:
+      # Parse container logs (CRI format)
+      - type: router
+        id: get-format
+        routes:
+          - output: parser-docker
+            expr: 'body matches "^\\{"'
+          - output: parser-crio
+            expr: 'body matches "^[^ Z]+ "'
+          - output: parser-containerd
+            expr: 'body matches "^[^ Z]+Z"'
+      # Docker JSON format
+      - type: json_parser
+        id: parser-docker
+        output: extract-metadata-from-filepath
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      # CRI-O format
+      - type: regex_parser
+        id: parser-crio
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        output: extract-metadata-from-filepath
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%f%j'
+      # Containerd format
+      - type: regex_parser
+        id: parser-containerd
+        regex: '^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        output: extract-metadata-from-filepath
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      # Extract K8s metadata from file path
+      - type: regex_parser
+        id: extract-metadata-from-filepath
+        regex: '^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]{36})\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$'
+        parse_from: attributes["log.file.path"]
+        cache:
+          size: 128
+      # Move parsed fields to resource attributes
+      - type: move
+        from: attributes.namespace
+        to: resource["k8s.namespace.name"]
+      - type: move
+        from: attributes.pod_name
+        to: resource["k8s.pod.name"]
+      - type: move
+        from: attributes.uid
+        to: resource["k8s.pod.uid"]
+      - type: move
+        from: attributes.container_name
+        to: resource["k8s.container.name"]
+      - type: move
+        from: attributes.restart_count
+        to: resource["k8s.container.restart_count"]
+      - type: move
+        from: attributes.log
+        to: body
+
+  # Receive logs via OTLP (from instrumented apps)
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${env:MY_POD_IP}:4317
+      http:
+        endpoint: ${env:MY_POD_IP}:4318
+
+processors:
+  # ============================================
+  # MEMORY LIMITER - Always first
+  # ============================================
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 85
+    spike_limit_percentage: 15
+
+  # ============================================
+  # KUBERNETES ATTRIBUTES - Add K8s metadata
+  # ============================================
+  k8sattributes:
+    auth_type: serviceAccount
+    passthrough: false
+    filter:
+      node_from_env_var: KUBE_NODE_NAME
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.pod.uid
+        - k8s.deployment.name
+        - k8s.statefulset.name
+        - k8s.daemonset.name
+        - k8s.cronjob.name
+        - k8s.job.name
+        - k8s.node.name
+        - k8s.container.name
+      labels:
+        - tag_name: app
+          key: app
+          from: pod
+        - tag_name: service
+          key: app.kubernetes.io/name
+          from: pod
+        - tag_name: version
+          key: app.kubernetes.io/version
+          from: pod
+      annotations:
+        - tag_name: owner
+          key: owner
+          from: pod
+    pod_association:
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.name
+          - from: resource_attribute
+            name: k8s.namespace.name
+
+  # ============================================
+  # FILTER: Namespace Exclusion
+  # Equivalent to: DD_CONTAINER_EXCLUDE_LOGS
+  # ============================================
+  filter/namespace:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop logs from system namespaces
+        - 'resource.attributes["k8s.namespace.name"] == "kube-system"'
+        - 'resource.attributes["k8s.namespace.name"] == "kube-public"'
+        - 'resource.attributes["k8s.namespace.name"] == "kube-node-lease"'
+        - 'resource.attributes["k8s.namespace.name"] == "cert-manager"'
+        - 'resource.attributes["k8s.namespace.name"] == "ingress-nginx"'
+        # Drop logs from monitoring components
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^fluent.*")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^datadog.*")'
+        - 'IsMatch(resource.attributes["k8s.pod.name"], "^otel-collector.*")'
+
+  # ============================================
+  # FILTER: Health Check Exclusion
+  # Equivalent to: exclude_at_match for health endpoints
+  # ============================================
+  filter/healthcheck:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Health check endpoints
+        - 'IsMatch(body, ".*(GET|HEAD|POST) /(health|healthz|ready|readyz|live|livez|ping).*")'
+        # Metrics endpoints
+        - 'IsMatch(body, ".*(GET|POST) /metrics.*")'
+        # Kubernetes probes
+        - 'IsMatch(body, ".*kube-probe.*")'
+
+  # ============================================
+  # FILTER: Severity-based filtering
+  # Equivalent to: include_at_match for errors only
+  # Drop logs below WARNING level
+  # ============================================
+  filter/severity:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Drop DEBUG and TRACE logs using severity number
+        - 'severity_number < SEVERITY_NUMBER_INFO'
+        # Also catch text-based debug patterns
+        - 'IsMatch(body, "^\\[DEBUG\\].*")'
+        - 'IsMatch(body, ".*level=debug.*")'
+        - 'IsMatch(body, ".*\"level\":\\s*\"debug\".*")'
+        - 'IsMatch(body, ".*DEBUG:.*")'
+        - 'IsMatch(body, ".*TRACE:.*")'
+
+  # ============================================
+  # FILTER: Custom Pattern Exclusion
+  # Equivalent to: exclude_at_match for custom patterns
+  # ============================================
+  filter/patterns:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Exclude static asset requests
+        - 'IsMatch(body, ".*\\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2).*")'
+        # Exclude specific noisy logs
+        - 'IsMatch(body, ".*Connection reset by peer.*")'
+        - 'IsMatch(body, ".*context canceled.*")'
+        # Exclude internal service communication
+        - 'IsMatch(body, ".*internal-.*")'
+
+  # ============================================
+  # TRANSFORM: PII Masking
+  # Equivalent to: mask_sequences
+  # ============================================
+  transform/pii:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Mask SSN (format: XXX-XX-XXXX)
+          - replace_pattern(body, "\\d{3}-\\d{2}-\\d{4}", "[SSN_REDACTED]")
+
+          # Mask Credit Card numbers
+          # Visa: 4XXX-XXXX-XXXX-XXXX
+          - replace_pattern(body, "\\b4[0-9]{12}(?:[0-9]{3})?\\b", "[VISA_REDACTED]")
+          # Mastercard: 5XXX-XXXX-XXXX-XXXX
+          - replace_pattern(body, "\\b5[1-5][0-9]{14}\\b", "[MC_REDACTED]")
+          # Amex: 3XXX-XXXXXX-XXXXX
+          - replace_pattern(body, "\\b3[47][0-9]{13}\\b", "[AMEX_REDACTED]")
+          # Generic 16-digit card
+          - replace_pattern(body, "\\b[0-9]{16}\\b", "[CARD_REDACTED]")
+
+          # Mask Email addresses
+          - replace_pattern(body, "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "[EMAIL_REDACTED]")
+
+          # Mask IP addresses (IPv4)
+          - replace_pattern(body, "\\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\b", "[IP_REDACTED]")
+
+          # Mask Bearer tokens
+          - replace_pattern(body, "Bearer\\s+[a-zA-Z0-9._-]+", "Bearer [TOKEN_REDACTED]")
+
+          # Mask Authorization headers
+          - replace_pattern(body, "Authorization:\\s*[^\\s,}\"]+", "Authorization: [REDACTED]")
+
+          # Mask password fields in various formats
+          - replace_pattern(body, "(password|passwd|pwd)[=:]\\s*[^\\s,}\"']+", "$1=[REDACTED]")
+
+          # Mask API keys
+          - replace_pattern(body, "(api_key|apikey|api-key|API_KEY|APIKEY)[=:]\\s*[^\\s,}\"']+", "$1=[REDACTED]")
+
+          # Mask secret/token fields
+          - replace_pattern(body, "(secret|token|SECRET|TOKEN)[=:]\\s*[^\\s,}\"']+", "$1=[REDACTED]")
+
+          # Mask AWS access keys
+          - replace_pattern(body, "AKIA[0-9A-Z]{16}", "[AWS_KEY_REDACTED]")
+
+          # Mask phone numbers (US format)
+          - replace_pattern(body, "\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b", "[PHONE_REDACTED]")
+
+  # ============================================
+  # TRANSFORM: Enrich with service metadata
+  # Equivalent to: Setting source, service in DD annotations
+  # ============================================
+  transform/enrich:
+    error_mode: ignore
+    log_statements:
+      - context: resource
+        statements:
+          # Set service name from container name if not present
+          - set(attributes["service.name"], attributes["k8s.container.name"]) where attributes["service.name"] == nil
+          - set(attributes["service.name"], attributes["k8s.container.name"]) where attributes["service.name"] == ""
+
+          # Set deployment environment (customize as needed)
+          - set(attributes["deployment.environment"], "production")
+
+          # Set cluster name (customize as needed)
+          - set(attributes["cluster.name"], "my-k8s-cluster")
+
+      - context: log
+        statements:
+          # Set severity based on log content if not already set
+          - set(severity_text, "ERROR") where severity_text == "" and IsMatch(body, "(?i)(error|exception|fatal|fail)")
+          - set(severity_text, "WARN") where severity_text == "" and IsMatch(body, "(?i)(warn|warning)")
+          - set(severity_text, "INFO") where severity_text == "" and IsMatch(body, "(?i)(info)")
+
+          # Set severity number based on text
+          - set(severity_number, SEVERITY_NUMBER_ERROR) where severity_text == "ERROR"
+          - set(severity_number, SEVERITY_NUMBER_WARN) where severity_text == "WARN" or severity_text == "WARNING"
+          - set(severity_number, SEVERITY_NUMBER_INFO) where severity_text == "INFO"
+
+  # ============================================
+  # BATCH - Always last before export
+  # ============================================
+  batch:
+    send_batch_size: 15000
+    send_batch_max_size: 15000
+    timeout: 10s
+
+exporters:
+  # Export to Last9 via OTLP
+  otlp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${LAST9_AUTH_TOKEN}"
+    compression: gzip
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  # Debug output (disable in production)
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+extensions:
+  health_check:
+    endpoint: ${env:MY_POD_IP}:13133
+
+service:
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+      address: ${env:MY_POD_IP}:8888
+
+  extensions:
+    - health_check
+
+  pipelines:
+    logs:
+      receivers:
+        - filelog
+        - otlp
+      processors:
+        # Order matters!
+        - memory_limiter        # 1. Prevent OOM
+        - k8sattributes         # 2. Add K8s metadata
+        - filter/namespace      # 3. Drop system namespaces (early = less processing)
+        - filter/healthcheck    # 4. Drop health checks
+        - filter/patterns       # 5. Drop by custom patterns
+        # Uncomment below to enable severity filtering (drops DEBUG/INFO)
+        # - filter/severity     # 6. Drop by severity
+        - transform/pii         # 7. Mask sensitive data
+        - transform/enrich      # 8. Enrich with metadata
+        - batch                 # 9. Batch for efficiency
+      exporters:
+        - otlp/last9
+        # Uncomment for debugging
+        # - debug

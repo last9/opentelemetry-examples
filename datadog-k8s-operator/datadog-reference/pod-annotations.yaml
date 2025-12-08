@@ -1,0 +1,235 @@
+# Datadog Pod Annotations - Reference Examples
+# These annotations configure log collection for specific containers
+#
+# Documentation: https://docs.datadoghq.com/agent/logs/advanced_log_collection/
+
+---
+# Example 1: Basic log collection with source and service
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-basic
+  annotations:
+    # Basic log configuration
+    # Replace <CONTAINER_NAME> with your container name
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "python",
+        "service": "my-python-app"
+      }]
+spec:
+  containers:
+    - name: app
+      image: python:3.11
+      command: ["python", "-c", "while True: print('Hello')"]
+
+---
+# Example 2: Exclude health check logs
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-exclude-healthcheck
+  annotations:
+    ad.datadoghq.com/nginx.logs: |
+      [{
+        "source": "nginx",
+        "service": "web-frontend",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_healthcheck",
+            "pattern": "(GET|HEAD) /(health|healthz|ready|readyz|live|livez)"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_metrics",
+            "pattern": "GET /metrics"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+
+---
+# Example 3: Include only error logs
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-include-errors
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "java",
+        "service": "payment-service",
+        "log_processing_rules": [
+          {
+            "type": "include_at_match",
+            "name": "only_errors",
+            "pattern": "(ERROR|FATAL|CRITICAL|Exception|Traceback)"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: openjdk:17
+
+---
+# Example 4: Mask sensitive data (PII)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-mask-pii
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "nodejs",
+        "service": "user-service",
+        "log_processing_rules": [
+          {
+            "type": "mask_sequences",
+            "name": "mask_ssn",
+            "pattern": "\\d{3}-\\d{2}-\\d{4}",
+            "replace_placeholder": "[SSN_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_credit_card",
+            "pattern": "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\\b",
+            "replace_placeholder": "[CARD_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_email",
+            "pattern": "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+            "replace_placeholder": "[EMAIL_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_ip",
+            "pattern": "\\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\b",
+            "replace_placeholder": "[IP_REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_api_key",
+            "pattern": "(api[_-]?key|apikey|token|bearer|authorization)[=:\\s]+['\"]?([a-zA-Z0-9_-]{20,})['\"]?",
+            "replace_placeholder": "$1=[REDACTED]"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: node:18
+
+---
+# Example 5: Multiple rules combined
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-combined-rules
+  annotations:
+    ad.datadoghq.com/api.logs: |
+      [{
+        "source": "go",
+        "service": "api-gateway",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_debug",
+            "pattern": "level=debug"
+          },
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_healthcheck",
+            "pattern": "GET /health"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_bearer_token",
+            "pattern": "Bearer\\s+[a-zA-Z0-9._-]+",
+            "replace_placeholder": "Bearer [REDACTED]"
+          },
+          {
+            "type": "mask_sequences",
+            "name": "mask_password",
+            "pattern": "password[=:]\\s*[^\\s,}]+",
+            "replace_placeholder": "password=[REDACTED]"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: api
+      image: golang:1.21
+
+---
+# Example 6: Disable log collection for specific container
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-disable-logs
+  annotations:
+    # Completely disable logs for this container
+    ad.datadoghq.com/sidecar.logs: "false"
+    # Enable logs for main app
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "python",
+        "service": "main-app"
+      }]
+spec:
+  containers:
+    - name: app
+      image: python:3.11
+    - name: sidecar
+      image: busybox
+
+---
+# Example 7: Multi-line log parsing (Java stack traces)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-multiline
+  annotations:
+    ad.datadoghq.com/java-app.logs: |
+      [{
+        "source": "java",
+        "service": "order-service",
+        "log_processing_rules": [
+          {
+            "type": "multi_line",
+            "name": "java_stack_trace",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: java-app
+      image: openjdk:17
+
+---
+# Example 8: Custom tags and additional attributes
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-custom-tags
+  labels:
+    app: my-app
+    environment: production
+    team: platform
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "python",
+        "service": "data-processor",
+        "tags": ["env:production", "team:platform", "version:2.1.0"]
+      }]
+spec:
+  containers:
+    - name: app
+      image: python:3.11
