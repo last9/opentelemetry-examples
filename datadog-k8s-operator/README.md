@@ -26,7 +26,7 @@ Datadog uses the **DatadogAgent CRD** and **pod annotations** for log collection
 
 ```bash
 # Download the setup script
-curl -O https://raw.githubusercontent.com/last9/l9-otel-operator/main/last9-otel-setup.sh
+curl -O https://raw.githubusercontent.com/last9/last9-k8s-observability/main/last9-otel-setup.sh
 chmod +x last9-otel-setup.sh
 
 # Install with logs collection
@@ -93,6 +93,8 @@ processors:
 
 ### 2. PII Masking
 
+> **💡 Last9 Built-in Masking**: Last9 automatically masks common sensitive data patterns (emails, phone numbers, credit cards, IPs, etc.) server-side. You may not need collector-level masking for these. See [Last9 Sensitive Data Controls](https://last9.io/docs/control-plane-sensitive-data/) for details.
+
 **Datadog** uses `mask_sequences` to redact sensitive data:
 ```yaml
 log_processing_rules:
@@ -102,7 +104,7 @@ log_processing_rules:
     replace_placeholder: "[SSN_REDACTED]"
 ```
 
-**OpenTelemetry** uses the `transform` processor:
+**OpenTelemetry** uses the `transform` processor (for custom patterns not covered by Last9's built-in masking):
 ```yaml
 processors:
   transform/pii:
@@ -194,8 +196,8 @@ receivers:
   filelog:
     operators:
       - type: recombine
-        combine_field: body
-        is_first_entry: body matches "^\\d{4}-\\d{2}-\\d{2}"
+        combine_field: attributes.log
+        is_first_entry: attributes.log matches "^\\d{4}-\\d{2}-\\d{2}"
         source_identifier: attributes["log.file.path"]
 ```
 
@@ -400,6 +402,7 @@ log_processing_rules:
 ```yaml
 processors:
   filter/health:
+    error_mode: ignore
     logs:
       log_record:
         - 'IsMatch(body, "GET /health")'
@@ -440,18 +443,83 @@ processors:
         - 'resource.attributes["k8s.container.name"] == "nginx" and IsMatch(body, "\\.(css|js|png|jpg)")'
 ```
 
+## OTTL Functions Quick Reference
+
+OpenTelemetry Transformation Language (OTTL) is used in `filter` and `transform` processors.
+
+> **Full reference**: [OTTL Functions Documentation](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.141.0/pkg/ottl/ottlfuncs/README.md)
+
+### Editors (Modify Telemetry)
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `set` | `set(target, value)` | Set a field to a value |
+| `delete_key` | `delete_key(target, key)` | Remove a key from a map |
+| `delete_matching_keys` | `delete_matching_keys(target, pattern)` | Remove keys matching regex |
+| `keep_keys` | `keep_keys(target, keys[])` | Keep only specified keys |
+| `replace_pattern` | `replace_pattern(target, regex, replacement)` | Replace regex matches in string |
+| `replace_all_patterns` | `replace_all_patterns(target, mode, regex, replacement)` | Replace in all map values |
+| `replace_match` | `replace_match(target, pattern, replacement)` | Replace if glob pattern matches |
+| `merge_maps` | `merge_maps(target, source, strategy)` | Merge source map into target |
+| `truncate_all` | `truncate_all(target, limit)` | Limit string lengths in map |
+| `flatten` | `flatten(target, Optional[prefix], Optional[depth])` | Flatten nested maps |
+
+### Converters (Read-Only Functions)
+
+| Function | Signature | Returns |
+|----------|-----------|---------|
+| `IsMatch` | `IsMatch(target, pattern)` | `bool` - regex match test |
+| `IsString` | `IsString(value)` | `bool` - type check |
+| `Concat` | `Concat(values[], delimiter)` | Concatenated string |
+| `ConvertCase` | `ConvertCase(target, "lower"\|"upper"\|"snake"\|"camel")` | Case-converted string |
+| `ParseJSON` | `ParseJSON(target)` | Parsed map from JSON string |
+| `ParseKeyValue` | `ParseKeyValue(target, delimiter, pair_delimiter)` | Parsed map from key=value |
+| `Split` | `Split(target, delimiter)` | String array |
+| `Substring` | `Substring(target, start, length)` | Substring |
+| `Len` | `Len(target)` | Length as int64 |
+| `SHA256` | `SHA256(value)` | Hash string |
+| `ExtractPatterns` | `ExtractPatterns(target, pattern)` | Map with named regex groups |
+| `Int` | `Int(value)` | Converted int64 |
+| `Double` | `Double(value)` | Converted float64 |
+
+### Common OTTL Patterns for Log Processing
+
+```yaml
+# Pattern matching (used in filter processor)
+- 'IsMatch(body, "(?i)error|exception|fatal")'
+
+# Redact sensitive data
+- replace_pattern(body, "password=[^\\s]+", "password=[REDACTED]")
+
+# Remove fields
+- delete_key(attributes, "api_key")
+
+# Parse JSON body into attributes
+- set(attributes["parsed"], ParseJSON(body))
+
+# Normalize case
+- set(severity_text, ConvertCase(severity_text, "upper"))
+
+# Extract patterns with named groups
+- set(attributes, ExtractPatterns(body, "^(?P<ip>[\\d.]+) - (?P<user>\\S+)"))
+
+# Conditional set (with where clause)
+- set(attributes["alert"], true) where IsMatch(body, "(?i)critical")
+```
+
 ## Resources
 
 ### OpenTelemetry Documentation
 
-**Processors**:
-- [Filter Processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor)
-- [Transform Processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/transformprocessor)
-- [Attributes Processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/attributesprocessor)
-
 **OTTL (OpenTelemetry Transformation Language)**:
-- [OTTL Functions](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs)
-- [OTTL Contexts](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/contexts/README.md)
+- [**OTTL Functions Reference**](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.141.0/pkg/ottl/ottlfuncs/README.md) - Complete function list
+- [OTTL Contexts](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/contexts/README.md) - Log, metric, trace contexts
+
+**Processors**:
+- [**Filter Processor**](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/processor/filterprocessor/README.md) - Drop logs/metrics/traces based on conditions
+  - [Filter Processor OTTL Examples](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor#ottl) - OTTL-specific filtering patterns
+- [**Transform Processor**](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/processor/transformprocessor/README.md) - Modify telemetry using OTTL statements
+- [Attributes Processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/attributesprocessor)
 
 **Filelog Receiver Operators**:
 - [Operators Overview](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/operators/README.md)
@@ -463,8 +531,26 @@ processors:
 - [Log Processing Rules](https://docs.datadoghq.com/agent/logs/advanced_log_collection/)
 - [Datadog Operator](https://docs.datadoghq.com/containers/kubernetes/installation/?tab=operator)
 
-### Last9
-- [Last9 Documentation](https://docs.last9.io/)
+### Last9 Documentation
+
+**Logs**:
+- [Logs Overview](https://last9.io/docs/logs/) - Getting started with logs in Last9
+- [Logs Explorer](https://last9.io/docs/logs-explorer/) - Search and analyze logs
+- [Log Query Builder](https://last9.io/docs/logs-query-builder/) - Build log queries
+- [Log Analytics Dashboards](https://last9.io/docs/creating-log-analytics-dashboards-from-logs-explorer/) - Create dashboards from logs
+- [Logs Query API](https://last9.io/docs/query-logs-api/) - Programmatic log access
+
+**Data Control**:
+- [Sensitive Data Controls](https://last9.io/docs/control-plane-sensitive-data/) - Built-in PII masking (emails, phones, cards, IPs)
+- [Ingestion Control Plane](https://last9.io/docs/control-plane-ingestion/) - Manage data ingestion
+
+**Log Collection Integrations**:
+- [Fluent Bit](https://last9.io/docs/integrations/observability/fluent-bit/) - Lightweight log forwarder
+- [Elastic Logstash](https://last9.io/docs/integrations/observability/elastic-logstash/) - Logstash integration
+- [AWS CloudWatch Logs](https://last9.io/docs/integrations/observability/aws-cloudwatch-logs/) - CloudWatch to Last9
+- [Cloudflare Logs](https://last9.io/docs/integrations/observability/cloudflare-logs/) - Cloudflare log export
+- [Winston Logger](https://last9.io/docs/integrations/observability/winston-logger/) - Node.js Winston integration
+- [Grafana Loki](https://last9.io/docs/grafana-loki-in-last9/) - Use Loki datasource with Last9
 
 ## Support
 

@@ -102,7 +102,7 @@ spec:
       serviceAccountName: otel-collector
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:0.126.0
+          image: otel/opentelemetry-collector-contrib:0.141.0
           args:
             - --config=/etc/otelcol/config.yaml
           ports:
