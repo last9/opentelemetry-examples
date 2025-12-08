@@ -1,0 +1,87 @@
+# Datadog: Severity-Based Filtering
+# Keep only logs above a certain severity level (e.g., ERROR, WARN)
+#
+# Use include_at_match to keep ONLY matching logs
+
+# Method 1: Keep only ERROR and above (drop DEBUG, INFO)
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-errors-only
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "java",
+        "service": "order-service",
+        "log_processing_rules": [
+          {
+            "type": "include_at_match",
+            "name": "only_errors",
+            "pattern": "(ERROR|FATAL|CRITICAL|SEVERE|Exception|Traceback)"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: openjdk:17
+
+---
+# Method 2: Keep WARN and above
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-warn-and-above
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "python",
+        "service": "data-processor",
+        "log_processing_rules": [
+          {
+            "type": "include_at_match",
+            "name": "warn_and_above",
+            "pattern": "(WARN|WARNING|ERROR|FATAL|CRITICAL)"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: python:3.11
+
+---
+# Method 3: Drop DEBUG logs (inverse approach - exclude debug)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-no-debug
+  annotations:
+    ad.datadoghq.com/app.logs: |
+      [{
+        "source": "go",
+        "service": "api-gateway",
+        "log_processing_rules": [
+          {
+            "type": "exclude_at_match",
+            "name": "exclude_debug",
+            "pattern": "(DEBUG|TRACE|level=debug|level=trace|\"level\":\"debug\"|\"level\":\"trace\")"
+          }
+        ]
+      }]
+spec:
+  containers:
+    - name: app
+      image: golang:1.21
+
+---
+# Method 4: Global configuration via Helm (exclude debug from ALL containers)
+# datadog:
+#   env:
+#     - name: DD_LOGS_CONFIG_PROCESSING_RULES
+#       value: >-
+#         [
+#           {"type":"exclude_at_match","name":"exclude_debug","pattern":"^\\[DEBUG\\]|level=debug|\"level\":\"debug\""},
+#           {"type":"exclude_at_match","name":"exclude_trace","pattern":"^\\[TRACE\\]|level=trace|\"level\":\"trace\""}
+#         ]

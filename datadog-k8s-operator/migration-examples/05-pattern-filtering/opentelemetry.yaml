@@ -1,0 +1,161 @@
+# OpenTelemetry: Custom Pattern Filtering
+# Equivalent to Datadog's exclude_at_match for custom patterns
+#
+# Uses filter processor with IsMatch() for regex patterns
+
+processors:
+  # ============================================
+  # Web server patterns (nginx, apache, etc.)
+  # ============================================
+  filter/web_patterns:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Static assets
+        - 'IsMatch(body, ".*\\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\\s.*")'
+        - 'IsMatch(body, ".*favicon\\.ico.*")'
+        - 'IsMatch(body, ".*robots\\.txt.*")'
+        - 'IsMatch(body, ".*sitemap\\.xml.*")'
+
+        # Successful requests (drop 200s, keep errors)
+        # Uncomment to enable:
+        # - 'IsMatch(body, ".*\" 200 .*")'
+        # - 'IsMatch(body, ".*\" 204 .*")'
+        # - 'IsMatch(body, ".*\" 304 .*")'
+
+        # Bot traffic
+        - 'IsMatch(body, ".*(Googlebot|bingbot|Baiduspider|YandexBot|AhrefsBot|SemrushBot).*")'
+
+        # Load balancer checks
+        - 'IsMatch(body, ".*(ELB-HealthChecker|GoogleHC|kube-probe).*")'
+
+  # ============================================
+  # Application error patterns to ignore
+  # ============================================
+  filter/noise_patterns:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Connection errors (often client-side issues)
+        - 'IsMatch(body, ".*connection reset by peer.*")'
+        - 'IsMatch(body, ".*broken pipe.*")'
+        - 'IsMatch(body, ".*context canceled.*")'
+        - 'IsMatch(body, ".*context deadline exceeded.*")'
+        - 'IsMatch(body, ".*unexpected EOF.*")'
+        - 'IsMatch(body, ".*use of closed network connection.*")'
+
+        # Client disconnects
+        - 'IsMatch(body, ".*client disconnected.*")'
+        - 'IsMatch(body, ".*connection refused.*")'
+
+        # Timeout logs (if too noisy)
+        - 'IsMatch(body, ".*i/o timeout.*")'
+
+  # ============================================
+  # Internal/infrastructure patterns
+  # ============================================
+  filter/internal_patterns:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Internal service calls
+        - 'IsMatch(body, ".*internal-service-call.*")'
+        - 'IsMatch(body, ".*x-internal-request.*")'
+
+        # Heartbeat/keepalive
+        - 'IsMatch(body, ".*heartbeat.*")'
+        - 'IsMatch(body, ".*keepalive.*")'
+        - 'IsMatch(body, ".*ping-pong.*")'
+
+        # Kubernetes internal
+        - 'IsMatch(body, ".*leader election.*")'
+        - 'IsMatch(body, ".*watch closed.*")'
+
+  # ============================================
+  # Database patterns
+  # ============================================
+  filter/db_patterns:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Health check queries
+        - 'IsMatch(body, ".*SELECT 1.*")'
+        - 'IsMatch(body, ".*SELECT version().*")'
+
+        # Stats queries
+        - 'IsMatch(body, ".*pg_stat_.*")'
+        - 'IsMatch(body, ".*information_schema.*")'
+
+        # Fast queries (keep slow ones)
+        # This regex matches duration under 10ms
+        - 'IsMatch(body, ".*duration: [0-9]\\.[0-9]{1,3} ms.*")'
+
+        # Connection pooler logs
+        - 'IsMatch(body, ".*pgbouncer.*stats.*")'
+
+  # ============================================
+  # Kubernetes event patterns
+  # ============================================
+  filter/k8s_events:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Normal events (keep Warning/Error)
+        - 'IsMatch(body, ".*\"type\":\\s*\"Normal\".*")'
+
+        # Successful operations
+        - 'IsMatch(body, ".*(Pulled|Created|Started|Scheduled).*") and not IsMatch(body, ".*(Error|Warning|Failed).*")'
+
+  # ============================================
+  # Conditional patterns (container-specific)
+  # ============================================
+  filter/nginx_specific:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Only filter static assets from nginx containers
+        - |
+          resource.attributes["k8s.container.name"] == "nginx" and
+          IsMatch(body, ".*\\.(css|js|png|jpg|gif|ico)\\s.*")
+
+        # Only filter 200s from nginx (keep errors from other containers)
+        - |
+          resource.attributes["k8s.container.name"] == "nginx" and
+          IsMatch(body, ".*\" 200 .*")
+
+  # ============================================
+  # Rate limiting patterns (drop repetitive logs)
+  # ============================================
+  filter/repetitive:
+    error_mode: ignore
+    logs:
+      log_record:
+        # These often repeat thousands of times
+        - 'IsMatch(body, ".*no new sessions.*")'
+        - 'IsMatch(body, ".*waiting for.*")'
+        - 'IsMatch(body, ".*retrying.*attempt [0-9]+.*")'
+
+# ============================================
+# Complete pipeline with all pattern filters
+# ============================================
+service:
+  pipelines:
+    logs:
+      receivers:
+        - filelog
+        - otlp
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - filter/namespace           # 1. System namespaces
+        - filter/web_patterns        # 2. Static assets, bots
+        - filter/noise_patterns      # 3. Connection errors
+        - filter/internal_patterns   # 4. Heartbeats, internal calls
+        # Uncomment as needed:
+        # - filter/db_patterns       # 5. DB health checks
+        # - filter/k8s_events        # 6. Normal K8s events
+        - transform/pii
+        - transform/enrich
+        - batch
+      exporters:
+        - otlp/last9

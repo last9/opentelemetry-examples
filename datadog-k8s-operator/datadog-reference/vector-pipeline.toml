@@ -1,0 +1,242 @@
+# Datadog Observability Pipelines (Vector) Configuration
+# This shows how Datadog uses Vector for advanced log processing
+#
+# Vector is the open-source project that powers Datadog Observability Pipelines
+# Documentation: https://vector.dev/ and https://docs.datadoghq.com/observability_pipelines/
+#
+# OpenTelemetry Equivalent: transform processor with OTTL
+
+# ============================================
+# SOURCES - Where logs come from
+# ============================================
+
+[sources.kubernetes_logs]
+type = "kubernetes_logs"
+# Automatically discovers and collects logs from Kubernetes
+
+[sources.http_logs]
+type = "http_server"
+address = "0.0.0.0:8080"
+encoding = "json"
+
+# ============================================
+# TRANSFORMS - Processing and filtering
+# ============================================
+
+# Transform 1: Parse JSON logs
+[transforms.parse_json]
+type = "remap"
+inputs = ["kubernetes_logs"]
+source = '''
+  # Try to parse message as JSON
+  parsed, err = parse_json(.message)
+  if err == null {
+    . = merge(., parsed)
+  }
+'''
+
+# Transform 2: Drop health check logs (equivalent to exclude_at_match)
+[transforms.drop_healthchecks]
+type = "remap"
+inputs = ["parse_json"]
+drop_on_abort = true
+source = '''
+  # Drop health check requests
+  if contains(string!(.message), "/health") ?? false {
+    abort
+  }
+  if contains(string!(.message), "/ready") ?? false {
+    abort
+  }
+  if contains(string!(.message), "/live") ?? false {
+    abort
+  }
+  if contains(string!(.message), "/ping") ?? false {
+    abort
+  }
+'''
+
+# Transform 3: Filter by severity (equivalent to include_at_match)
+[transforms.filter_by_severity]
+type = "filter"
+inputs = ["drop_healthchecks"]
+condition = '''
+  .level != "debug" && .level != "trace"
+'''
+
+# Transform 4: Redact PII (equivalent to mask_sequences)
+[transforms.redact_pii]
+type = "remap"
+inputs = ["filter_by_severity"]
+source = '''
+  # Mask SSN (format: XXX-XX-XXXX)
+  .message = replace(.message, r'\d{3}-\d{2}-\d{4}', "[SSN_REDACTED]") ?? .message
+
+  # Mask Credit Card numbers (Visa, Mastercard, Amex, Discover)
+  .message = replace(.message, r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b', "[CARD_REDACTED]") ?? .message
+
+  # Mask Email addresses
+  .message = replace(.message, r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', "[EMAIL_REDACTED]") ?? .message
+
+  # Mask IP addresses
+  .message = replace(.message, r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b', "[IP_REDACTED]") ?? .message
+
+  # Mask Bearer tokens
+  .message = replace(.message, r'Bearer\s+[a-zA-Z0-9._-]+', "Bearer [TOKEN_REDACTED]") ?? .message
+
+  # Mask password fields
+  .message = replace(.message, r'(password|passwd|pwd)[=:]\s*[^\s,}"]+', "$1=[REDACTED]") ?? .message
+
+  # Mask API keys
+  .message = replace(.message, r'(api_key|apikey|api-key)[=:]\s*[^\s,}"]+', "$1=[REDACTED]") ?? .message
+
+  # Also check in structured fields
+  if exists(.password) {
+    .password = "[REDACTED]"
+  }
+  if exists(.api_key) {
+    .api_key = "[REDACTED]"
+  }
+  if exists(.token) {
+    .token = "[REDACTED]"
+  }
+'''
+
+# Transform 5: Exclude namespaces (equivalent to DD_CONTAINER_EXCLUDE_LOGS)
+[transforms.exclude_namespaces]
+type = "filter"
+inputs = ["redact_pii"]
+condition = '''
+  !includes(["kube-system", "kube-public", "kube-node-lease"], .kubernetes.namespace_name)
+'''
+
+# Transform 6: Enrich with metadata
+[transforms.enrich_metadata]
+type = "remap"
+inputs = ["exclude_namespaces"]
+source = '''
+  # Set service name from container name if not present
+  if !exists(.service) || .service == "" {
+    .service = .kubernetes.container_name ?? "unknown"
+  }
+
+  # Add environment
+  .environment = "production"
+
+  # Add cluster name
+  .cluster = "my-cluster"
+
+  # Set timestamp
+  .timestamp = now()
+
+  # Add source identifier
+  .source = "vector-pipeline"
+'''
+
+# Transform 7: Drop debug logs with pattern matching
+[transforms.drop_debug_patterns]
+type = "remap"
+inputs = ["enrich_metadata"]
+drop_on_abort = true
+source = '''
+  # Drop logs with debug patterns
+  patterns = [
+    r'^\[DEBUG\]',
+    r'level=debug',
+    r'"level":"debug"',
+    r'DEBUG:',
+    r'TRACE:'
+  ]
+
+  message = string!(.message)
+  for_each(patterns) -> |_index, pattern| {
+    if match(message, pattern) ?? false {
+      abort
+    }
+  }
+'''
+
+# Transform 8: Route logs based on content
+[transforms.route_by_type]
+type = "route"
+inputs = ["drop_debug_patterns"]
+route.error = '.level == "error" || .level == "fatal" || .level == "critical"'
+route.warn = '.level == "warn" || .level == "warning"'
+route.access = 'contains(string!(.message), "HTTP") ?? false'
+route._unmatched = true
+
+# ============================================
+# SINKS - Where logs go
+# ============================================
+
+# Sink 1: Send all processed logs to Datadog
+[sinks.datadog_logs]
+type = "datadog_logs"
+inputs = ["route_by_type._unmatched", "route_by_type.error", "route_by_type.warn", "route_by_type.access"]
+default_api_key = "${DATADOG_API_KEY}"
+site = "datadoghq.com"
+compression = "gzip"
+
+# Sink 2: Send errors to separate destination for alerting
+[sinks.error_alerts]
+type = "http"
+inputs = ["route_by_type.error"]
+uri = "https://alerts.example.com/webhook"
+method = "post"
+encoding.codec = "json"
+
+# Sink 3: Debug output (for development)
+# [sinks.debug]
+# type = "console"
+# inputs = ["route_by_type._unmatched"]
+# encoding.codec = "json"
+
+# ============================================
+# OPENTELEMETRY EQUIVALENT PROCESSORS
+# ============================================
+#
+# The above Vector transforms can be replicated in OpenTelemetry using:
+#
+# 1. drop_healthchecks -> filter processor:
+#    processors:
+#      filter/healthcheck:
+#        logs:
+#          log_record:
+#            - 'IsMatch(body, "/(health|ready|live|ping)")'
+#
+# 2. filter_by_severity -> filter processor:
+#    processors:
+#      filter/severity:
+#        logs:
+#          log_record:
+#            - 'severity_number < SEVERITY_NUMBER_INFO'
+#
+# 3. redact_pii -> transform processor:
+#    processors:
+#      transform/pii:
+#        log_statements:
+#          - context: log
+#            statements:
+#              - replace_pattern(body, "\\d{3}-\\d{2}-\\d{4}", "[SSN_REDACTED]")
+#
+# 4. exclude_namespaces -> filter processor:
+#    processors:
+#      filter/namespace:
+#        logs:
+#          log_record:
+#            - 'resource.attributes["k8s.namespace.name"] == "kube-system"'
+#
+# 5. enrich_metadata -> transform processor:
+#    processors:
+#      transform/enrich:
+#        log_statements:
+#          - context: resource
+#            statements:
+#              - set(attributes["service.name"], attributes["k8s.container.name"])
+#
+# 6. route_by_type -> routing connector (advanced):
+#    connectors:
+#      routing:
+#        logs:
+#          - condition: 'severity_number >= SEVERITY_NUMBER_ERROR'
+#            output: errors

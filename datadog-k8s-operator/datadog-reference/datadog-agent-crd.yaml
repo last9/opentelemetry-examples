@@ -1,0 +1,107 @@
+# Datadog Agent CRD (v2alpha1) - Reference Configuration
+# This shows all log-related configuration options
+#
+# Documentation: https://docs.datadoghq.com/containers/datadog_operator/
+
+apiVersion: datadoghq.com/v2alpha1
+kind: DatadogAgent
+metadata:
+  name: datadog
+  namespace: datadog
+spec:
+  # Global settings
+  global:
+    credentials:
+      apiSecret:
+        secretName: datadog-secret
+        keyName: api-key
+      appSecret:
+        secretName: datadog-secret
+        keyName: app-key
+    site: datadoghq.com
+
+    # Cluster name for resource identification
+    clusterName: my-cluster
+
+  # Features configuration
+  features:
+    # ============================================
+    # LOG COLLECTION CONFIGURATION
+    # ============================================
+    logCollection:
+      # Enable log collection
+      enabled: true
+
+      # Collect logs from all containers (equivalent to DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL)
+      containerCollectAll: true
+
+      # Use file-based collection instead of container runtime API
+      # More efficient, recommended for production
+      containerCollectUsingFiles: true
+
+      # Path to container logs (default: /var/lib/docker/containers)
+      containerLogsPath: /var/lib/docker/containers
+
+      # Path to pod logs (default: /var/log/pods)
+      podLogsPath: /var/log/pods
+
+      # Path for symlinks (default: /var/log/containers)
+      containerSymlinksPath: /var/log/containers
+
+      # Path for storing checkpoint info about processed files
+      tempStoragePath: /var/lib/datadog-agent/logs
+
+      # Maximum number of log files to tail (increase with caution)
+      openFilesLimit: 100
+
+      # Auto-detect multi-line logs (Java stack traces, etc.)
+      autoMultiLineDetection: true
+
+  # ============================================
+  # OVERRIDE NODE AGENT CONFIGURATION
+  # ============================================
+  override:
+    nodeAgent:
+      # Environment variables for log processing
+      env:
+        # Global processing rules (apply to ALL containers)
+        # JSON array of rules
+        - name: DD_LOGS_CONFIG_PROCESSING_RULES
+          value: |
+            [
+              {
+                "type": "exclude_at_match",
+                "name": "exclude_healthchecks",
+                "pattern": "(GET|HEAD) /(health|ready|live)"
+              },
+              {
+                "type": "mask_sequences",
+                "name": "mask_credit_cards",
+                "pattern": "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\\b",
+                "replace_placeholder": "[CREDIT_CARD_REDACTED]"
+              }
+            ]
+
+        # Container exclusion by namespace
+        - name: DD_CONTAINER_EXCLUDE_LOGS
+          value: "kube_namespace:kube-system kube_namespace:kube-public kube_namespace:kube-node-lease"
+
+        # Container inclusion (overrides exclusion)
+        - name: DD_CONTAINER_INCLUDE_LOGS
+          value: "name:my-critical-app"
+
+        # Exclude by image name
+        - name: DD_CONTAINER_EXCLUDE
+          value: "image:pause image:fluent-bit"
+
+---
+# Secret for Datadog credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datadog-secret
+  namespace: datadog
+type: Opaque
+stringData:
+  api-key: "<YOUR_DATADOG_API_KEY>"
+  app-key: "<YOUR_DATADOG_APP_KEY>"

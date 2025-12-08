@@ -1,0 +1,195 @@
+# OpenTelemetry Collector ConfigMap
+# Contains the collector configuration for log processing
+#
+# This ConfigMap is referenced by the DaemonSet
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: last9
+  labels:
+    app.kubernetes.io/name: otel-collector
+data:
+  config.yaml: |
+    receivers:
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          - /var/log/pods/*/otel-collector/*.log
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+        operators:
+          - type: router
+            id: get-format
+            routes:
+              - output: parser-docker
+                expr: 'body matches "^\\{"'
+              - output: parser-crio
+                expr: 'body matches "^[^ Z]+ "'
+              - output: parser-containerd
+                expr: 'body matches "^[^ Z]+Z"'
+          - type: json_parser
+            id: parser-docker
+            output: extract-metadata-from-filepath
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+          - type: regex_parser
+            id: parser-crio
+            regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+            output: extract-metadata-from-filepath
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%f%j'
+          - type: regex_parser
+            id: parser-containerd
+            regex: '^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+            output: extract-metadata-from-filepath
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+          - type: regex_parser
+            id: extract-metadata-from-filepath
+            regex: '^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]{36})\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$'
+            parse_from: attributes["log.file.path"]
+            cache:
+              size: 128
+          - type: move
+            from: attributes.namespace
+            to: resource["k8s.namespace.name"]
+          - type: move
+            from: attributes.pod_name
+            to: resource["k8s.pod.name"]
+          - type: move
+            from: attributes.uid
+            to: resource["k8s.pod.uid"]
+          - type: move
+            from: attributes.container_name
+            to: resource["k8s.container.name"]
+          - type: move
+            from: attributes.restart_count
+            to: resource["k8s.container.restart_count"]
+          - type: move
+            from: attributes.log
+            to: body
+
+      otlp:
+        protocols:
+          grpc:
+            endpoint: ${env:MY_POD_IP}:4317
+          http:
+            endpoint: ${env:MY_POD_IP}:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 85
+        spike_limit_percentage: 15
+
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        filter:
+          node_from_env_var: KUBE_NODE_NAME
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.node.name
+            - k8s.container.name
+          labels:
+            - tag_name: app
+              key: app
+              from: pod
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+
+      # Namespace exclusion
+      filter/namespace:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'resource.attributes["k8s.namespace.name"] == "kube-system"'
+            - 'resource.attributes["k8s.namespace.name"] == "kube-public"'
+            - 'resource.attributes["k8s.namespace.name"] == "kube-node-lease"'
+
+      # Health check exclusion
+      filter/healthcheck:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'IsMatch(body, ".*(GET|HEAD) /(health|ready|live).*")'
+            - 'IsMatch(body, ".*kube-probe.*")'
+
+      # PII masking
+      transform/pii:
+        error_mode: ignore
+        log_statements:
+          - context: log
+            statements:
+              - replace_pattern(body, "\\d{3}-\\d{2}-\\d{4}", "[SSN_REDACTED]")
+              - replace_pattern(body, "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "[EMAIL_REDACTED]")
+              - replace_pattern(body, "Bearer\\s+[a-zA-Z0-9._-]+", "Bearer [TOKEN_REDACTED]")
+
+      # Service name enrichment
+      transform/enrich:
+        error_mode: ignore
+        log_statements:
+          - context: resource
+            statements:
+              - set(attributes["service.name"], attributes["k8s.container.name"]) where attributes["service.name"] == nil
+              - set(attributes["deployment.environment"], "production")
+
+      batch:
+        send_batch_size: 15000
+        send_batch_max_size: 15000
+        timeout: 10s
+
+    exporters:
+      otlp/last9:
+        endpoint: "${LAST9_OTLP_ENDPOINT}"
+        headers:
+          Authorization: "${LAST9_AUTH_TOKEN}"
+        compression: gzip
+
+      debug:
+        verbosity: detailed
+        sampling_initial: 5
+        sampling_thereafter: 200
+
+    extensions:
+      health_check:
+        endpoint: ${env:MY_POD_IP}:13133
+
+    service:
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          address: ${env:MY_POD_IP}:8888
+
+      extensions:
+        - health_check
+
+      pipelines:
+        logs:
+          receivers:
+            - filelog
+            - otlp
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - filter/namespace
+            - filter/healthcheck
+            - transform/pii
+            - transform/enrich
+            - batch
+          exporters:
+            - otlp/last9

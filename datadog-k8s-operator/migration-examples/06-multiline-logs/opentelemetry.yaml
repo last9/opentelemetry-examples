@@ -1,0 +1,252 @@
+# OpenTelemetry: Multi-line Log Aggregation
+# Equivalent to Datadog's multi_line log processing rule
+#
+# Uses the `recombine` operator in the filelog receiver
+#
+# Documentation:
+# - Recombine Operator: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/operators/recombine.md
+# - Filelog Receiver: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver
+
+receivers:
+  # ============================================
+  # Java Stack Trace Aggregation
+  # ============================================
+  filelog/java:
+    include:
+      - /var/log/pods/*/*/*.log
+    include_file_path: true
+    operators:
+      # First, parse the container runtime format (CRI/Docker)
+      - type: router
+        routes:
+          - output: parser-cri
+            expr: 'body matches "^[^ Z]+ "'
+          - output: parser-docker
+            expr: 'body matches "^\\{"'
+        default: parser-cri
+
+      - id: parser-cri
+        type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        output: recombine-java
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      - id: parser-docker
+        type: json_parser
+        output: recombine-java
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Recombine multi-line Java logs
+      # Lines starting with timestamp are new entries
+      - id: recombine-java
+        type: recombine
+        combine_field: attributes.log
+        is_first_entry: attributes.log matches "^\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}"
+        source_identifier: attributes["log.file.path"]
+        max_log_size: 1048576  # 1MB max
+        combine_with: "\n"
+        force_flush_period: 5s
+
+      - type: move
+        from: attributes.log
+        to: body
+
+  # ============================================
+  # Python Traceback Aggregation
+  # ============================================
+  filelog/python:
+    include:
+      - /var/log/pods/*/python-*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Python tracebacks start with "Traceback" or timestamp
+      # Continuation lines start with whitespace or "File"
+      - type: recombine
+        combine_field: attributes.log
+        is_first_entry: attributes.log matches "^(Traceback|\\d{4}-\\d{2}-\\d{2}|[A-Z][a-z]+Error:)"
+        source_identifier: attributes["log.file.path"]
+        max_log_size: 524288  # 512KB max
+        combine_with: "\n"
+        force_flush_period: 5s
+
+      - type: move
+        from: attributes.log
+        to: body
+
+  # ============================================
+  # Go Panic Stack Trace Aggregation
+  # ============================================
+  filelog/go:
+    include:
+      - /var/log/pods/*/go-*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Go logs: timestamp, panic:, or goroutine start new entries
+      - type: recombine
+        combine_field: attributes.log
+        is_first_entry: attributes.log matches "^(\\d{4}/\\d{2}/\\d{2}|panic:|goroutine \\d+)"
+        source_identifier: attributes["log.file.path"]
+        max_log_size: 524288
+        combine_with: "\n"
+        force_flush_period: 5s
+
+      - type: move
+        from: attributes.log
+        to: body
+
+  # ============================================
+  # Generic Multi-line (ISO Timestamp)
+  # ============================================
+  filelog/generic:
+    include:
+      - /var/log/pods/*/*/*.log
+    exclude:
+      - /var/log/pods/kube-system_*/*/*.log
+      - /var/log/pods/last9_*/*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # Generic: any line starting with ISO timestamp is a new entry
+      # Matches: 2024-01-15T10:30:00, [2024-01-15 10:30:00], etc.
+      - type: recombine
+        combine_field: attributes.log
+        is_first_entry: attributes.log matches "^\\[?\\d{4}[-/]\\d{2}[-/]\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}"
+        source_identifier: attributes["log.file.path"]
+        max_log_size: 1048576
+        combine_with: "\n"
+        force_flush_period: 5s
+        # Overwrite preserves the first entry's timestamp
+        overwrite_with: oldest
+
+      - type: move
+        from: attributes.log
+        to: body
+
+  # ============================================
+  # JSON Multi-line (Pretty-printed JSON)
+  # ============================================
+  filelog/json_multiline:
+    include:
+      - /var/log/pods/*/nodejs-*/*.log
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # JSON: lines starting with { are new entries
+      - type: recombine
+        combine_field: attributes.log
+        is_first_entry: attributes.log matches "^\\{"
+        source_identifier: attributes["log.file.path"]
+        max_log_size: 262144  # 256KB for JSON
+        combine_with: ""  # No separator for JSON
+        force_flush_period: 3s
+
+      - type: move
+        from: attributes.log
+        to: body
+
+      # After recombining, parse the JSON
+      - type: json_parser
+        parse_from: body
+        parse_to: attributes
+
+processors:
+  # Add K8s metadata
+  k8sattributes:
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.container.name
+        - k8s.deployment.name
+
+  # Memory limiter
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+
+exporters:
+  otlp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${LAST9_AUTH_TOKEN}"
+    compression: gzip
+
+service:
+  pipelines:
+    logs:
+      receivers:
+        - filelog/generic  # Use generic for most cases
+        # Or use specific receivers:
+        # - filelog/java
+        # - filelog/python
+        # - filelog/go
+      processors:
+        - memory_limiter
+        - k8sattributes
+        - batch
+      exporters:
+        - otlp/last9
+
+# ============================================
+# Key recombine operator options:
+# ============================================
+#
+# is_first_entry: Expression that returns true for the first line of a multi-line log
+#                 Uses expr language (similar to OTTL)
+#
+# is_last_entry:  Alternative - expression for the last line (use one or the other)
+#
+# combine_field:  Which field contains the log content to combine
+#
+# combine_with:   String to join lines (default: "\n")
+#
+# source_identifier: Field to identify log source (prevents mixing logs from different files)
+#
+# max_log_size:   Maximum combined log size in bytes (default: unlimited, recommend setting)
+#
+# force_flush_period: Time to wait before flushing incomplete multi-line logs
+#
+# overwrite_with: "oldest" or "newest" - which entry's attributes to keep
+#
+# ============================================
+# Common is_first_entry patterns:
+# ============================================
+#
+# Java timestamp:      body matches "^\\d{4}-\\d{2}-\\d{2}"
+# Python traceback:    body matches "^(Traceback|\\d{4}-)"
+# Go panic:            body matches "^(panic:|goroutine|\\d{4}/)"
+# JSON object:         body matches "^\\{"
+# Generic ISO:         body matches "^\\[?\\d{4}[-/]\\d{2}[-/]\\d{2}"
+# Log level prefix:    body matches "^(DEBUG|INFO|WARN|ERROR|FATAL)"
+# Docker JSON:         body matches "^\\{\"log\":"
