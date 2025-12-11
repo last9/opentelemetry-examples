@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: node14-express-otel
+    ports:
+      - "3000:3000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-node14-express-example}
+      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-always_on}
+      - OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=local}
+      - OTEL_LOG_LEVEL=${OTEL_LOG_LEVEL:-error}
+      - PORT=3000
+    restart: unless-stopped

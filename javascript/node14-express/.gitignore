@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment files with real credentials
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
