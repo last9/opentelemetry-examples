@@ -1,0 +1,33 @@
+# Sanic web framework
+sanic>=23.6.0
+
+# OpenTelemetry core
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+
+# OTLP exporters (HTTP/protobuf - more firewall-friendly than gRPC)
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+
+# Optional: Standard asyncio instrumentation from OTEL contrib
+# Provides coroutine duration/count metrics (complementary to our event loop metrics)
+opentelemetry-instrumentation-asyncio>=0.41b0
+
+# Optional: Kubernetes resource detector
+# Automatically detects k8s.pod.name, k8s.namespace.name, container.id, etc.
+# Only needed when running in Kubernetes
+opentelemetry-resourcedetector-kubernetes>=0.3.0
+
+# Optional: AWS resource detectors (EC2, ECS, EKS, Lambda)
+# Automatically detects cloud.provider, cloud.platform, cloud.region, etc.
+# Only needed when running in AWS
+# pip install opentelemetry-sdk-extension-aws
+# opentelemetry-sdk-extension-aws>=2.0.0
+
+# Optional: GCP resource detector (GCE, GKE, Cloud Run, Cloud Functions)
+# Automatically detects cloud.provider, cloud.platform, gcp.* attributes
+# Only needed when running in GCP
+# pip install opentelemetry-resourcedetector-gcp
+# opentelemetry-resourcedetector-gcp>=1.7.0
+
+# Development/testing
+aiohttp>=3.8.0  # For making async HTTP requests in tests

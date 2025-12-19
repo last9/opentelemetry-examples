@@ -1,0 +1,62 @@
+# OpenTelemetry Collector configuration for event loop diagnostics demo
+#
+# This configuration:
+# 1. Receives telemetry from the Sanic app via OTLP
+# 2. Exports to Last9 (or other OTLP-compatible backend)
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    # Batch telemetry for better performance
+    timeout: 10s
+    send_batch_size: 1024
+
+  memory_limiter:
+    # Prevent OOM in the collector
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  resource:
+    # Add additional resource attributes
+    attributes:
+      - key: deployment.environment
+        value: development
+        action: upsert
+
+exporters:
+  # Debug output (useful for local testing)
+  debug:
+    verbosity: detailed
+
+  # OTLP exporter for Last9 or other backends
+  # Configure via environment variables:
+  #   LAST9_OTLP_ENDPOINT
+  #   LAST9_AUTH_HEADER
+  otlp:
+    endpoint: ${LAST9_OTLP_ENDPOINT:-https://otlp.last9.io}
+    headers:
+      Authorization: ${LAST9_AUTH_HEADER:-}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [debug]  # Add 'otlp' to export to Last9
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [debug]  # Add 'otlp' to export to Last9
+
+  telemetry:
+    logs:
+      level: info
