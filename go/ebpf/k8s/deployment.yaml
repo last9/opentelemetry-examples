@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-ebpf-demo
+  namespace: last9
+  labels:
+    app: go-ebpf-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-ebpf-demo
+  template:
+    metadata:
+      labels:
+        app: go-ebpf-demo
+      annotations:
+        # Enable eBPF auto-instrumentation
+        instrumentation.opentelemetry.io/inject-go: "true"
+        # REQUIRED: Path to Go binary (must be annotation, not just env var)
+        instrumentation.opentelemetry.io/otel-go-auto-target-exe: "/app/server"
+    spec:
+      # REQUIRED: Allow sidecar to access the Go process
+      shareProcessNamespace: true
+      containers:
+      - name: app
+        image: go-ebpf-demo:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        # REQUIRED: Path to the Go binary inside the container
+        # eBPF instrumentation needs this to know which process to trace
+        - name: OTEL_GO_AUTO_TARGET_EXE
+          value: "/app/server"
+        # OPTIONAL: Override service name (defaults to binary name)
+        - name: OTEL_SERVICE_NAME
+          value: "go-ebpf-demo"
+        # OPTIONAL: Add resource attributes
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.version=1.0.0,deployment.environment=demo"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-ebpf-demo
+  namespace: last9
+spec:
+  selector:
+    app: go-ebpf-demo
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+    name: http
+  type: ClusterIP

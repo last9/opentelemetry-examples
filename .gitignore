@@ -3,3 +3,8 @@ go/gin/gin_example
 go/pgx/gin
 go/pgx/m
 go/grpc/example.com/
+.claude
+.env
+.env.local
+.env.test
+node_modules
