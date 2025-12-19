@@ -1,0 +1,54 @@
+receivers:
+  # Filelog receiver to read logs from Ruby application
+  # Detailed configuration: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver
+  filelog:
+    include: [/path/to/opentelemetry-examples/ruby/file-logs/logs/*.log]
+    include_file_path: true
+    include_file_name: true
+    retry_on_failure:
+      enabled: true
+    # Parse JSON formatted logs
+    operators:
+      - type: json_parser
+        parse_from: body
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%Y-%m-%dT%H:%M:%S%z'
+      - type: move
+        from: attributes.level
+        to: attributes["log.level"]
+      - type: move
+        from: attributes.message
+        to: body
+      - type: move
+        from: attributes.service
+        to: resource["service.name"]
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+
+exporters:
+  # OTLP exporter - replace with your observability backend endpoint
+  otlp:
+    endpoint: "<YOUR_OTEL_ENDPOINT>"
+    headers:
+      "Authorization": "Basic <YOUR_AUTH_TOKEN>"
+
+  # Debug exporter to see logs in console
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch, resourcedetection/system]
+      exporters: [debug]
+      # To send to your backend, add: exporters: [otlp, debug]
