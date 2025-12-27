@@ -18,6 +18,14 @@ receivers:
     start_at: end
     include_file_path: true
     include_file_name: false
+
+    # Multiline configuration for handling stack traces and multi-line logs
+    # This prevents splitting of multi-line logs like Java/Python stack traces
+    multiline:
+      # Detect lines that start with ISO8601 timestamp as new log entries
+      # Matches: 2024-01-15T10:30:00, [2024-01-15 10:30:00], etc.
+      line_start_pattern: '^\[?\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}'
+
     operators:
       # Parse container logs (CRI format)
       - type: router

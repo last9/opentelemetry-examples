@@ -21,6 +21,12 @@ data:
         start_at: end
         include_file_path: true
         include_file_name: false
+
+        # Multiline configuration for handling stack traces and multi-line logs
+        multiline:
+          # Detect lines that start with ISO8601 timestamp as new log entries
+          line_start_pattern: '^\[?\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}'
+
         operators:
           - type: router
             id: get-format
