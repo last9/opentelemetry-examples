@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  # Log generator service - simulates HAProxy logs with combined entries
+  log-generator:
+    image: bash:5.2
+    container_name: haproxy-log-generator
+    volumes:
+      - ./logs:/logs
+      - ./generate-logs.sh:/generate-logs.sh:ro
+    command: ["/usr/local/bin/bash", "/generate-logs.sh"]
+    restart: unless-stopped
+    networks:
+      - otel-network
+
+  # OpenTelemetry Collector - splits and processes logs
+  # Requires v0.137.0+ for unroll processor support
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    container_name: otel-collector-haproxy
+    command: ["--config=/etc/otel-collector/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector/config.yaml:ro
+      - ./logs:/logs:ro
+    environment:
+      # Last9 OTLP configuration
+      # Set these in .env file or pass via environment
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT:-otlp.last9.io:443}
+      - LAST9_AUTH_TOKEN=${LAST9_AUTH_TOKEN:-your-last9-token-here}
+    # Expose OTLP ports for receiving customer logs
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - log-generator
+    restart: unless-stopped
+    networks:
+      - otel-network
+
+networks:
+  otel-network:
+    driver: bridge
