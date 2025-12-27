@@ -16,7 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from hello import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Health check for ECS/ALB
+    path('health/', views.health, name='health'),
+    # API endpoints
+    path('api/send-message', views.send_sqs_message, name='send_message'),
+    path('api/queue-info', views.get_queue_info, name='queue_info'),
 ]
