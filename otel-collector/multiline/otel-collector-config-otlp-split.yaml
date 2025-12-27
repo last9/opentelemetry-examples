@@ -1,0 +1,116 @@
+# OpenTelemetry Collector Configuration
+# Receives logs via OTLP with combined lines and processes them
+#
+# IMPORTANT LIMITATION:
+# OpenTelemetry Collector does NOT have a built-in way to split one log record
+# into multiple log records. This configuration demonstrates:
+# 1. Receiving OTLP logs with combined lines
+# 2. Parsing and marking them for downstream processing
+# 3. Recommended workarounds
+#
+# For true splitting, use the file-based approach (otel-collector-config.yaml)
+
+receivers:
+  # OTLP receiver - receives logs from customer
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 85
+    spike_limit_percentage: 15
+
+  # Transform processor - marks logs that need splitting
+  # This CANNOT split them, but adds metadata for downstream processing
+  transform/detect_combined:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Detect if body contains multiple lines with RFC3339 timestamps
+          - set(attributes["combined_lines"], true) where IsMatch(body.string, "\\n\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}")
+          - set(attributes["line_count"], 2) where IsMatch(body.string, "\\n\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}") and not IsMatch(body.string, "(\\n\\d{4}-\\d{2}-\\d{2}T){2,}")
+          # Extract first line only for parsing
+          - replace_pattern(attributes["first_line"], body.string, "^([^\\n]+).*", "$$1") where attributes["combined_lines"] == true
+
+  # Parse HAProxy format from the body (treats as single log)
+  transform/parse_haproxy:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Extract fields from HAProxy syslog format
+          - set(attributes["hostname"], ParseRE(body.string, "^\\d{4}-\\d{2}-\\d{2}T[\\d:.+-]+\\s+([\\w-]+)\\s+").groups[0]) where IsMatch(body.string, "^\\d{4}-\\d{2}-\\d{2}T")
+          - set(attributes["process"], ParseRE(body.string, "\\s+(\\w+)\\[\\d+\\]:").groups[0]) where IsMatch(body.string, "\\w+\\[\\d+\\]:")
+          - set(attributes["pid"], ParseRE(body.string, "\\[(\\d+)\\]:").groups[0]) where IsMatch(body.string, "\\[\\d+\\]:")
+
+          # Extract severity
+          - set(severity_text, "ERROR") where IsMatch(body.string, "\\[ERROR\\]")
+          - set(severity_text, "WARNING") where IsMatch(body.string, "\\[WARNING\\]")
+          - set(severity_text, "INFO") where IsMatch(body.string, "\\[INFO\\]")
+          - set(severity_text, "DEBUG") where IsMatch(body.string, "\\[DEBUG\\]")
+
+          # Add service name
+          - set(attributes["service.name"], "haproxy")
+
+  batch:
+    timeout: 5s
+    send_batch_size: 100
+
+exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 100
+    sampling_thereafter: 100
+
+  # Forward to Last9
+  otlp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "Basic ${LAST9_AUTH_TOKEN}"
+    compression: gzip
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/detect_combined, transform/parse_haproxy, batch]
+      exporters: [debug, otlp/last9]
+
+# ============================================
+# RECOMMENDED WORKAROUNDS FOR LOG SPLITTING
+# ============================================
+#
+# Since OTEL Collector cannot split one log into multiple logs, consider:
+#
+# 1. **Customer-Side Splitting** (RECOMMENDED):
+#    - Have customer split logs before sending via OTLP
+#    - Send each HAProxy line as a separate LogRecord
+#    - Example pseudocode:
+#      for line in haproxy_output.split('\n'):
+#          if line.startswith('2025-'):
+#              send_otlp_log(body=line)
+#
+# 2. **File-Based Collection** (BEST FOR SPLITTING):
+#    - Customer writes logs to file
+#    - OTEL Collector uses filelog receiver with multiline config
+#    - See otel-collector-config.yaml for implementation
+#    - This approach WORKS and splits correctly
+#
+# 3. **Intermediate Processor**:
+#    - Write custom processor to split logs
+#    - Or use external tool (Logstash, Fluentd) to split then forward
+#
+# 4. **Accept Combined Logs**:
+#    - Keep logs combined but add attributes marking them
+#    - Process in Last9 backend/UI to display as separate entries
+#
+# 5. **Use Syslog Receiver**:
+#    - If customer can send via syslog protocol
+#    - Each syslog message = one log record (natural splitting)
+#

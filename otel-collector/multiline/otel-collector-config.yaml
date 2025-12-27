@@ -1,0 +1,153 @@
+receivers:
+  # OTLP receiver - receives logs from customer
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Filelog receiver - for local file testing
+  filelog/haproxy:
+    include:
+      - /logs/haproxy.log
+
+    # Start from beginning to read existing logs (testing only)
+    # For production, use: start_at: end
+    start_at: beginning
+
+    # Include file metadata for debugging
+    include_file_path: true
+    include_file_name: true
+
+    # CRITICAL: Multiline configuration splits combined logs
+    # The line_start_pattern defines log boundaries based on RFC3339 timestamps
+    multiline:
+      # Pattern matches: YYYY-MM-DDTHH:MM:SS.microseconds+00:00
+      # Example: 2025-12-14T02:23:07.305817+00:00
+      line_start_pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+\d{2}:\d{2}'
+
+    # Operators pipeline for parsing and enrichment
+    operators:
+      # 1. Parse HAProxy syslog format
+      # Format: TIMESTAMP HOSTNAME PROCESS[PID]: MESSAGE
+      - type: regex_parser
+        regex: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+\d{2}:\d{2})\s+(?P<hostname>[\w-]+)\s+(?P<process>\w+)\[(?P<pid>\d+)\]:\s+(?P<message>.*)$'
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%Y-%m-%dT%H:%M:%S.%f%z'
+
+      # 2. Extract severity level from message (if present)
+      # Matches: [WARNING], [ERROR], [INFO], [DEBUG]
+      - type: regex_parser
+        regex: '^\[(?P<severity_text>ERROR|WARNING|INFO|DEBUG)\]'
+        parse_from: attributes.message
+        if: 'attributes.message matches "^\\["'
+
+      # 3. Add service name
+      - type: add
+        field: attributes.service.name
+        value: "haproxy"
+
+      # 4. Add log source attribute
+      - type: add
+        field: attributes.log.source
+        value: "file"
+
+      # 5. Move hostname to resource attribute (if it exists)
+      - type: move
+        from: attributes.hostname
+        to: resource.hostname
+        if: 'attributes.hostname != nil'
+
+processors:
+  # Memory limiter (best practice - always first processor)
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 85
+    spike_limit_percentage: 15
+
+  # STEP 1: Split combined logs received via OTLP
+  # Converts body string with \n into array of lines
+  transform/split_lines:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Split body on newlines - creates array
+          - set(body, Split(body.string, "\n")) where IsString(body)
+          # Filter out empty lines
+          - set(body, body) where len(body) > 0
+
+  # STEP 2: Unroll the array into separate log records
+  # This creates N log records from 1 (one per array element)
+  unroll:
+    # Each element in the body array becomes a separate LogRecord
+    # Preserves timestamp, attributes, and resource
+    recursive: false
+
+  # STEP 3: Parse HAProxy format from each split log line
+  transform/parse_haproxy:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Extract HAProxy fields using regex
+          - set(attributes["timestamp_str"], ParseRE(body.string, "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}\\+\\d{2}:\\d{2})").groups[0]) where IsMatch(body.string, "^\\d{4}-\\d{2}-\\d{2}T")
+          - set(attributes["hostname"], ParseRE(body.string, "^\\d{4}-\\d{2}-\\d{2}T[\\d:.+-]+\\s+([\\w-]+)").groups[0]) where IsMatch(body.string, "^\\d{4}-\\d{2}-\\d{2}T")
+          - set(attributes["process"], ParseRE(body.string, "\\s+(\\w+)\\[\\d+\\]:").groups[0]) where IsMatch(body.string, "\\w+\\[\\d+\\]:")
+          - set(attributes["pid"], ParseRE(body.string, "\\[(\\d+)\\]:").groups[0]) where IsMatch(body.string, "\\[\\d+\\]:")
+
+          # Extract severity
+          - set(severity_text, "ERROR") where IsMatch(body.string, "\\[ERROR\\]")
+          - set(severity_text, "WARNING") where IsMatch(body.string, "\\[WARNING\\]")
+          - set(severity_text, "INFO") where IsMatch(body.string, "\\[INFO\\]")
+          - set(severity_text, "DEBUG") where IsMatch(body.string, "\\[DEBUG\\]")
+
+          # Add service name
+          - set(attributes["service.name"], "haproxy")
+
+  # Batch processor for efficiency
+  batch:
+    timeout: 5s
+    send_batch_size: 100
+
+  # Resource detection (adds host metadata)
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+
+exporters:
+  # Debug exporter for testing
+  debug:
+    verbosity: detailed
+    sampling_initial: 100
+    sampling_thereafter: 100
+
+  # Last9 OTLP exporter
+  otlp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "Basic ${LAST9_AUTH_TOKEN}"
+    compression: gzip
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  pipelines:
+    # Pipeline 1: File-based log collection with splitting
+    logs/file:
+      receivers: [filelog/haproxy]
+      processors: [memory_limiter, resourcedetection/system, batch]
+      exporters: [debug, otlp/last9]
+
+    # Pipeline 2: OTLP-received logs with splitting using unroll processor
+    logs/otlp:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/split_lines, unroll, transform/parse_haproxy, batch]
+      exporters: [debug, otlp/last9]
