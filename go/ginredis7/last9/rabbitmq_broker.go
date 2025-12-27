@@ -42,7 +42,10 @@ type RabbitMQBroker struct {
 	tracer trace.Tracer
 }
 
-func NewRabbitMQBroker(config *RabbitMQConfig, tracer trace.Tracer) (*RabbitMQBroker, error) {
+func NewRabbitMQBroker(config *RabbitMQConfig) (*RabbitMQBroker, error) {
+	// Use global tracer from go-agent
+	tracer := otel.Tracer("rabbitmq")
+
 	client, err := NewRabbitMQClient(config, tracer)
 	if err != nil {
 		return nil, err

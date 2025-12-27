@@ -8,35 +8,35 @@ import (
 	"os/signal"
 	"time"
 
-	"kafka-hello-world/last9"
-
 	"github.com/IBM/sarama"
-	"github.com/dnwe/otelsarama"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/last9/go-agent"
+	"github.com/last9/go-agent/integrations/kafka"
 )
 
 func main() {
-	// Initialize instrumentation
-	instrumentation := last9.NewInstrumentation()
-	defer instrumentation.TracerProvider.Shutdown(context.Background())
+	// Initialize the Last9 agent - this sets up tracing, metrics, and logging
+	// Configuration is read from environment variables:
+	//   OTEL_EXPORTER_OTLP_ENDPOINT - Last9 OTLP endpoint
+	//   OTEL_EXPORTER_OTLP_HEADERS  - Authorization header
+	//   OTEL_SERVICE_NAME           - Service name (defaults to "kafka-producer")
+	//   OTEL_RESOURCE_ATTRIBUTES    - Additional resource attributes
+	if err := agent.Start(); err != nil {
+		log.Fatalf("Failed to start Last9 agent: %v", err)
+	}
+	defer agent.Shutdown()
 
-	// Sarama configuration
-	config := sarama.NewConfig()
-	config.Version = sarama.V2_8_0_0
-	config.Producer.Return.Successes = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
-
-	// Create a new producer
-	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, config)
+	// Create an instrumented Kafka producer using go-agent
+	// This automatically:
+	// - Creates spans for each message sent
+	// - Propagates trace context via message headers
+	// - Records metrics (messages sent, errors, duration, message size)
+	producer, err := kafka.NewSyncProducer(kafka.ProducerConfig{
+		Brokers: []string{"localhost:9092"},
+		Config:  newSaramaConfig(),
+	})
 	if err != nil {
 		log.Fatalf("Failed to create producer: %v", err)
 	}
-
-	// Wrap the producer with OpenTelemetry instrumentation
-	producer = otelsarama.WrapSyncProducer(config, producer)
 	defer producer.Close()
 
 	// Create a signal channel for graceful shutdown
@@ -47,22 +47,27 @@ func main() {
 	counter := 0
 	run := true
 
+	fmt.Println("Producer started. Press Ctrl+C to stop.")
+
 	for run {
 		select {
 		case <-sigchan:
-			fmt.Println("Caught shutdown signal. Closing producer...")
+			fmt.Println("\nCaught shutdown signal. Closing producer...")
 			run = false
 		default:
 			message := fmt.Sprintf("Hello, World! #%d", counter)
 
-			// Create and send message
+			// Create message
 			msg := &sarama.ProducerMessage{
 				Topic: topic,
 				Key:   sarama.StringEncoder(fmt.Sprintf("key-%d", counter)),
 				Value: sarama.StringEncoder(message),
 			}
 
-			partition, offset, err := producer.SendMessage(msg)
+			// Send message with context - trace context is automatically injected
+			// into message headers for distributed tracing
+			ctx := context.Background()
+			partition, offset, err := producer.SendMessage(ctx, msg)
 			if err != nil {
 				log.Printf("Failed to send message: %v\n", err)
 			} else {
@@ -78,22 +83,11 @@ func main() {
 	fmt.Println("Producer shut down")
 }
 
-func printMessage(msg *sarama.ConsumerMessage) {
-	// Extract tracing info from message
-	ctx := otel.GetTextMapPropagator().Extract(context.Background(), otelsarama.NewConsumerMessageCarrier(msg))
-
-	tr := otel.Tracer("consumer")
-	_, span := tr.Start(ctx, "consume message", trace.WithAttributes(
-		attribute.Key(semconv.MessagingSystemKey).String(semconv.MessagingSystemKafka.Value.AsString()),
-		attribute.Key(semconv.MessagingOperationTypeKey).String(semconv.MessagingOperationTypePublish.Value.AsString()),
-		attribute.Key("topic").String(msg.Topic),
-		attribute.Key("partition").Int64(int64(msg.Partition)),
-		attribute.Key("offset").Int64(msg.Offset),
-	))
-	defer span.End()
-
-	// Process the message
-	log.Printf("Message topic:%q partition:%d offset:%d\n\tkey:%s value:%s\n",
-		msg.Topic, msg.Partition, msg.Offset,
-		string(msg.Key), string(msg.Value))
+// newSaramaConfig creates a Sarama configuration for the producer
+func newSaramaConfig() *sarama.Config {
+	config := sarama.NewConfig()
+	config.Version = sarama.V2_8_0_0
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	return config
 }

@@ -20,8 +20,6 @@ import (
 
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -42,15 +40,7 @@ type server struct {
 }
 
 func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-	// Create a custom span for business logic
-	tracer := otel.Tracer("grpc-gateway-server")
-	ctx, span := tracer.Start(ctx, "SayHello")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("user.name", in.Name),
-	)
-
+	// Note: gRPC span is automatically created by go-agent, no need for manual span here
 	log.Printf("Gateway received request: name=%s", in.Name)
 
 	var greetCount int
@@ -81,11 +71,6 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 			}
 			greetCount++
 		}
-
-		span.SetAttributes(
-			attribute.Int("user.id", userID),
-			attribute.Int("user.greet_count", greetCount),
-		)
 	} else {
 		greetCount = 1
 	}
@@ -100,11 +85,6 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 	}
 	location := locations[hash%len(locations)]
 	weatherCondition := weather[hash%len(weather)]
-
-	span.SetAttributes(
-		attribute.String("user.location", location),
-		attribute.String("weather", weatherCondition),
-	)
 
 	// External API call for inspirational quote (automatically instrumented by go-agent)
 	quote := "Have a great day!"
