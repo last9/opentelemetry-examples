@@ -1,0 +1,35 @@
+{
+  "name": "cloud-run-express-otel",
+  "version": "1.0.0",
+  "description": "Express application on Cloud Run with OpenTelemetry instrumentation",
+  "main": "app.js",
+  "scripts": {
+    "start": "node -r ./instrumentation.js app.js",
+    "dev": "node -r ./instrumentation.js app.js",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.53.0",
+    "@opentelemetry/sdk-trace-base": "^1.26.0",
+    "@opentelemetry/sdk-metrics": "^1.26.0",
+    "@opentelemetry/resources": "^1.26.0",
+    "@opentelemetry/semantic-conventions": "^1.27.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.50.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.53.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.53.0"
+  },
+  "keywords": [
+    "cloud-run",
+    "express",
+    "opentelemetry",
+    "tracing",
+    "last9"
+  ],
+  "author": "Last9",
+  "license": "MIT"
+}

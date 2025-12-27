@@ -1,0 +1,65 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: flask-otel-demo
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scaling configuration
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        # Allow up to 80 concurrent requests per instance
+        autoscaling.knative.dev/maxConcurrentRequests: "80"
+    spec:
+      # Request timeout
+      timeoutSeconds: 300
+      # Container concurrency
+      containerConcurrency: 80
+      containers:
+        - image: gcr.io/PROJECT_ID/flask-otel-demo:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          env:
+            # OpenTelemetry Configuration
+            - name: OTEL_SERVICE_NAME
+              value: "flask-cloud-run-demo"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "https://otlp.last9.io"
+            # Auth header from Secret Manager
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: last9-auth-header
+            - name: OTEL_TRACES_SAMPLER
+              value: "always_on"
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: "production"
+            - name: SERVICE_VERSION
+              value: "1.0.0"
+            # GCP project info (auto-populated by Cloud Run)
+            - name: GOOGLE_CLOUD_PROJECT
+              value: "PROJECT_ID"
+            - name: CLOUD_RUN_REGION
+              value: "us-central1"
+          # Startup probe for faster scaling
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            failureThreshold: 30
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
