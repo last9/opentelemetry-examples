@@ -1,0 +1,358 @@
+# OpenTelemetry Collector Configuration for RDS PostgreSQL Deep Integration
+# Migrating from Datadog DBM to Last9 via OTLP
+
+receivers:
+  # PostgreSQL metrics receiver - connects directly to RDS
+  postgresql:
+    endpoint: ${env:PG_ENDPOINT}:${env:PG_PORT}
+    transport: tcp
+    username: ${env:PG_USERNAME}
+    password: ${env:PG_PASSWORD}
+    databases:
+      - ${env:PG_DATABASE}
+    collection_interval: 30s
+    tls:
+      insecure: false
+      insecure_skip_verify: false
+      ca_file: /etc/ssl/certs/rds-combined-ca-bundle.pem
+    metrics:
+      # Background writer metrics
+      postgresql.bgwriter.buffers.allocated:
+        enabled: true
+      postgresql.bgwriter.buffers.writes:
+        enabled: true
+      postgresql.bgwriter.checkpoint.count:
+        enabled: true
+      postgresql.bgwriter.duration:
+        enabled: true
+      # Block read metrics
+      postgresql.blocks_read:
+        enabled: true
+      # Transaction metrics
+      postgresql.commits:
+        enabled: true
+      postgresql.rollbacks:
+        enabled: true
+      # Connection metrics
+      postgresql.connection.count:
+        enabled: true
+      postgresql.connection.max:
+        enabled: true
+      # Database metrics
+      postgresql.database.count:
+        enabled: true
+      postgresql.db_size:
+        enabled: true
+      postgresql.deadlocks:
+        enabled: true
+      # Index metrics
+      postgresql.index.scans:
+        enabled: true
+      postgresql.index.size:
+        enabled: true
+      # Operations metrics
+      postgresql.operations:
+        enabled: true
+      # Replication metrics
+      postgresql.replication.data_delay:
+        enabled: true
+      # Row metrics
+      postgresql.rows:
+        enabled: true
+      # Scan metrics
+      postgresql.sequential_scans:
+        enabled: true
+      # Table metrics
+      postgresql.table.count:
+        enabled: true
+      postgresql.table.size:
+        enabled: true
+      postgresql.table.vacuum.count:
+        enabled: true
+      # Temp files
+      postgresql.temp_files:
+        enabled: true
+      # WAL metrics
+      postgresql.wal.age:
+        enabled: true
+      postgresql.wal.lag:
+        enabled: true
+
+  # AWS CloudWatch receiver for RDS host-level metrics
+  awscloudwatch:
+    region: ${env:AWS_REGION}
+    poll_interval: 60s
+    metrics:
+      named:
+        # CPU Utilization
+        - namespace: AWS/RDS
+          metric_name: CPUUtilization
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Database Connections
+        - namespace: AWS/RDS
+          metric_name: DatabaseConnections
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Memory
+        - namespace: AWS/RDS
+          metric_name: FreeableMemory
+          period: 1m
+          statistics: [Average, Minimum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Storage
+        - namespace: AWS/RDS
+          metric_name: FreeStorageSpace
+          period: 1m
+          statistics: [Average, Minimum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # IOPS
+        - namespace: AWS/RDS
+          metric_name: ReadIOPS
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        - namespace: AWS/RDS
+          metric_name: WriteIOPS
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Latency
+        - namespace: AWS/RDS
+          metric_name: ReadLatency
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        - namespace: AWS/RDS
+          metric_name: WriteLatency
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Throughput
+        - namespace: AWS/RDS
+          metric_name: ReadThroughput
+          period: 1m
+          statistics: [Average]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        - namespace: AWS/RDS
+          metric_name: WriteThroughput
+          period: 1m
+          statistics: [Average]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Replication (for read replicas)
+        - namespace: AWS/RDS
+          metric_name: ReplicaLag
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Disk Queue
+        - namespace: AWS/RDS
+          metric_name: DiskQueueDepth
+          period: 1m
+          statistics: [Average, Maximum]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Network
+        - namespace: AWS/RDS
+          metric_name: NetworkReceiveThroughput
+          period: 1m
+          statistics: [Average]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        - namespace: AWS/RDS
+          metric_name: NetworkTransmitThroughput
+          period: 1m
+          statistics: [Average]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+        # Swap
+        - namespace: AWS/RDS
+          metric_name: SwapUsage
+          period: 1m
+          statistics: [Average]
+          dimensions:
+            - name: DBInstanceIdentifier
+              value: ${env:RDS_INSTANCE_ID}
+
+  # CloudWatch Logs receiver for PostgreSQL slow query and error logs
+  awscloudwatchlogs:
+    region: ${env:AWS_REGION}
+    logs:
+      poll_interval: 10s
+      groups:
+        named:
+          /aws/rds/instance/${env:RDS_INSTANCE_ID}/postgresql:
+            receivers:
+              log_group:
+                auto_discover:
+                  limit: 100
+
+  # Prometheus receiver for collector self-monitoring
+  prometheus/self:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector-self'
+          scrape_interval: 30s
+          static_configs:
+            - targets: ['localhost:8888']
+              labels:
+                service: postgresql-collector
+
+processors:
+  # Batch processing for efficiency
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+    send_batch_max_size: 1500
+
+  # Memory limiter for stability
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  # Add resource attributes to all telemetry
+  resource:
+    attributes:
+      - key: service.name
+        value: postgresql-collector
+        action: upsert
+      - key: service.version
+        value: "1.0.0"
+        action: upsert
+      - key: deployment.environment
+        value: ${env:ENVIRONMENT}
+        action: upsert
+      - key: db.system
+        value: postgresql
+        action: upsert
+      - key: cloud.provider
+        value: aws
+        action: upsert
+      - key: cloud.platform
+        value: aws_rds
+        action: upsert
+      - key: cloud.region
+        value: ${env:AWS_REGION}
+        action: upsert
+      - key: db.instance.id
+        value: ${env:RDS_INSTANCE_ID}
+        action: upsert
+
+  # Attributes processor for log enrichment
+  attributes/logs:
+    actions:
+      - key: log.source
+        value: postgresql
+        action: upsert
+      - key: db.instance.id
+        value: ${env:RDS_INSTANCE_ID}
+        action: upsert
+
+  # Transform processor for metric renaming (OTEL semantic conventions)
+  transform/metrics:
+    metric_statements:
+      - context: metric
+        statements:
+          # Add db.system attribute to all metrics
+          - set(attributes["db.system"], "postgresql")
+
+  # Filter processor to drop noisy metrics if needed
+  filter/metrics:
+    metrics:
+      exclude:
+        match_type: regexp
+        metric_names:
+          - ".*_total$"  # Exclude if duplicating counters
+
+exporters:
+  # Last9 OTLP exporter
+  otlp/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_AUTH_HEADER}
+    tls:
+      insecure: false
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+  # Debug exporter for troubleshooting (disable in production)
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+extensions:
+  # Health check endpoint for ECS health checks
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /health
+    tls:
+      insecure: true
+
+  # Performance profiling pages
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+  # Memory ballast for GC optimization
+  memory_ballast:
+    size_mib: 64
+
+service:
+  extensions: [health_check, zpages, memory_ballast]
+
+  pipelines:
+    # Metrics pipeline
+    metrics:
+      receivers: [postgresql, awscloudwatch, prometheus/self]
+      processors: [memory_limiter, transform/metrics, resource, batch]
+      exporters: [otlp/last9]
+
+    # Logs pipeline
+    logs:
+      receivers: [awscloudwatchlogs]
+      processors: [memory_limiter, attributes/logs, resource, batch]
+      exporters: [otlp/last9]
+
+  telemetry:
+    logs:
+      level: info
+      encoding: json
+      output_paths: [stdout]
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888
