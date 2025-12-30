@@ -1,0 +1,23 @@
+{
+    "name": "last9/wordpress-otel-example",
+    "description": "WordPress with OpenTelemetry auto-instrumentation for Last9",
+    "type": "project",
+    "require": {
+        "php": "^8.1",
+        "open-telemetry/sdk": "^1.1",
+        "open-telemetry/exporter-otlp": "^1.1",
+        "open-telemetry/opentelemetry-auto-wordpress": "^0.1",
+        "open-telemetry/opentelemetry-auto-pdo": "^0.0.15",
+        "open-telemetry/opentelemetry-auto-curl": "^0.0.2",
+        "php-http/guzzle7-adapter": "^1.1",
+        "nyholm/psr7": "^1.8"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        },
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}
