@@ -14,6 +14,12 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def _env_truthy(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "y", "on")
+
 class OTelBootstrap:
     """OpenTelemetry initialization with fallbacks and validation"""
     
@@ -98,19 +104,475 @@ class OTelBootstrap:
         except Exception as e:
             logger.warning(f"Connectivity test failed: {e}")
             return False
-    
+
+    def extract_queue_metadata(self, queue_url: str) -> dict:
+        """
+        Extract queue metadata from SQS queue URL automatically.
+
+        Supports AWS and LocalStack URL formats:
+        - AWS: https://sqs.{region}.amazonaws.com/{account_id}/{queue_name}
+        - LocalStack: http://localhost:4566/{account_id}/{queue_name}
+
+        Returns:
+            dict: Queue metadata including queue_url, server_address, server_port,
+                  account_id, queue_name, and region (if AWS)
+        """
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(queue_url)
+            path_parts = [p for p in parsed.path.split('/') if p]
+
+            metadata = {
+                'queue_url': queue_url,
+                'server_address': parsed.hostname or 'unknown',
+                'server_port': parsed.port or (443 if parsed.scheme == 'https' else 80)
+            }
+
+            # Extract account ID and queue name from path
+            if len(path_parts) >= 2:
+                metadata['account_id'] = path_parts[0]
+                metadata['queue_name'] = path_parts[1]
+            elif len(path_parts) == 1:
+                metadata['queue_name'] = path_parts[0]
+
+            # Extract region from AWS hostname
+            if parsed.hostname and 'amazonaws.com' in parsed.hostname:
+                hostname_parts = parsed.hostname.split('.')
+                if len(hostname_parts) >= 3 and hostname_parts[0] == 'sqs':
+                    metadata['region'] = hostname_parts[1]
+
+            return metadata
+        except Exception as e:
+            logger.warning(f"Failed to extract queue metadata: {e}")
+            return {'queue_url': queue_url}
+
+    def _instrument_boto(self):
+        """Instrument boto3/botocore for automatic AWS SDK tracing with context propagation"""
+        try:
+            from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+            from opentelemetry import propagate, context as otel_context
+            import boto3
+            import boto3.session
+
+            def sqs_request_hook(span, service_name, operation_name, api_params, **kwargs):
+                """
+                Enhanced hook: Automatically inject trace context and capture comprehensive SQS attributes
+                This hook is called before sending AWS requests
+                """
+                # BotocoreInstrumentor commonly passes service names like "SQS"
+                if (service_name or "").lower() == 'sqs':
+                    # COMMON: Extract and add queue metadata for all operations
+                    queue_url = api_params.get('QueueUrl')
+                    if queue_url:
+                        queue_meta = _bootstrap.extract_queue_metadata(queue_url)
+                        span.set_attribute('aws.sqs.queue.url', queue_meta['queue_url'])
+                        span.set_attribute('messaging.destination.name', queue_meta.get('queue_name', 'unknown'))
+                        span.set_attribute('server.address', queue_meta.get('server_address', 'unknown'))
+                        if 'server_port' in queue_meta:
+                            span.set_attribute('server.port', queue_meta['server_port'])
+                        if 'account_id' in queue_meta:
+                            span.set_attribute('messaging.sqs.queue.account_id', queue_meta['account_id'])
+                        if 'region' in queue_meta:
+                            span.set_attribute('messaging.sqs.queue.region', queue_meta['region'])
+
+                    # SENDMESSAGE: Capture message details and inject trace context
+                    if operation_name == 'SendMessage':
+                        span.set_attribute('messaging.operation.name', 'send')
+                        span.set_attribute('messaging.operation.type', 'send')
+
+                        # Capture message body size
+                        message_body = api_params.get('MessageBody', '')
+                        span.set_attribute('messaging.sqs.message.body_size', len(message_body))
+
+                        # Capture delay seconds if specified
+                        if 'DelaySeconds' in api_params:
+                            span.set_attribute('messaging.sqs.message.delay_seconds', api_params['DelaySeconds'])
+
+                        # Initialize MessageAttributes if not present
+                        message_attrs = api_params.get('MessageAttributes', {})
+
+                        # Capture custom MessageAttributes (business data) before adding trace context
+                        custom_attrs = {k: v for k, v in message_attrs.items()
+                                      if k not in ['traceparent', 'tracestate']}
+                        if custom_attrs:
+                            span.set_attribute('messaging.sqs.message.custom_attributes_count', len(custom_attrs))
+                            # Capture specific business attributes
+                            for attr_name in ['MessageType', 'Priority', 'Source']:
+                                if attr_name in custom_attrs:
+                                    attr_data = custom_attrs[attr_name]
+                                    if isinstance(attr_data, dict):
+                                        attr_value = attr_data.get('StringValue')
+                                        if attr_value:
+                                            span.set_attribute(f'messaging.sqs.message.{attr_name.lower()}', attr_value)
+
+                        # Inject trace context into a carrier
+                        carrier = {}
+                        propagate.inject(carrier)
+
+                        # Add trace context to MessageAttributes
+                        for key, value in carrier.items():
+                            if key not in message_attrs:  # Don't overwrite existing attributes
+                                message_attrs[key] = {
+                                    'StringValue': value,
+                                    'DataType': 'String'
+                                }
+
+                        api_params['MessageAttributes'] = message_attrs
+                        logger.debug(f"Auto-injected trace context into SQS SendMessage: {list(carrier.keys())}")
+
+                    # RECEIVEMESSAGE: Capture receive parameters
+                    elif operation_name == 'ReceiveMessage':
+                        span.set_attribute('messaging.operation.name', 'receive')
+                        span.set_attribute('messaging.operation.type', 'receive')
+
+                        if 'MaxNumberOfMessages' in api_params:
+                            span.set_attribute('messaging.sqs.receive.max_messages', api_params['MaxNumberOfMessages'])
+                        if 'WaitTimeSeconds' in api_params:
+                            span.set_attribute('messaging.sqs.receive.wait_time_seconds', api_params['WaitTimeSeconds'])
+                        if 'VisibilityTimeout' in api_params:
+                            span.set_attribute('messaging.sqs.receive.visibility_timeout', api_params['VisibilityTimeout'])
+
+                    # DELETEMESSAGE: Mark as settle operation
+                    elif operation_name == 'DeleteMessage':
+                        span.set_attribute('messaging.operation.name', 'settle')
+                        span.set_attribute('messaging.operation.type', 'settle')
+
+                    # SENDMESSAGEBATCH: Capture batch details and inject trace context
+                    elif operation_name == 'SendMessageBatch' and 'Entries' in api_params:
+                        span.set_attribute('messaging.operation.name', 'send')
+                        span.set_attribute('messaging.operation.type', 'send')
+
+                        entries = api_params.get('Entries', [])
+                        span.set_attribute('messaging.sqs.batch.size', len(entries))
+
+                        total_body_size = sum(len(entry.get('MessageBody', '')) for entry in entries)
+                        span.set_attribute('messaging.sqs.batch.total_body_size', total_body_size)
+
+                        # Inject trace context for each message in batch
+                        for entry in entries:
+                            # Initialize MessageAttributes if not present
+                            message_attrs = entry.get('MessageAttributes', {})
+
+                            # Inject trace context for each message
+                            carrier = {}
+                            propagate.inject(carrier)
+
+                            for key, value in carrier.items():
+                                if key not in message_attrs:
+                                    message_attrs[key] = {
+                                        'StringValue': value,
+                                        'DataType': 'String'
+                                    }
+
+                            entry['MessageAttributes'] = message_attrs
+
+                        logger.debug(f"Auto-injected trace context into {len(entries)} batch messages")
+
+            def sqs_response_hook(span, service_name, operation_name, api_params, result, **kwargs):
+                """
+                Enhanced hook: Capture comprehensive response metadata from SQS operations
+                This hook is called after receiving AWS responses
+                """
+                if (service_name or "").lower() == 'sqs':
+                    # COMMON: Capture AWS request ID and HTTP status
+                    response_metadata = result.get('ResponseMetadata', {})
+                    request_id = response_metadata.get('RequestId')
+                    if request_id:
+                        span.set_attribute('aws.request_id', request_id)
+
+                    http_status = response_metadata.get('HTTPStatusCode')
+                    if http_status:
+                        span.set_attribute('http.status_code', http_status)
+
+                    # SENDMESSAGE: Capture message response
+                    if operation_name == 'SendMessage':
+                        message_id = result.get('MessageId')
+                        if message_id:
+                            span.set_attribute('messaging.message.id', message_id)
+                            span.set_attribute('messaging.sqs.message.id', message_id)
+
+                        md5_body = result.get('MD5OfMessageBody')
+                        if md5_body:
+                            span.set_attribute('messaging.sqs.message.md5_of_body', md5_body)
+
+                        sequence_number = result.get('SequenceNumber')
+                        if sequence_number:
+                            span.set_attribute('messaging.sqs.message.sequence_number', sequence_number)
+
+                    # RECEIVEMESSAGE: Capture message details
+                    elif operation_name == 'ReceiveMessage':
+                        messages = result.get('Messages', [])
+                        message_count = len(messages)
+                        span.set_attribute('messaging.sqs.receive.message_count', message_count)
+
+                        if messages:
+                            # Capture total body size
+                            total_body_size = sum(len(msg.get('Body', '')) for msg in messages)
+                            span.set_attribute('messaging.sqs.receive.total_body_size', total_body_size)
+
+                            # Capture first message details (representative)
+                            first_msg = messages[0]
+
+                            message_id = first_msg.get('MessageId')
+                            if message_id:
+                                span.set_attribute('messaging.message.id', message_id)
+
+                            # Capture system attributes
+                            msg_attrs = first_msg.get('Attributes', {})
+                            if msg_attrs:
+                                if 'SentTimestamp' in msg_attrs:
+                                    span.set_attribute('messaging.sqs.message.sent_timestamp', msg_attrs['SentTimestamp'])
+                                if 'ApproximateReceiveCount' in msg_attrs:
+                                    span.set_attribute('messaging.sqs.message.approximate_receive_count',
+                                                     int(msg_attrs['ApproximateReceiveCount']))
+                                if 'ApproximateFirstReceiveTimestamp' in msg_attrs:
+                                    span.set_attribute('messaging.sqs.message.approximate_first_receive_timestamp',
+                                                     msg_attrs['ApproximateFirstReceiveTimestamp'])
+
+                            # Capture custom MessageAttributes
+                            custom_msg_attrs = first_msg.get('MessageAttributes', {})
+                            if custom_msg_attrs:
+                                custom_attrs = {k: v for k, v in custom_msg_attrs.items()
+                                              if k not in ['traceparent', 'tracestate']}
+                                if custom_attrs:
+                                    span.set_attribute('messaging.sqs.message.custom_attributes_count', len(custom_attrs))
+                                    # Capture specific business attributes
+                                    for attr_name in ['MessageType', 'Priority', 'Source']:
+                                        if attr_name in custom_attrs:
+                                            attr_data = custom_attrs[attr_name]
+                                            if isinstance(attr_data, dict):
+                                                attr_value = attr_data.get('StringValue')
+                                                if attr_value:
+                                                    span.set_attribute(f'messaging.sqs.message.{attr_name.lower()}', attr_value)
+
+                            # Log for debugging
+                            logger.debug(f"Received {message_count} SQS messages")
+                            for msg in messages:
+                                msg_attrs = msg.get('MessageAttributes', {})
+                                has_context = any(
+                                    key in ['traceparent', 'tracestate']
+                                    for key in msg_attrs.keys()
+                                )
+                                if has_context:
+                                    logger.debug(f"Message {msg.get('MessageId', 'unknown')} contains trace context")
+
+                    # SENDMESSAGEBATCH: Capture batch results
+                    elif operation_name == 'SendMessageBatch':
+                        successful = result.get('Successful', [])
+                        failed = result.get('Failed', [])
+
+                        span.set_attribute('messaging.sqs.batch.success_count', len(successful))
+                        span.set_attribute('messaging.sqs.batch.failed_count', len(failed))
+
+                        if failed:
+                            failure_codes = [f.get('Code', 'Unknown') for f in failed]
+                            span.set_attribute('messaging.sqs.batch.failure_codes', ','.join(failure_codes))
+
+            # Check if already instrumented (for span creation). This does not cover
+            # message attribute mutation; we register native botocore handlers below.
+            if not BotocoreInstrumentor().is_instrumented_by_opentelemetry:
+                BotocoreInstrumentor().instrument(
+                    request_hook=sqs_request_hook,
+                    response_hook=sqs_response_hook
+                )
+                logger.info("Botocore instrumentation enabled with automatic SQS context propagation")
+            else:
+                logger.debug("Botocore already instrumented")
+
+            # ----
+            # IMPORTANT: Reliable SQS context injection + attribute enrichment
+            #
+            # In some botocore/opentelemetry-instrumentation versions, mutating `api_params`
+            # inside BotocoreInstrumentor request hooks does not reliably affect the outgoing request.
+            #
+            # To guarantee "no manual input" context propagation, we also register native botocore
+            # event handlers that mutate the real request params in-place.
+            # ----
+
+            def _set_common_sqs_span_attrs(span, queue_url: str):
+                try:
+                    queue_meta = _bootstrap.extract_queue_metadata(queue_url)
+                    span.set_attribute('aws.sqs.queue.url', queue_meta.get('queue_url', queue_url))
+                    span.set_attribute('messaging.destination.name', queue_meta.get('queue_name', 'unknown'))
+                    span.set_attribute('server.address', queue_meta.get('server_address', 'unknown'))
+                    if 'server_port' in queue_meta:
+                        span.set_attribute('server.port', queue_meta['server_port'])
+                    if 'account_id' in queue_meta:
+                        span.set_attribute('messaging.sqs.queue.account_id', queue_meta['account_id'])
+                    if 'region' in queue_meta:
+                        span.set_attribute('messaging.sqs.queue.region', queue_meta['region'])
+                except Exception as e:
+                    logger.debug(f"Failed to set common SQS span attrs: {e}")
+
+            def _inject_trace_context_into_message_attributes(message_attrs: dict):
+                carrier = {}
+                propagate.inject(carrier)
+                if not carrier:
+                    return
+                for key, value in carrier.items():
+                    message_attrs.setdefault(key, {'StringValue': value, 'DataType': 'String'})
+
+            def _before_parameter_build_sqs_send(params, **kwargs):
+                try:
+                    if not isinstance(params, dict):
+                        return
+                    span = trace.get_current_span()
+                    queue_url = params.get('QueueUrl')
+                    if span and span.is_recording() and queue_url:
+                        _set_common_sqs_span_attrs(span, queue_url)
+                        span.set_attribute('messaging.operation.name', 'send')
+                        span.set_attribute('messaging.operation.type', 'send')
+
+                    # Capture custom (business) attributes count before injection
+                    msg_attrs = params.setdefault('MessageAttributes', {}) or {}
+                    if isinstance(msg_attrs, dict):
+                        custom_attrs = {k: v for k, v in msg_attrs.items() if k not in ['traceparent', 'tracestate']}
+                        if span and span.is_recording() and custom_attrs:
+                            span.set_attribute('messaging.sqs.message.custom_attributes_count', len(custom_attrs))
+                            for attr_name in ['MessageType', 'Priority', 'Source']:
+                                if attr_name in custom_attrs:
+                                    attr_data = custom_attrs[attr_name]
+                                    if isinstance(attr_data, dict):
+                                        attr_value = attr_data.get('StringValue')
+                                        if attr_value:
+                                            span.set_attribute(f'messaging.sqs.message.{attr_name.lower()}', attr_value)
+
+                        # Inject W3C trace context (traceparent/tracestate) automatically
+                        _inject_trace_context_into_message_attributes(msg_attrs)
+                        params['MessageAttributes'] = msg_attrs
+                except Exception as e:
+                    logger.debug(f"SQS SendMessage before-parameter-build handler failed: {e}")
+
+            def _before_parameter_build_sqs_send_batch(params, **kwargs):
+                try:
+                    if not isinstance(params, dict):
+                        return
+                    span = trace.get_current_span()
+                    queue_url = params.get('QueueUrl')
+                    if span and span.is_recording() and queue_url:
+                        _set_common_sqs_span_attrs(span, queue_url)
+                        span.set_attribute('messaging.operation.name', 'send')
+                        span.set_attribute('messaging.operation.type', 'send')
+
+                    entries = params.get('Entries') or []
+                    if isinstance(entries, list):
+                        if span and span.is_recording():
+                            span.set_attribute('messaging.sqs.batch.size', len(entries))
+                        for entry in entries:
+                            if not isinstance(entry, dict):
+                                continue
+                            msg_attrs = entry.setdefault('MessageAttributes', {}) or {}
+                            if isinstance(msg_attrs, dict):
+                                _inject_trace_context_into_message_attributes(msg_attrs)
+                                entry['MessageAttributes'] = msg_attrs
+                except Exception as e:
+                    logger.debug(f"SQS SendMessageBatch before-parameter-build handler failed: {e}")
+
+            def _before_parameter_build_sqs_receive(params, **kwargs):
+                try:
+                    if not isinstance(params, dict):
+                        return
+                    span = trace.get_current_span()
+                    queue_url = params.get('QueueUrl')
+                    if span and span.is_recording() and queue_url:
+                        _set_common_sqs_span_attrs(span, queue_url)
+                        span.set_attribute('messaging.operation.name', 'receive')
+                        span.set_attribute('messaging.operation.type', 'receive')
+
+                    # IMPORTANT: consumers must request MessageAttributes to receive `traceparent`.
+                    # This ensures distributed tracing can continue without the customer needing
+                    # to remember MessageAttributeNames=["All"] everywhere.
+                    if _env_truthy("OTEL_SQS_AUTO_INCLUDE_MESSAGE_ATTRIBUTES", default=True):
+                        if 'MessageAttributeNames' not in params:
+                            params['MessageAttributeNames'] = ['All']
+                except Exception as e:
+                    logger.debug(f"SQS ReceiveMessage before-parameter-build handler failed: {e}")
+
+            def _before_parameter_build_sqs_delete(params, **kwargs):
+                try:
+                    if not isinstance(params, dict):
+                        return
+                    span = trace.get_current_span()
+                    queue_url = params.get('QueueUrl')
+                    if span and span.is_recording() and queue_url:
+                        _set_common_sqs_span_attrs(span, queue_url)
+                        span.set_attribute('messaging.operation.name', 'settle')
+                        span.set_attribute('messaging.operation.type', 'settle')
+                except Exception as e:
+                    logger.debug(f"SQS DeleteMessage before-parameter-build handler failed: {e}")
+
+            def _register_sqs_param_handlers(botocore_session):
+                """
+                Register handlers on a specific botocore session.
+
+                Why: customers often create clients via boto3.Session().client(...),
+                which uses that session’s underlying botocore session (not boto3.DEFAULT_SESSION).
+                """
+                # Use unique IDs so repeated calls don't duplicate handlers.
+                botocore_session.register(
+                    'before-parameter-build.sqs.SendMessage',
+                    _before_parameter_build_sqs_send,
+                    unique_id='otel_sqs_before_send',
+                )
+                botocore_session.register(
+                    'before-parameter-build.sqs.SendMessageBatch',
+                    _before_parameter_build_sqs_send_batch,
+                    unique_id='otel_sqs_before_send_batch',
+                )
+                botocore_session.register(
+                    'before-parameter-build.sqs.ReceiveMessage',
+                    _before_parameter_build_sqs_receive,
+                    unique_id='otel_sqs_before_receive',
+                )
+                botocore_session.register(
+                    'before-parameter-build.sqs.DeleteMessage',
+                    _before_parameter_build_sqs_delete,
+                    unique_id='otel_sqs_before_delete',
+                )
+
+            # 1) Register on boto3 default session (covers boto3.client(...))
+            if boto3.DEFAULT_SESSION is None:
+                boto3.setup_default_session()
+            _register_sqs_param_handlers(boto3.DEFAULT_SESSION._session)
+
+            # 2) Patch boto3.session.Session.client to register on *that* session too (covers boto3.Session().client(...))
+            # Guard so we patch only once per process.
+            if not getattr(boto3.session.Session, "_otel_sqs_client_patched", False):
+                _orig_client = boto3.session.Session.client
+
+                def _otel_wrapped_client(self, *args, **kwargs):
+                    try:
+                        _register_sqs_param_handlers(self._session)
+                    except Exception as e:
+                        logger.debug(f"Failed to register SQS param handlers on boto3.Session: {e}")
+                    return _orig_client(self, *args, **kwargs)
+
+                boto3.session.Session.client = _otel_wrapped_client
+                boto3.session.Session._otel_sqs_client_patched = True
+
+            return True
+        except ImportError:
+            logger.warning("opentelemetry-instrumentation-botocore not installed. Run: pip install opentelemetry-instrumentation-botocore")
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to instrument botocore: {e}")
+            return False
+
     def _set_defaults(self):
         """Set sensible defaults for all OTEL environment variables"""
         defaults = {
             'OTEL_SERVICE_NAME': self._get_service_name(),
             'OTEL_TRACES_EXPORTER': 'otlp',
-            'OTEL_METRICS_EXPORTER': 'otlp', 
-            'OTEL_TRACES_SAMPLER': 'always_on',
+            'OTEL_METRICS_EXPORTER': 'otlp',
+            # Prod-friendly default: propagate parent sampling, otherwise sample at 10%.
+            # Customers can override via OTEL_TRACES_SAMPLER + OTEL_TRACES_SAMPLER_ARG.
+            'OTEL_TRACES_SAMPLER': 'parentbased_traceidratio',
+            'OTEL_TRACES_SAMPLER_ARG': os.getenv('OTEL_TRACES_SAMPLER_ARG', '0.1'),
             'OTEL_PYTHON_LOG_CORRELATION': 'true',
             'OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED': 'true',
             'OTEL_LOG_LEVEL': os.getenv('OTEL_LOG_LEVEL', 'info'),
         }
-        
+
         for key, value in defaults.items():
             if not os.getenv(key):
                 os.environ[key] = value
@@ -149,12 +611,16 @@ class OTelBootstrap:
             # Test connectivity if endpoint provided
             endpoint_reachable = True
             if self.endpoint:
-                endpoint_reachable = self._test_connectivity(self.endpoint)
-                if not endpoint_reachable or force_console_fallback:
+                if _env_truthy("OTEL_BOOTSTRAP_CONNECTIVITY_TEST", default=False):
+                    endpoint_reachable = self._test_connectivity(self.endpoint)
+                # Only add console fallback when explicitly enabled (or forced by caller)
+                if (force_console_fallback or _env_truthy("OTEL_CONSOLE_FALLBACK", default=False)) and not endpoint_reachable:
                     self._configure_console_fallback()
             else:
-                logger.warning("No OTLP endpoint configured, using console exporter")
-                os.environ['OTEL_TRACES_EXPORTER'] = 'console'
+                logger.warning("OTEL_EXPORTER_OTLP_ENDPOINT not set (no OTLP export will occur unless configured)")
+                if force_console_fallback or _env_truthy("OTEL_CONSOLE_FALLBACK", default=False):
+                    logger.info("Console fallback enabled; exporting spans to console")
+                    os.environ['OTEL_TRACES_EXPORTER'] = 'console'
             
             # Initialize OpenTelemetry
             from opentelemetry.sdk.trace import TracerProvider
@@ -167,17 +633,21 @@ class OTelBootstrap:
                 self.is_initialized = True
                 return True
             
-            # Test tracer creation
-            tracer = trace.get_tracer("bootstrap-test")
-            with tracer.start_as_current_span("initialization-test") as span:
-                span.set_attribute("otel.bootstrap.success", True)
-                span.set_attribute("service.name", self.service_name)
-                span.set_attribute("endpoint.reachable", endpoint_reachable)
-                span.set_attribute("exporter.type", os.getenv('OTEL_TRACES_EXPORTER', 'unknown'))
-                
-                # Log span creation success
-                logger.info(f"Test span created successfully with trace_id: {format(span.get_span_context().trace_id, '032x')}")
-            
+            # Optional: emit a one-time test span (disabled by default for prod noise reduction)
+            if _env_truthy("OTEL_BOOTSTRAP_TEST_SPAN", default=False):
+                tracer = trace.get_tracer("bootstrap-test")
+                with tracer.start_as_current_span("initialization-test") as span:
+                    span.set_attribute("otel.bootstrap.success", True)
+                    span.set_attribute("service.name", self.service_name)
+                    span.set_attribute("endpoint.reachable", endpoint_reachable)
+                    span.set_attribute("exporter.type", os.getenv('OTEL_TRACES_EXPORTER', 'unknown'))
+                    logger.info(
+                        f"Bootstrap test span created with trace_id: {format(span.get_span_context().trace_id, '032x')}"
+                    )
+
+            # Instrument boto3/botocore for AWS SDK auto-tracing
+            self._instrument_boto()
+
             self.is_initialized = True
             logger.info("OpenTelemetry initialized successfully")
             return True
