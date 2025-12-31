@@ -6,13 +6,15 @@
 
 const express = require('express');
 const { trace, metrics, SpanStatusCode } = require('@opentelemetry/api');
+const { logs, SeverityNumber } = require('@opentelemetry/api-logs');
 
 const app = express();
 const port = process.env.PORT || 8080;
 
-// Get tracer and meter
+// Get tracer, meter, and logger
 const tracer = trace.getTracer('cloud-run-express');
 const meter = metrics.getMeter('cloud-run-express');
+const logger = logs.getLogger('cloud-run-express', '1.0.0');
 
 // Create custom metrics
 const requestCounter = meter.createCounter('http_requests_total', {
@@ -29,12 +31,44 @@ const requestDuration = meter.createHistogram('http_request_duration_seconds', {
 app.use(express.json());
 
 /**
- * Structured logging for Cloud Logging with trace correlation
+ * Structured logging via OpenTelemetry with trace correlation
  */
 function structuredLog(level, message, extra = {}) {
   const span = trace.getActiveSpan();
   const spanContext = span ? span.spanContext() : null;
 
+  // Map string level to SeverityNumber
+  const severityMap = {
+    'INFO': SeverityNumber.INFO,
+    'WARNING': SeverityNumber.WARN,
+    'ERROR': SeverityNumber.ERROR,
+    'DEBUG': SeverityNumber.DEBUG,
+  };
+
+  const severity = severityMap[level] || SeverityNumber.INFO;
+
+  // Emit log via OpenTelemetry
+  const logRecord = {
+    severityNumber: severity,
+    severityText: level,
+    body: message,
+    attributes: {
+      'service.name': process.env.K_SERVICE || 'local',
+      'service.revision': process.env.K_REVISION || 'local',
+      ...extra,
+    },
+  };
+
+  // Add trace context if available
+  if (spanContext) {
+    logRecord.spanId = spanContext.spanId;
+    logRecord.traceId = spanContext.traceId;
+    logRecord.traceFlags = spanContext.traceFlags;
+  }
+
+  logger.emit(logRecord);
+
+  // Also log to console for Cloud Logging (dual output)
   const logEntry = {
     severity: level,
     message,

@@ -36,7 +36,7 @@ Run batch processing jobs on Google Cloud Run with full OpenTelemetry instrument
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `OTEL_SERVICE_NAME` | Service name for telemetry | `cloud-run-job` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Last9 OTLP endpoint | `https://otlp.last9.io` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint | `YOUR_OTLP_ENDPOINT` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Auth header | - |
 | `SLEEP_MS` | Simulated work duration (ms) | `1000` |
 | `FAIL_RATE` | Random failure probability (0.0-1.0) | `0.0` |
@@ -55,7 +55,7 @@ pip install -r requirements.txt
 
 ```bash
 export OTEL_SERVICE_NAME=my-batch-job
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io
+export OTEL_EXPORTER_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic YOUR_CREDENTIALS"
 
 # Simulate Cloud Run Job environment
@@ -77,7 +77,8 @@ python main.py
 ### 1. Create Last9 secret (one-time)
 
 ```bash
-echo -n "Basic YOUR_BASE64_CREDENTIALS" | \
+# IMPORTANT: Include "Authorization=" prefix
+echo -n "Authorization=Basic YOUR_BASE64_CREDENTIALS" | \
   gcloud secrets create last9-auth-header --data-file=-
 ```
 
@@ -92,7 +93,7 @@ gcloud run jobs deploy batch-job-demo \
   --max-retries 3 \
   --task-timeout 600 \
   --set-env-vars "OTEL_SERVICE_NAME=batch-job-demo" \
-  --set-env-vars "OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io" \
+  --set-env-vars "OTEL_EXPORTER_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT" \
   --set-env-vars "SLEEP_MS=5000" \
   --set-env-vars "FAIL_RATE=0.1" \
   --set-secrets "OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"

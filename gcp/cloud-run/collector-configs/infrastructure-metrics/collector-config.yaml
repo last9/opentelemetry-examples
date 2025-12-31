@@ -1,0 +1,81 @@
+receivers:
+  # Pull GCP Cloud Run infrastructure metrics from Cloud Monitoring API
+  googlecloudmonitoring:
+    collection_interval: 60s
+    project_id: ${GCP_PROJECT_ID}
+
+    # Use metric descriptor filter to get all Cloud Run metrics
+    metrics_list:
+      - metric_descriptor_filter: 'metric.type = starts_with("run.googleapis.com")'
+
+processors:
+  # Memory limiter prevents collector from OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  # Add resource attributes for better filtering in Last9
+  resource:
+    attributes:
+      - key: cloud.provider
+        value: gcp
+        action: upsert
+      - key: cloud.platform
+        value: gcp_cloud_run
+        action: upsert
+      - key: monitoring.source
+        value: gcp_cloud_monitoring_api
+        action: upsert
+      - key: telemetry.sdk.name
+        value: opentelemetry
+        action: upsert
+
+  # Batch metrics for efficient export
+  batch:
+    timeout: 10s
+    send_batch_size: 100
+    send_batch_max_size: 200
+
+exporters:
+  # Send to Last9 via Prometheus Remote Write
+  prometheusremotewrite:
+    endpoint: ${REMOTE_WRITE_URL}
+    headers:
+      Authorization: ${OTEL_EXPORTER_OTLP_HEADERS}
+    compression: snappy
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Debug exporter for debugging (optional)
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+extensions:
+  # Health check endpoint for Cloud Run
+  health_check:
+    endpoint: 0.0.0.0:8080
+    path: /health
+
+service:
+  # Enable health check extension
+  extensions: [health_check]
+
+  pipelines:
+    metrics:
+      receivers: [googlecloudmonitoring]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheusremotewrite]
+      # exporters: [prometheusremotewrite, debug]  # Uncomment for debugging
+
+  telemetry:
+    logs:
+      level: info

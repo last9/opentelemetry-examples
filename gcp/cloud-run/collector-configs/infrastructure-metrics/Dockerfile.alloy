@@ -1,0 +1,19 @@
+# Grafana Alloy - GCP Infrastructure Metrics Collector
+# Official Grafana Alloy image
+FROM grafana/alloy:latest
+
+# Copy Alloy configuration
+COPY alloy-config.alloy /etc/alloy/config.alloy
+
+# Expose port 12345 for Alloy UI and health checks
+# Cloud Run requires listening on PORT environment variable (default 8080)
+EXPOSE 8080
+
+# Set Cloud Run compatible port
+ENV ALLOY_HTTP_LISTEN_PORT=8080
+
+# Run Alloy with the configuration
+ENTRYPOINT ["/bin/alloy"]
+CMD ["run", "/etc/alloy/config.alloy", \
+     "--server.http.listen-addr=0.0.0.0:8080", \
+     "--stability.level=generally-available"]

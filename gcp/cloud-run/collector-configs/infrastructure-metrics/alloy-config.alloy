@@ -1,0 +1,66 @@
+// Grafana Alloy Configuration for GCP Cloud Run Infrastructure Metrics
+// Collects GCP Cloud Monitoring metrics and forwards to Last9 via Prometheus remote write
+
+// Export GCP Cloud Run metrics
+prometheus.exporter.gcp "cloud_run" {
+  project_ids = [env("GCP_PROJECT_ID")]
+
+  // Collect all Cloud Run metrics using prefix filter
+  metrics_prefixes = [
+    "run.googleapis.com",
+  ]
+
+  // Add extra labels for better filtering in Last9
+  extra_filters = []
+}
+
+// Scrape GCP metrics from the exporter
+prometheus.scrape "gcp_metrics" {
+  targets    = prometheus.exporter.gcp.cloud_run.targets
+  forward_to = [prometheus.remote_write.last9.receiver]
+
+  scrape_interval = "5m"  // 5 minute interval (infrastructure metrics don't need high frequency)
+}
+
+// Remote write to Last9
+prometheus.remote_write "last9" {
+  endpoint {
+    url = env("LAST9_REMOTE_WRITE_URL")
+
+    // Remote write configuration optimized for Last9
+    remote_timeout = "60s"
+
+    queue_config {
+      capacity = 10000
+      max_samples_per_send = 3000
+      batch_send_deadline = "20s"
+      min_shards = 4
+      max_shards = 200
+      min_backoff = "100ms"
+      max_backoff = "10s"
+    }
+
+    basic_auth {
+      username = env("LAST9_USERNAME")
+      password = env("LAST9_PASSWORD")
+    }
+  }
+
+  // Add external labels for all metrics
+  external_labels = {
+    source = "grafana-alloy",
+    environment = "production",
+    collector_type = "gcp-infrastructure-metrics",
+  }
+}
+
+// Health check for Cloud Run
+prometheus.exporter.self "alloy" { }
+
+// Expose Alloy's own metrics for monitoring
+prometheus.scrape "alloy_metrics" {
+  targets    = prometheus.exporter.self.alloy.targets
+  forward_to = [prometheus.remote_write.last9.receiver]
+
+  scrape_interval = "60s"
+}

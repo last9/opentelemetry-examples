@@ -1,28 +1,31 @@
-# Cloud Build configuration for Express Cloud Run service
-# Usage: gcloud builds submit --config cloudbuild.yaml \
-#   --substitutions=_SERVICE_NAME=my-service,_REGION=us-central1
 substitutions:
-  _SERVICE_NAME: cloud-run-nodejs-express
+  _SERVICE_NAME: cloud-run-metrics-alloy
   _REGION: us-central1
-  # Replace with your OTLP endpoint
-  _OTLP_ENDPOINT: YOUR_OTLP_ENDPOINT
+  # Replace with your Prometheus remote write URL
+  _REMOTE_WRITE_URL: YOUR_REMOTE_WRITE_URL
 
 steps:
+  # Build Grafana Alloy Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '-f'
+      - 'Dockerfile.alloy'
       - '-t'
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
       - '-t'
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
       - '.'
 
+  # Push image with commit SHA tag
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA']
 
+  # Push image with latest tag
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest']
 
+  # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -35,25 +38,31 @@ steps:
       - '${_REGION}'
       - '--platform'
       - 'managed'
-      - '--allow-unauthenticated'
+      - '--no-allow-unauthenticated'
       - '--memory'
       - '512Mi'
       - '--cpu'
       - '1'
+      - '--min-instances'
+      - '1'  # Keep warm to continuously collect metrics
+      - '--max-instances'
+      - '1'  # Only need one instance
+      - '--timeout'
+      - '600'
       - '--set-env-vars'
-      - 'OTEL_SERVICE_NAME=${_SERVICE_NAME}'
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
       - '--set-env-vars'
-      - 'OTEL_EXPORTER_OTLP_ENDPOINT=${_OTLP_ENDPOINT}'
-      - '--set-env-vars'
-      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
-      - '--set-env-vars'
-      - 'DEPLOYMENT_ENVIRONMENT=production'
-      - '--set-env-vars'
-      - 'SERVICE_VERSION=$COMMIT_SHA'
-      - '--set-env-vars'
-      - 'NODE_ENV=production'
+      - 'REMOTE_WRITE_URL=${_REMOTE_WRITE_URL}'
       - '--set-secrets'
-      - 'OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest'
+      - 'LAST9_USERNAME=last9-username:latest'
+      - '--set-secrets'
+      - 'LAST9_PASSWORD=last9-password:latest'
+      - '--set-secrets'
+      - '/secrets/gcp-creds/key.json=gcp-monitoring-credentials:latest'
+      - '--set-env-vars'
+      - 'GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-creds/key.json'
+      - '--service-account'
+      - 'metrics-collector@$PROJECT_ID.iam.gserviceaccount.com'
 
 images:
   - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
@@ -61,3 +70,4 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+timeout: 600s

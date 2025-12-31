@@ -40,7 +40,7 @@ cp .env.example .env
 
 ```bash
 export OTEL_SERVICE_NAME=flask-cloud-run-demo
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io
+export OTEL_EXPORTER_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic YOUR_CREDENTIALS"
 ```
 
@@ -79,7 +79,8 @@ export PROJECT_ID=your-gcp-project
 gcloud config set project $PROJECT_ID
 
 # Create the Last9 auth secret (one-time setup)
-echo -n "Basic YOUR_BASE64_CREDENTIALS" | \
+# IMPORTANT: Include "Authorization=" prefix
+echo -n "Authorization=Basic YOUR_BASE64_CREDENTIALS" | \
   gcloud secrets create last9-auth-header --data-file=-
 
 # Deploy using Cloud Build
@@ -97,7 +98,7 @@ gcloud run deploy flask-otel-demo \
   --allow-unauthenticated \
   --memory 512Mi \
   --set-env-vars "OTEL_SERVICE_NAME=flask-cloud-run-demo" \
-  --set-env-vars "OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io" \
+  --set-env-vars "OTEL_EXPORTER_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT" \
   --set-secrets "OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
 ```
 
