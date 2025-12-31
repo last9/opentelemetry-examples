@@ -1,14 +1,11 @@
-# Cloud Build configuration for Flask Cloud Run service
-# Usage: gcloud builds submit --config cloudbuild.yaml
-
 substitutions:
-  _SERVICE_NAME: flask-otel-demo
+  _SERVICE_NAME: cloud-run-metrics-collector
   _REGION: us-central1
   # Replace with your OTLP endpoint
   _OTLP_ENDPOINT: YOUR_OTLP_ENDPOINT
 
 steps:
-  # Build the container image
+  # Build Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -18,16 +15,13 @@ steps:
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
       - '.'
 
-  # Push the container image to Container Registry
+  # Push image with commit SHA tag
   - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+    args: ['push', 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA']
 
+  # Push image with latest tag
   - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+    args: ['push', 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest']
 
   # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -42,27 +36,29 @@ steps:
       - '${_REGION}'
       - '--platform'
       - 'managed'
-      - '--allow-unauthenticated'
+      - '--no-allow-unauthenticated'
       - '--memory'
       - '512Mi'
       - '--cpu'
       - '1'
       - '--min-instances'
-      - '0'
+      - '1'  # Keep warm to avoid cold starts
       - '--max-instances'
-      - '10'
+      - '1'  # Only need one instance
+      - '--timeout'
+      - '600'
       - '--set-env-vars'
-      - 'OTEL_SERVICE_NAME=${_SERVICE_NAME}'
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
       - '--set-env-vars'
       - 'OTEL_EXPORTER_OTLP_ENDPOINT=${_OTLP_ENDPOINT}'
       - '--set-env-vars'
-      - 'DEPLOYMENT_ENVIRONMENT=production'
-      - '--set-env-vars'
-      - 'SERVICE_VERSION=$COMMIT_SHA'
-      - '--set-env-vars'
-      - 'CLOUD_RUN_REGION=${_REGION}'
+      - 'GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-creds/key.json'
       - '--set-secrets'
       - 'OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest'
+      - '--set-secrets'
+      - '/secrets/gcp-creds/key.json=gcp-monitoring-credentials:latest'
+      - '--service-account'
+      - 'metrics-collector@$PROJECT_ID.iam.gserviceaccount.com'
 
 images:
   - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
@@ -70,3 +66,4 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+timeout: 600s

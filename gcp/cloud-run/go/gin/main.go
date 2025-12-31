@@ -23,10 +23,12 @@ import (
 )
 
 var (
-	tracer         trace.Tracer
-	meter          metric.Meter
-	requestCounter metric.Int64Counter
-	requestLatency metric.Float64Histogram
+	tracer           trace.Tracer
+	meter            metric.Meter
+	requestCounter   metric.Int64Counter
+	requestLatency   metric.Float64Histogram
+	coldStartCounter metric.Int64Counter
+	startTime        = time.Now() // Track when container started
 )
 
 // User represents a user entity
@@ -92,9 +94,19 @@ func initMetrics() {
 		"http_request_duration_seconds",
 		metric.WithDescription("HTTP request duration in seconds"),
 		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 	)
 	if err != nil {
 		log.Printf("Failed to create request latency histogram: %v", err)
+	}
+
+	coldStartCounter, err = meter.Int64Counter(
+		"cloud_run_cold_starts_total",
+		metric.WithDescription("Total number of cold starts detected"),
+		metric.WithUnit("1"),
+	)
+	if err != nil {
+		log.Printf("Failed to create cold start counter: %v", err)
 	}
 }
 
@@ -118,6 +130,27 @@ func metricsMiddleware() gin.HandlerFunc {
 	}
 }
 
+// coldStartMiddleware detects and records cold starts
+func coldStartMiddleware() gin.HandlerFunc {
+	isColdStart := time.Since(startTime) < 10*time.Second
+	coldStartRecorded := false
+
+	return func(c *gin.Context) {
+		if isColdStart && !coldStartRecorded {
+			coldStartRecorded = true
+			coldStartCounter.Add(c.Request.Context(), 1)
+
+			span := trace.SpanFromContext(c.Request.Context())
+			span.SetAttributes(attribute.Bool("faas.coldstart", true))
+
+			structuredLog(c.Request.Context(), "INFO", "Cold start detected", map[string]interface{}{
+				"container_age_seconds": time.Since(startTime).Seconds(),
+			})
+		}
+		c.Next()
+	}
+}
+
 func main() {
 	// Initialize OpenTelemetry
 	tp, mp := initTelemetry()
@@ -128,10 +161,14 @@ func main() {
 		structuredLog(ctx, "INFO", "Shutting down telemetry providers", nil)
 
 		if err := tp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
+			structuredLog(ctx, "ERROR", "Error shutting down tracer provider", map[string]interface{}{
+				"error": err.Error(),
+			})
 		}
 		if err := mp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down meter provider: %v", err)
+			structuredLog(ctx, "ERROR", "Error shutting down meter provider", map[string]interface{}{
+				"error": err.Error(),
+			})
 		}
 	}()
 
@@ -145,6 +182,7 @@ func main() {
 
 	// Add middleware
 	r.Use(gin.Recovery())
+	r.Use(coldStartMiddleware())  // Detect cold starts before tracing
 	r.Use(otelgin.Middleware(os.Getenv("OTEL_SERVICE_NAME")))
 	r.Use(metricsMiddleware())
 
@@ -187,7 +225,9 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		structuredLog(ctx, "ERROR", "Server shutdown error", map[string]interface{}{
+			"error": err.Error(),
+		})
 	}
 
 	structuredLog(context.Background(), "INFO", "Server shutdown complete", nil)

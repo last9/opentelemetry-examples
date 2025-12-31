@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -89,7 +91,7 @@ func initTelemetry() (*sdktrace.TracerProvider, *metric.MeterProvider) {
 	// Get endpoint
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
-		endpoint = "https://otlp.last9.io"
+		endpoint = "https://your-otlp-endpoint"
 	}
 	// Remove protocol prefix for HTTP exporter
 	endpoint = strings.TrimPrefix(endpoint, "https://")
@@ -141,6 +143,12 @@ func initTelemetry() (*sdktrace.TracerProvider, *metric.MeterProvider) {
 		)),
 	)
 	otel.SetMeterProvider(mp)
+
+	// Enable runtime metrics (goroutines, memory, GC)
+	err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
+	if err != nil {
+		log.Printf("Failed to start runtime instrumentation: %v", err)
+	}
 
 	return tp, mp
 }

@@ -1,42 +1,102 @@
 # Google Cloud Run OpenTelemetry Integration
 
-Send traces, logs, and metrics from Google Cloud Run to Last9 using OpenTelemetry.
+Complete observability for Google Cloud Run with traces, logs, and metrics sent to Last9 using OpenTelemetry.
 
 ## Overview
 
-This directory contains examples for instrumenting Cloud Run services and jobs with OpenTelemetry, demonstrating multiple deployment patterns and language implementations.
+This directory contains examples for instrumenting Cloud Run services with OpenTelemetry, providing **complete observability** through:
 
-## Deployment Patterns
+### 1. Application Telemetry (via OTLP SDK)
+Deploy your application with OpenTelemetry instrumentation to send:
+- **Distributed traces** - Request flows across services
+- **Structured logs** - With automatic trace correlation
+- **Custom application metrics** - Business KPIs, counters, histograms
+- **HTTP instrumentation** - Automatic request/response tracking
 
-### Pattern 1: Direct SDK Export (Recommended)
-Application sends telemetry directly to Last9 via OTLP.
+**Choose your language**: [Node.js](#language-examples) | [Python](#language-examples) | [Go](#language-examples)
+
+### 2. Infrastructure Metrics (via OTEL Collector)
+Deploy a centralized OTEL Collector to pull basic GCP platform metrics:
+- **Instance count** - Scaling patterns and autoscaling behavior
+- **Billable time** - Cost tracking and optimization
+- **CPU allocation** - Basic resource monitoring
+- **Request count** - Platform-measured request volume
+
+**Note**: OTEL Collector cannot collect Distribution metrics (CPU/memory utilization, latencies) due to limitations in the `googlecloudmonitoring` receiver.
+
+**Setup guide**: [Infrastructure Metrics](#infrastructure-metrics-setup)
+
+## Complete Observability = Both Parts
+
+**IMPORTANT**: To achieve complete observability, you need to deploy BOTH:
+
+1. **Your application** (with OTLP SDK) → Sends app telemetry to Last9
+2. **OTEL Collector** → Pulls basic GCP infrastructure metrics to Last9
 
 ```
-Cloud Run Service → OTLP → Last9
+┌─────────────────────────────────────┐
+│   Your Cloud Run Application        │
+│   (Node.js/Python/Go + OTLP SDK)   │
+│                                     │
+│   Traces, Logs, Custom Metrics      │
+└──────────────────┬──────────────────┘
+                   │
+                   ├─► OTLP → Last9
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│   GCP Cloud Monitoring API          │
+│   (Platform Metrics - automatic)    │
+└──────────────────┬──────────────────┘
+                   │
+                   │ Pull every 60 seconds
+                   ▼
+┌─────────────────────────────────────┐
+│   OTEL Collector                    │
+│   (Deployed as Cloud Run service)   │
+│                                     │
+│   OTLP Exporter                     │
+└──────────────────┬──────────────────┘
+                   │
+                   ├─► Last9
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│        Last9 Platform               │
+│                                     │
+│  Complete Observability Dashboard   │
+│  - App Telemetry                    │
+│  - Basic Infrastructure Metrics     │
+└─────────────────────────────────────┘
 ```
 
-**Pros**: Simple, no extra containers, lower cost
-**Cons**: Slightly higher cold start latency
+## How It Works
 
-### Pattern 2: Sidecar Collector
-Application sends to a local OTEL Collector sidecar, which exports to Last9.
+This integration uses **direct OTLP export** - the simplest and most efficient approach:
 
 ```
-App Container → localhost:4318 → OTEL Collector Sidecar → Last9
+┌────────────────────────────────────────┐
+│  Your Cloud Run Application            │
+│  (instrumented with OTLP SDK)          │
+│                                        │
+│  • Traces                              │
+│  • Logs (with trace correlation)       │
+│  • Custom Metrics                      │
+└───────────────┬────────────────────────┘
+                │
+                │ OTLP/HTTP
+                │ (direct export)
+                ▼
+        ┌──────────────┐
+        │    Last9     │
+        └──────────────┘
 ```
 
-**Pros**: Buffering, retries, batching handled by collector
-**Cons**: Requires multi-container (beta), higher memory usage
-
-### Pattern 3: Cloud Logging Integration
-Logs flow through Cloud Logging, then to Last9 via Pub/Sub.
-
-```
-Cloud Run → Cloud Logging → Log Sink → Pub/Sub → OTEL Collector → Last9
-```
-
-**Pros**: Works with existing Cloud Logging setup, centralized log management
-**Cons**: Higher latency, requires external collector
+**Benefits**:
+- ✅ Simple - No sidecars or additional infrastructure
+- ✅ Low latency - Direct export to Last9
+- ✅ Cost-effective - No extra containers
+- ✅ Reliable - Built-in batching and retries in SDK
 
 ## Language Examples
 
@@ -45,18 +105,11 @@ Cloud Run → Cloud Logging → Log Sink → Pub/Sub → OTEL Collector → Last
 | Python | Flask | [python/flask/](./python/flask/) |
 | Node.js | Express | [nodejs/express/](./nodejs/express/) |
 | Go | Gin | [go/gin/](./go/gin/) |
-| Java | Spring Boot | [java/springboot/](./java/springboot/) |
-
-## Collector Configurations
-
-| Pattern | Directory |
-|---------|-----------|
-| Sidecar | [collector-configs/sidecar/](./collector-configs/sidecar/) |
-| Cloud Logging | [collector-configs/cloud-logging/](./collector-configs/cloud-logging/) |
+| Python | Batch Job | [python/job/](./python/job/) |
 
 ## Cloud Run Jobs
 
-For batch processing workloads, see [jobs/](./jobs/).
+For batch processing workloads (ETL, data processing, scheduled tasks), see [python/job/](./python/job/).
 
 ## Prerequisites
 
@@ -79,14 +132,24 @@ gcloud services enable \
 
 ```bash
 # Create secret for Last9 auth header
-echo -n "Basic YOUR_BASE64_CREDENTIALS" | \
+# IMPORTANT: Include "Authorization=" prefix in the secret value
+echo -n "Authorization=Basic YOUR_BASE64_CREDENTIALS" | \
   gcloud secrets create last9-auth-header --data-file=-
+
+# Verify secret was created correctly
+gcloud secrets versions access latest --secret=last9-auth-header
 
 # Grant Cloud Run access to the secret
 gcloud secrets add-iam-policy-binding last9-auth-header \
   --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
+
+**Finding your Last9 credentials:**
+1. Log in to Last9 console
+2. Navigate to Settings → Integrations → OTLP
+3. Copy the base64-encoded credentials
+4. Format as: `Authorization=Basic <base64_credentials>`
 
 ## Environment Variables
 
@@ -95,8 +158,8 @@ All examples use these standard OTEL environment variables:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `OTEL_SERVICE_NAME` | Service name for telemetry | `my-cloud-run-service` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Last9 OTLP endpoint | `https://otlp.last9.io` |
-| `OTEL_EXPORTER_OTLP_HEADERS` | Auth header | `Authorization=Basic ...` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (region-specific) | `YOUR_OTLP_ENDPOINT` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Auth header (from Secret Manager) | `Authorization=Basic ...` |
 | `OTEL_TRACES_SAMPLER` | Sampling strategy | `always_on` |
 | `OTEL_RESOURCE_ATTRIBUTES` | Additional attributes | `deployment.environment=prod` |
 
@@ -114,59 +177,142 @@ The examples automatically detect and set these resource attributes:
 | `faas.name` | `K_SERVICE` env | Cloud Run service name |
 | `faas.version` | `K_REVISION` env | Revision identifier |
 
-## Structured Logging
+## Telemetry Signals
 
-For trace correlation in Cloud Logging, logs should include:
+### 1. Traces
+All HTTP requests are automatically instrumented with distributed tracing. The examples capture:
+- HTTP server spans (method, route, status code)
+- Database query spans (when applicable)
+- Custom business logic spans
+- Error tracking and exceptions
 
+### 2. Logs
+Logs are exported in two ways:
+- **OTLP Logs to Last9**: Structured logs with automatic trace correlation
+- **Cloud Logging**: JSON logs for GCP console viewing
+
+Log format with trace correlation:
 ```json
 {
   "severity": "INFO",
   "message": "Request processed",
+  "traceId": "abcd1234...",
+  "spanId": "5678efgh...",
   "logging.googleapis.com/trace": "projects/PROJECT_ID/traces/TRACE_ID",
   "logging.googleapis.com/spanId": "SPAN_ID"
 }
 ```
 
-All examples implement this pattern automatically.
+### 3. Metrics
+Two types of metrics are collected:
 
-## Quick Start
+**Application Metrics** (via SDK):
+- HTTP request count and duration
+- Custom business metrics
+- Runtime metrics (memory, GC)
 
-### 1. Choose an example
+**Infrastructure Metrics** (via OTEL Collector):
+- Instance count and scaling
+- Billable time (cost tracking)
+- CPU allocation time
+- Request count (platform-measured)
 
-```bash
-cd python/flask  # or nodejs/express, go/gin, java/springboot
-```
+**Note**: CPU/memory utilization and latency distributions cannot be collected due to OTEL Collector limitations with Distribution metrics.
 
-### 2. Set environment variables
+See [Infrastructure Metrics Setup](#infrastructure-metrics-setup) below.
+
+## Quick Start - Deploy Complete Observability in 4 Steps
+
+### Step 1: Enable GCP APIs
 
 ```bash
 export PROJECT_ID=your-gcp-project
-export REGION=us-central1
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic YOUR_CREDENTIALS"
+gcloud config set project $PROJECT_ID
+
+gcloud services enable \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  secretmanager.googleapis.com
 ```
 
-### 3. Build and deploy
+### Step 2: Store Last9 Credentials
 
+**Get your credentials from Last9**:
+- **OTLP endpoint** and **authorization credentials** (used for both app and infrastructure telemetry)
+
+**Store in Secret Manager**:
 ```bash
-# Build with Cloud Build
-gcloud builds submit --config cloudbuild.yaml
+# For all telemetry (both application and infrastructure)
+echo -n "Authorization=Basic YOUR_BASE64_CREDENTIALS" | \
+  gcloud secrets create last9-auth-header --data-file=-
+```
 
-# Or deploy directly
-gcloud run deploy SERVICE_NAME \
+### Step 3: Deploy Your Application with OpenTelemetry
+
+Choose your language and follow the specific README:
+
+**Node.js (Express)**:
+```bash
+cd nodejs/express
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_SERVICE_NAME=my-nodejs-service,_REGION=us-central1,_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT
+```
+📖 [Full Node.js guide](./nodejs/express/README.md)
+
+**Python (Flask)**:
+```bash
+cd python/flask
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_SERVICE_NAME=my-flask-service,_REGION=us-central1,_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT
+```
+📖 [Full Python guide](./python/flask/README.md)
+
+**Go (Gin)**:
+```bash
+cd go/gin
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_SERVICE_NAME=my-go-service,_REGION=us-central1,_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT
+```
+📖 [Full Go guide](./go/gin/README.md)
+
+**Cloud Run Job (Python)**:
+```bash
+cd python/job
+gcloud run jobs deploy my-batch-job \
   --source . \
-  --region $REGION \
-  --set-env-vars "OTEL_SERVICE_NAME=my-service" \
-  --set-env-vars "OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT" \
+  --region us-central1 \
+  --set-env-vars "OTEL_EXPORTER_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT" \
   --set-secrets "OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
 ```
+📖 [Full Job guide](./python/job/README.md)
 
-### 4. Verify in Last9
+### Step 4: Deploy OTEL Collector for Infrastructure Metrics
 
-1. Generate traffic to your Cloud Run service
-2. Navigate to Last9 APM dashboard
-3. Filter by your service name
-4. View traces, logs, and metrics
+```bash
+cd collector-configs/infrastructure-metrics
+
+# Setup IAM service account
+./setup-iam.sh $PROJECT_ID
+
+# Deploy OTEL Collector (uses same OTLP endpoint as your app)
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_SERVICE_NAME=cloud-run-metrics-collector,_REGION=us-central1,_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT
+```
+
+📖 [Full infrastructure metrics guide](./collector-configs/infrastructure-metrics/README.md)
+
+### Verify Complete Observability in Last9
+
+1. **Generate traffic** to your Cloud Run service
+2. **Navigate to Last9** dashboard
+3. **Check Application Telemetry**:
+   - Traces: APM → Traces → Filter by service name
+   - Logs: Logs → Filter by `service.name="your-service"`
+   - Metrics: Custom app metrics like `http_requests_total`
+4. **Check Infrastructure Metrics**:
+   - Filter by `collector_type="gcp-infrastructure-metrics"`
+   - Look for `run_googleapis_com_*` metrics
+   - Instance count, billable time, CPU allocation, request count
 
 ## Troubleshooting
 
@@ -176,11 +322,6 @@ If spans are not appearing:
 - Ensure graceful shutdown is implemented
 - Increase `--timeout` for your Cloud Run service
 - Use `BatchSpanProcessor` with reasonable timeout (5-10s)
-
-### Memory Issues with Sidecar
-
-- Minimum recommended: 512MB total (256MB app + 256MB collector)
-- Use `memory_limiter` processor in collector config
 
 ### Authentication Errors
 
@@ -192,8 +333,195 @@ If spans are not appearing:
 - Ensure structured JSON logging is enabled
 - Verify `logging.googleapis.com/trace` field format includes project ID
 
+## Security Best Practices
+
+### Secret Management
+
+**✅ DO**: Use Secret Manager for credentials
+```bash
+# Create secret
+echo -n "Authorization=Basic YOUR_CREDENTIALS" | \
+  gcloud secrets create last9-auth-header --data-file=-
+
+# Grant access
+gcloud secrets add-iam-policy-binding last9-auth-header \
+  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+**❌ DON'T**: Store credentials in environment variables or code
+
+### Secret Rotation
+
+Rotate credentials using versioned secrets:
+```bash
+# Create new version
+echo -n "Authorization=Basic NEW_CREDENTIALS" | \
+  gcloud secrets versions add last9-auth-header --data-file=-
+
+# Update service to use specific version
+gcloud run services update SERVICE_NAME \
+  --update-secrets OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:2
+```
+
+### IAM Least Privilege
+
+Create dedicated service account per service:
+```bash
+# Create service account
+gcloud iam service-accounts create my-cloud-run-service
+
+# Grant minimal permissions
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:my-cloud-run-service@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+# Deploy with service account
+gcloud run deploy SERVICE_NAME \
+  --service-account=my-cloud-run-service@PROJECT_ID.iam.gserviceaccount.com
+```
+
+### Recommended IAM Roles
+
+| Role | Purpose | Assign To |
+|------|---------|-----------|
+| `roles/secretmanager.secretAccessor` | Read secrets | Service Account |
+| `roles/monitoring.metricWriter` | Write custom metrics | Service Account |
+| `roles/cloudtrace.agent` | Write traces | Service Account |
+| `roles/logging.logWriter` | Write logs | Service Account (default) |
+
+### Container Security
+
+Scan images before deployment:
+```bash
+# Enable Container Scanning API
+gcloud services enable containerscanning.googleapis.com
+
+# Scan image
+gcloud artifacts docker images scan gcr.io/PROJECT_ID/SERVICE_NAME:TAG
+
+# View vulnerabilities
+gcloud artifacts docker images list-vulnerabilities \
+  gcr.io/PROJECT_ID/SERVICE_NAME:TAG
+```
+
+### Network Security
+
+**Private services** (internal only):
+```bash
+gcloud run deploy SERVICE_NAME \
+  --ingress=internal  # No public access
+```
+
+**VPC Connector** (access private resources):
+```bash
+gcloud run services update SERVICE_NAME \
+  --vpc-connector=my-connector \
+  --vpc-egress=private-ranges-only
+```
+
+## Infrastructure Metrics Setup
+
+While your application sends traces, logs, and custom metrics via the OpenTelemetry SDK, **GCP platform-level metrics** (instance count, billable time, etc.) are only available in Cloud Monitoring.
+
+Deploy a centralized **OTEL Collector** to pull basic infrastructure metrics and forward to Last9.
+
+**Important Limitation**: The OTEL Collector's `googlecloudmonitoring` receiver cannot process GCP's DISTRIBUTION (histogram) metrics. This means CPU utilization, memory utilization, and request latency distributions are **not available**. Only simple metric types (INT64, DOUBLE) can be collected.
+
+### Why Infrastructure Metrics Matter
+
+| Metric | Availability | Use Case |
+|--------|-------------|----------|
+| Instance Count | ✅ Available | Track scaling patterns, optimize min/max instances |
+| Billable Time | ✅ Available | Cost tracking and optimization |
+| CPU Allocation | ✅ Available | Basic resource monitoring |
+| Request Count | ✅ Available | Platform-measured request volume |
+| CPU/Memory Utilization | ❌ Not Available | DISTRIBUTION metrics not supported |
+| Request Latency | ❌ Not Available | DISTRIBUTION metrics not supported |
+
+### Quick Setup
+
+**Full documentation**: [collector-configs/infrastructure-metrics/README.md](./collector-configs/infrastructure-metrics/README.md)
+
+```bash
+# 1. Create IAM service account
+cd collector-configs/infrastructure-metrics
+./setup-iam.sh YOUR_PROJECT_ID
+
+# 2. Store Last9 credentials (same as your application uses)
+echo -n "Authorization=Basic YOUR_BASE64_CREDENTIALS" | \
+  gcloud secrets create last9-auth-header --data-file=-
+
+# 3. Deploy OTEL Collector to Cloud Run
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_OTLP_ENDPOINT=YOUR_OTLP_ENDPOINT \
+  --project=YOUR_PROJECT_ID
+
+# Replace YOUR_OTLP_ENDPOINT with your OTLP endpoint (same as your app)
+# Format should include protocol: https://your-endpoint or https://your-endpoint:443
+
+# 4. Verify metrics in Last9
+# Filter by: collector_type="gcp-infrastructure-metrics"
+```
+
+The OTEL Collector runs as a Cloud Run service with `min-instances=1` to continuously collect metrics every 60 seconds (configurable).
+
+### What You'll See in Last9
+
+Infrastructure metrics appear with the `run_googleapis_com_` prefix:
+
+```promql
+# Instance count over time
+run_googleapis_com_container_instance_count
+
+# Daily billable time (cost analysis)
+sum(increase(run_googleapis_com_container_billable_instance_time[1d]))
+  by (service_name)
+
+# Request rate (platform-measured)
+rate(run_googleapis_com_request_count[5m])
+```
+
+### Architecture
+
+```
+┌─────────────────────────────┐
+│   Your Cloud Run Services   │
+│                              │
+│  App Metrics/Traces/Logs     │
+│         │                    │
+│         ├─► OTLP → Last9     │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│   GCP Cloud Monitoring API   │
+│  (Platform Metrics)          │
+└─────────────────────────────┘
+         │
+         │ Pull every 60 seconds
+         ▼
+┌─────────────────────────────┐
+│   OTEL Collector             │
+│   (Cloud Run Service)        │
+│                              │
+│   OTLP Exporter              │
+│         │                    │
+│         ├─► Last9            │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│        Last9 Platform        │
+│                              │
+│  App + Infrastructure Data   │
+└─────────────────────────────┘
+```
+
 ## Resources
 
 - [Cloud Run Documentation](https://cloud.google.com/run/docs)
 - [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
-- [Last9 Integration Guide](https://last9.io/docs/integrations-gcp-cloud-run/)
+- [OTEL Collector Documentation](https://opentelemetry.io/docs/collector/)
+- [Cloud Run Metrics Reference](https://cloud.google.com/monitoring/api/metrics_gcp_p_z#gcp-run)
+- [Last9 Integration Guide](https://docs.last9.io)

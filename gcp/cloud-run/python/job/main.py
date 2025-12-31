@@ -84,7 +84,7 @@ def initialize_telemetry():
     global trace_provider, meter_provider
 
     resource = get_cloud_run_job_resource()
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otlp.last9.io")
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "https://your-otlp-endpoint")
     headers = parse_otlp_headers()
 
     # Initialize Tracing
