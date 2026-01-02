@@ -1,0 +1,115 @@
+# Docker Compose for local testing of PostgreSQL Collector
+# This simulates the ECS Fargate deployment locally
+#
+# Provides feature parity with Datadog DBM:
+# https://docs.datadoghq.com/database_monitoring/setup_postgres/rds/
+
+version: '3.8'
+
+services:
+  # OpenTelemetry Collector - metrics and logs
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: postgresql-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+      - ./config/rds-combined-ca-bundle.pem:/etc/ssl/certs/rds-combined-ca-bundle.pem:ro
+    ports:
+      - "13133:13133"  # Health check
+      - "8888:8888"    # Prometheus metrics
+      - "55679:55679"  # zPages
+    environment:
+      # PostgreSQL Connection
+      - PG_ENDPOINT=${PG_ENDPOINT}
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_USERNAME=${PG_USERNAME}
+      - PG_PASSWORD=${PG_PASSWORD}
+      - PG_DATABASE=${PG_DATABASE}
+      # AWS Configuration
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - RDS_INSTANCE_ID=${RDS_INSTANCE_ID}
+      # Last9 Configuration
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_AUTH_HEADER=${LAST9_AUTH_HEADER}
+      # Environment
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - collector-network
+
+  # DBM Collector - query samples, explain plans, wait events
+  # This provides Datadog DBM feature parity
+  dbm-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbm
+    container_name: dbm-collector
+    profiles: ["dbm"]
+    environment:
+      - PG_ENDPOINT=${PG_ENDPOINT}
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_USERNAME=${PG_USERNAME}
+      - PG_PASSWORD=${PG_PASSWORD}
+      - PG_DATABASE=${PG_DATABASE}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - RDS_INSTANCE_ID=${RDS_INSTANCE_ID}
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - COLLECTION_INTERVAL=30
+      - SLOW_QUERY_THRESHOLD_MS=100
+      - EXPLAIN_SAMPLE_RATE=100
+      - OUTPUT_FORMAT=json
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - collector-network
+
+  # Optional: Local PostgreSQL for testing the collector config
+  # Comment this out when connecting to RDS
+  postgres-local:
+    image: postgres:15
+    container_name: postgres-local
+    profiles: ["local-db"]
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=testdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/setup-db-user.sql:/docker-entrypoint-initdb.d/setup.sql:ro
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=all"
+      - "-c"
+      - "track_io_timing=on"
+      - "-c"
+      - "log_min_duration_statement=100"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - collector-network
+
+networks:
+  collector-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

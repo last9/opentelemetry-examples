@@ -1,0 +1,369 @@
+# Custom PostgreSQL Queries for Enhanced Monitoring
+# These queries extend the built-in OTEL PostgreSQL receiver metrics
+
+# Connection Statistics
+pg_stat_connections:
+  query: |
+    SELECT
+      datname as database,
+      state,
+      count(*) as count,
+      count(*) FILTER (WHERE wait_event IS NOT NULL) as waiting
+    FROM pg_stat_activity
+    WHERE backend_type = 'client backend'
+    GROUP BY datname, state
+  metrics:
+    - database:
+        usage: LABEL
+    - state:
+        usage: LABEL
+    - count:
+        usage: GAUGE
+        description: "Number of connections by state"
+    - waiting:
+        usage: GAUGE
+        description: "Number of connections waiting on events"
+
+# Slow Queries (queries running longer than threshold)
+pg_slow_queries:
+  query: |
+    SELECT
+      datname as database,
+      usename as username,
+      left(query, 100) as query_sample,
+      EXTRACT(EPOCH FROM (now() - query_start)) as duration_seconds,
+      wait_event_type,
+      wait_event,
+      state,
+      pid
+    FROM pg_stat_activity
+    WHERE state = 'active'
+      AND query NOT LIKE '%pg_stat_activity%'
+      AND query_start < now() - interval '100 milliseconds'
+      AND backend_type = 'client backend'
+    ORDER BY duration_seconds DESC
+    LIMIT 20
+  metrics:
+    - database:
+        usage: LABEL
+    - username:
+        usage: LABEL
+    - query_sample:
+        usage: LABEL
+    - duration_seconds:
+        usage: GAUGE
+        description: "Duration of slow running queries in seconds"
+    - wait_event_type:
+        usage: LABEL
+    - wait_event:
+        usage: LABEL
+    - state:
+        usage: LABEL
+    - pid:
+        usage: LABEL
+
+# Blocking Queries
+pg_blocking_queries:
+  query: |
+    SELECT
+      blocked_locks.pid AS blocked_pid,
+      blocked_activity.usename AS blocked_user,
+      blocked_activity.datname AS database,
+      blocking_locks.pid AS blocking_pid,
+      blocking_activity.usename AS blocking_user,
+      EXTRACT(EPOCH FROM (now() - blocked_activity.query_start)) AS blocked_duration_seconds,
+      left(blocked_activity.query, 100) AS blocked_query,
+      left(blocking_activity.query, 100) AS blocking_query
+    FROM pg_catalog.pg_locks blocked_locks
+    JOIN pg_catalog.pg_stat_activity blocked_activity
+      ON blocked_activity.pid = blocked_locks.pid
+    JOIN pg_catalog.pg_locks blocking_locks
+      ON blocking_locks.locktype = blocked_locks.locktype
+      AND blocking_locks.database IS NOT DISTINCT FROM blocked_locks.database
+      AND blocking_locks.relation IS NOT DISTINCT FROM blocked_locks.relation
+      AND blocking_locks.page IS NOT DISTINCT FROM blocked_locks.page
+      AND blocking_locks.tuple IS NOT DISTINCT FROM blocked_locks.tuple
+      AND blocking_locks.virtualxid IS NOT DISTINCT FROM blocked_locks.virtualxid
+      AND blocking_locks.transactionid IS NOT DISTINCT FROM blocked_locks.transactionid
+      AND blocking_locks.classid IS NOT DISTINCT FROM blocked_locks.classid
+      AND blocking_locks.objid IS NOT DISTINCT FROM blocked_locks.objid
+      AND blocking_locks.objsubid IS NOT DISTINCT FROM blocked_locks.objsubid
+      AND blocking_locks.pid != blocked_locks.pid
+    JOIN pg_catalog.pg_stat_activity blocking_activity
+      ON blocking_activity.pid = blocking_locks.pid
+    WHERE NOT blocked_locks.granted
+  metrics:
+    - blocked_pid:
+        usage: LABEL
+    - blocked_user:
+        usage: LABEL
+    - database:
+        usage: LABEL
+    - blocking_pid:
+        usage: LABEL
+    - blocking_user:
+        usage: LABEL
+    - blocked_duration_seconds:
+        usage: GAUGE
+        description: "Duration blocked queries have been waiting"
+    - blocked_query:
+        usage: LABEL
+    - blocking_query:
+        usage: LABEL
+
+# Wait Events Aggregation
+pg_wait_events:
+  query: |
+    SELECT
+      datname as database,
+      wait_event_type,
+      wait_event,
+      count(*) as count
+    FROM pg_stat_activity
+    WHERE wait_event IS NOT NULL
+      AND state = 'active'
+      AND backend_type = 'client backend'
+    GROUP BY datname, wait_event_type, wait_event
+    ORDER BY count DESC
+    LIMIT 50
+  metrics:
+    - database:
+        usage: LABEL
+    - wait_event_type:
+        usage: LABEL
+    - wait_event:
+        usage: LABEL
+    - count:
+        usage: GAUGE
+        description: "Count of active sessions waiting on each event type"
+
+# pg_stat_statements Top Queries
+pg_stat_statements_top:
+  query: |
+    SELECT
+      d.datname as database,
+      pg_get_userbyid(s.userid) as username,
+      s.queryid,
+      left(s.query, 200) as query_normalized,
+      s.calls,
+      s.total_exec_time as total_time_ms,
+      s.mean_exec_time as mean_time_ms,
+      s.rows,
+      s.shared_blks_hit,
+      s.shared_blks_read,
+      s.blk_read_time as blk_read_time_ms,
+      s.blk_write_time as blk_write_time_ms
+    FROM pg_stat_statements s
+    JOIN pg_database d ON d.oid = s.dbid
+    WHERE s.calls > 0
+    ORDER BY s.total_exec_time DESC
+    LIMIT 50
+  metrics:
+    - database:
+        usage: LABEL
+    - username:
+        usage: LABEL
+    - queryid:
+        usage: LABEL
+    - query_normalized:
+        usage: LABEL
+    - calls:
+        usage: COUNTER
+        description: "Number of times the query was executed"
+    - total_time_ms:
+        usage: COUNTER
+        description: "Total time spent executing the query in milliseconds"
+    - mean_time_ms:
+        usage: GAUGE
+        description: "Mean execution time per call in milliseconds"
+    - rows:
+        usage: COUNTER
+        description: "Total number of rows retrieved or affected"
+    - shared_blks_hit:
+        usage: COUNTER
+        description: "Total shared buffer cache hits"
+    - shared_blks_read:
+        usage: COUNTER
+        description: "Total shared blocks read from disk"
+    - blk_read_time_ms:
+        usage: COUNTER
+        description: "Time spent reading blocks in milliseconds"
+    - blk_write_time_ms:
+        usage: COUNTER
+        description: "Time spent writing blocks in milliseconds"
+
+# Replication Status
+pg_replication_status:
+  query: |
+    SELECT
+      client_addr::text as replica_address,
+      usename as username,
+      application_name,
+      state,
+      sent_lsn - replay_lsn as replay_lag_bytes,
+      EXTRACT(EPOCH FROM replay_lag) as replay_lag_seconds,
+      sync_state
+    FROM pg_stat_replication
+  metrics:
+    - replica_address:
+        usage: LABEL
+    - username:
+        usage: LABEL
+    - application_name:
+        usage: LABEL
+    - state:
+        usage: LABEL
+    - replay_lag_bytes:
+        usage: GAUGE
+        description: "Replication lag in bytes"
+    - replay_lag_seconds:
+        usage: GAUGE
+        description: "Replication lag in seconds"
+    - sync_state:
+        usage: LABEL
+
+# Vacuum Progress
+pg_vacuum_progress:
+  query: |
+    SELECT
+      p.datname as database,
+      t.relname as table_name,
+      p.phase,
+      p.heap_blks_total,
+      p.heap_blks_scanned,
+      p.heap_blks_vacuumed,
+      p.index_vacuum_count,
+      p.max_dead_tuples,
+      p.num_dead_tuples
+    FROM pg_stat_progress_vacuum p
+    JOIN pg_class t ON t.oid = p.relid
+  metrics:
+    - database:
+        usage: LABEL
+    - table_name:
+        usage: LABEL
+    - phase:
+        usage: LABEL
+    - heap_blks_total:
+        usage: GAUGE
+        description: "Total heap blocks in table"
+    - heap_blks_scanned:
+        usage: GAUGE
+        description: "Heap blocks scanned so far"
+    - heap_blks_vacuumed:
+        usage: GAUGE
+        description: "Heap blocks vacuumed so far"
+    - index_vacuum_count:
+        usage: GAUGE
+        description: "Number of completed index vacuum cycles"
+    - max_dead_tuples:
+        usage: GAUGE
+        description: "Maximum dead tuples that can be stored"
+    - num_dead_tuples:
+        usage: GAUGE
+        description: "Number of dead tuples collected so far"
+
+# Database Statistics
+pg_database_stats:
+  query: |
+    SELECT
+      datname as database,
+      numbackends as active_connections,
+      xact_commit as commits,
+      xact_rollback as rollbacks,
+      blks_read,
+      blks_hit,
+      CASE WHEN (blks_hit + blks_read) > 0
+           THEN blks_hit::float / (blks_hit + blks_read)
+           ELSE 0 END as cache_hit_ratio,
+      tup_returned,
+      tup_fetched,
+      tup_inserted,
+      tup_updated,
+      tup_deleted,
+      conflicts,
+      temp_files,
+      temp_bytes,
+      deadlocks,
+      EXTRACT(EPOCH FROM (now() - stats_reset)) as stats_age_seconds
+    FROM pg_stat_database
+    WHERE datname NOT LIKE 'template%'
+      AND datname != 'rdsadmin'
+  metrics:
+    - database:
+        usage: LABEL
+    - active_connections:
+        usage: GAUGE
+        description: "Number of active connections"
+    - commits:
+        usage: COUNTER
+        description: "Number of committed transactions"
+    - rollbacks:
+        usage: COUNTER
+        description: "Number of rolled back transactions"
+    - blks_read:
+        usage: COUNTER
+        description: "Number of disk blocks read"
+    - blks_hit:
+        usage: COUNTER
+        description: "Number of buffer cache hits"
+    - cache_hit_ratio:
+        usage: GAUGE
+        description: "Buffer cache hit ratio"
+    - tup_returned:
+        usage: COUNTER
+        description: "Number of rows returned by queries"
+    - tup_fetched:
+        usage: COUNTER
+        description: "Number of rows fetched by queries"
+    - tup_inserted:
+        usage: COUNTER
+        description: "Number of rows inserted"
+    - tup_updated:
+        usage: COUNTER
+        description: "Number of rows updated"
+    - tup_deleted:
+        usage: COUNTER
+        description: "Number of rows deleted"
+    - conflicts:
+        usage: COUNTER
+        description: "Number of queries canceled due to conflicts"
+    - temp_files:
+        usage: COUNTER
+        description: "Number of temporary files created"
+    - temp_bytes:
+        usage: COUNTER
+        description: "Total bytes written to temporary files"
+    - deadlocks:
+        usage: COUNTER
+        description: "Number of deadlocks detected"
+    - stats_age_seconds:
+        usage: GAUGE
+        description: "Seconds since statistics were reset"
+
+# Lock Statistics
+pg_locks_summary:
+  query: |
+    SELECT
+      d.datname as database,
+      l.locktype,
+      l.mode,
+      count(*) as count,
+      count(*) FILTER (WHERE NOT l.granted) as waiting
+    FROM pg_locks l
+    JOIN pg_database d ON d.oid = l.database
+    WHERE d.datname NOT LIKE 'template%'
+    GROUP BY d.datname, l.locktype, l.mode
+  metrics:
+    - database:
+        usage: LABEL
+    - locktype:
+        usage: LABEL
+    - mode:
+        usage: LABEL
+    - count:
+        usage: GAUGE
+        description: "Number of locks held"
+    - waiting:
+        usage: GAUGE
+        description: "Number of locks waiting to be granted"
