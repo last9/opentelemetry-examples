@@ -40,10 +40,12 @@ Monitor RDS PostgreSQL using OpenTelemetry Collector on ECS Fargate, with full *
 
 ## Prerequisites
 
-1. **RDS PostgreSQL** instance (version 15+)
-2. **ECS Cluster** with Fargate capacity
-3. **VPC** with private subnets and NAT gateway
-4. **Last9 account** with OTLP endpoint
+| Requirement | Notes |
+|-------------|-------|
+| **RDS PostgreSQL** | Version 15+ (or existing instance) |
+| **ECS Cluster** | With Fargate capacity |
+| **VPC** | Private subnets + NAT gateway |
+| **Last9 account** | For the OTLP endpoint |
 
 ## Quick Start
 
