@@ -69,7 +69,7 @@ def parse_otlp_headers():
 def initialize_telemetry():
     """Initialize OpenTelemetry tracing and metrics."""
     resource = get_cloud_run_resource()
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otlp.last9.io")
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "https://your-otlp-endpoint")
     headers = parse_otlp_headers()
 
     # Initialize Tracing

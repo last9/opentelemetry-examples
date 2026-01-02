@@ -8,6 +8,7 @@ const { NodeSDK } = require('@opentelemetry/sdk-node');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
+const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
 const { Resource } = require('@opentelemetry/resources');
 const {
   SEMRESATTRS_SERVICE_NAME,
@@ -16,6 +17,7 @@ const {
 } = require('@opentelemetry/semantic-conventions');
 const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+const { LoggerProvider, BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
 
 /**
  * Parse OTLP headers from environment variable
@@ -62,7 +64,7 @@ function createCloudRunResource() {
 }
 
 // Configuration
-const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'https://otlp.last9.io';
+const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'https://your-otlp-endpoint';
 const headers = parseHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS);
 const resource = createCloudRunResource();
 
@@ -78,6 +80,21 @@ const metricExporter = new OTLPMetricExporter({
   headers,
 });
 
+// Configure log exporter
+const logExporter = new OTLPLogExporter({
+  url: `${endpoint}/v1/logs`,
+  headers,
+});
+
+// Configure LoggerProvider with batch processor
+const loggerProvider = new LoggerProvider({ resource });
+loggerProvider.addLogRecordProcessor(
+  new BatchLogRecordProcessor(logExporter, {
+    maxExportBatchSize: 512,
+    scheduledDelayMillis: 5000, // 5 second delay for cold starts
+  })
+);
+
 // Initialize SDK
 const sdk = new NodeSDK({
   resource,
@@ -88,6 +105,10 @@ const sdk = new NodeSDK({
   metricReader: new PeriodicExportingMetricReader({
     exporter: metricExporter,
     exportIntervalMillis: 60000, // Export every 60 seconds
+  }),
+  logRecordProcessor: new BatchLogRecordProcessor(logExporter, {
+    maxExportBatchSize: 512,
+    scheduledDelayMillis: 5000,
   }),
   instrumentations: [
     getNodeAutoInstrumentations({

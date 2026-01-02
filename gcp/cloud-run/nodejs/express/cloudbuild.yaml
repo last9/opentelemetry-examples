@@ -1,7 +1,11 @@
 # Cloud Build configuration for Express Cloud Run service
+# Usage: gcloud builds submit --config cloudbuild.yaml \
+#   --substitutions=_SERVICE_NAME=my-service,_REGION=us-central1
 substitutions:
-  _SERVICE_NAME: express-otel-demo
+  _SERVICE_NAME: cloud-run-nodejs-express
   _REGION: us-central1
+  # Replace with your OTLP endpoint
+  _OTLP_ENDPOINT: YOUR_OTLP_ENDPOINT
 
 steps:
   - name: 'gcr.io/cloud-builders/docker'
@@ -39,7 +43,9 @@ steps:
       - '--set-env-vars'
       - 'OTEL_SERVICE_NAME=${_SERVICE_NAME}'
       - '--set-env-vars'
-      - 'OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io'
+      - 'OTEL_EXPORTER_OTLP_ENDPOINT=${_OTLP_ENDPOINT}'
+      - '--set-env-vars'
+      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
       - '--set-env-vars'
       - 'DEPLOYMENT_ENVIRONMENT=production'
       - '--set-env-vars'
