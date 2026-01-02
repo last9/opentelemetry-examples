@@ -1,0 +1,124 @@
+{
+  "family": "nodejs-express-large-logs",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<YOUR_AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<YOUR_AWS_ACCOUNT_ID>:role/ecs_task_iam_role",
+  "containerDefinitions": [
+    {
+      "name": "nodejs-app",
+      "image": "<YOUR_AWS_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com/nodejs-express-large-logs:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awsfirelens",
+        "options": {
+          "Name": "forward",
+          "Host": "127.0.0.1",
+          "Port": "8006"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "dependsOn": [
+        {
+          "containerName": "log-router",
+          "condition": "START"
+        },
+        {
+          "containerName": "otel-collector",
+          "condition": "START"
+        }
+      ]
+    },
+    {
+      "name": "log-router",
+      "image": "<YOUR_AWS_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com/nodejs-express-large-logs-fluentbit:latest",
+      "essential": false,
+      "firelensConfiguration": {
+        "type": "fluentbit",
+        "options": {
+          "enable-ecs-log-metadata": "true",
+          "config-file-type": "file",
+          "config-file-value": "/fluent-bit/etc/extra.conf"
+        }
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/log-router",
+          "awslogs-region": "<YOUR_REGION>",
+          "awslogs-stream-prefix": "firelens"
+        }
+      }
+    },
+    {
+      "name": "otel-collector",
+      "image": "otel/opentelemetry-collector-contrib:latest",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "name": "otel-collector-4317-grpc",
+          "containerPort": 4317,
+          "hostPort": 4317,
+          "protocol": "tcp",
+          "appProtocol": "grpc"
+        },
+        {
+          "name": "otel-collector-4318-http",
+          "containerPort": 4318,
+          "hostPort": 4318,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "essential": false,
+      "command": [
+        "--config",
+        "env:OTEL_CONFIG"
+      ],
+      "environment": [
+        {
+          "name": "OTEL_CONFIG",
+          "value": "receivers:\n  awsecscontainermetrics:\n    collection_interval: 60s\n  otlp:\n    protocols:\n      grpc:\n        endpoint: 0.0.0.0:4317\n        max_recv_msg_size_mib: 100\n      http:\n        endpoint: 0.0.0.0:4318\n        max_request_body_size: 104857600  # 100MB\n  fluentforward:\n    endpoint: 0.0.0.0:8006\n\nprocessors:\n  transform/ecsmetrics:\n    metric_statements:\n      - context: datapoint\n        statements:\n          # Task Level Resource Attributes\n          - set(attributes[\"aws.ecs.cluster.name\"], resource.attributes[\"aws.ecs.cluster.name\"])\n          - set(attributes[\"aws.ecs.task.family\"], resource.attributes[\"aws.ecs.task.family\"])\n          - set(attributes[\"aws.ecs.task.arn\"], resource.attributes[\"aws.ecs.task.arn\"])\n          - set(attributes[\"aws.ecs.task.id\"], resource.attributes[\"aws.ecs.task.id\"])\n          - set(attributes[\"aws.ecs.task.version\"], resource.attributes[\"aws.ecs.task.version\"])\n          - set(attributes[\"aws.ecs.service.name\"], resource.attributes[\"aws.ecs.service.name\"])\n          - set(attributes[\"cloud.zone\"], resource.attributes[\"cloud.zone\"])\n          - set(attributes[\"cloud.account.id\"], resource.attributes[\"cloud.account.id\"])\n          - set(attributes[\"cloud.region\"], resource.attributes[\"cloud.region\"])\n          - set(attributes[\"aws.ecs.task.pull_started_at\"], resource.attributes[\"aws.ecs.task.pull_started_at\"])\n          - set(attributes[\"aws.ecs.task.pull_stopped_at\"], resource.attributes[\"aws.ecs.task.pull_stopped_at\"])\n          - set(attributes[\"aws.ecs.task.known_status\"], resource.attributes[\"aws.ecs.task.known_status\"])\n          - set(attributes[\"aws.ecs.task.launch_type\"], resource.attributes[\"aws.ecs.task.launch_type\"])\n\n          # Container Level Resource Attributes (additional to task level)\n          - set(attributes[\"aws.ecs.container.created_at\"], resource.attributes[\"aws.ecs.container.created_at\"])\n          - set(attributes[\"aws.ecs.container.finished_at\"], resource.attributes[\"aws.ecs.container.finished_at\"])\n          - set(attributes[\"aws.ecs.container.know_status\"], resource.attributes[\"aws.ecs.container.know_status\"])\n          - set(attributes[\"container.name\"], resource.attributes[\"container.name\"])\n          - set(attributes[\"container.id\"], resource.attributes[\"container.id\"])\n          - set(attributes[\"aws.ecs.docker.name\"], resource.attributes[\"aws.ecs.docker.name\"])\n          - set(attributes[\"container.image.tag\"], resource.attributes[\"container.image.tag\"])\n          - set(attributes[\"aws.ecs.container.image.id\"], resource.attributes[\"aws.ecs.container.image.id\"])\n          - set(attributes[\"aws.ecs.container.exit_code\"], resource.attributes[\"aws.ecs.container.exit_code\"])\n\n          # Standard OpenTelemetry container attributes that may be present\n          - set(attributes[\"container.image.name\"], resource.attributes[\"container.image.name\"])\n          - set(attributes[\"container.runtime\"], resource.attributes[\"container.runtime\"])\n\n  transform/firelens:\n    error_mode: ignore\n    log_statements:\n      - context: log\n        statements:\n          # Set resource attributes from Fluent Bit metadata\n          - set(resource.attributes[\"container_name\"], attributes[\"container_name\"]) where attributes[\"container_name\"] != nil\n          - set(resource.attributes[\"container_id\"], attributes[\"container_id\"]) where attributes[\"container_id\"] != nil\n          - set(resource.attributes[\"service.name\"], attributes[\"container_name\"]) where attributes[\"container_name\"] != nil\n\n          # Clean up Fluent Bit metadata\n          - delete_key(attributes, \"container_id\")\n          - delete_key(attributes, \"container_name\")\n\n  batch:\n    send_batch_max_size: 1000\n    send_batch_size: 1000\n    timeout: 10s\n\n  resourcedetection:\n    detectors: [ecs]\n\nexporters:\n  otlp/last9:\n    endpoint: \"<YOUR_LAST9_OTLP_ENDPOINT>\"\n    headers:\n      \"Authorization\": \"Basic <YOUR_BASE64_CREDENTIALS>\"\n    sending_queue:\n      enabled: true\n      num_consumers: 10\n      queue_size: 5000\n\nservice:\n  pipelines:\n    metrics:\n      receivers: [awsecscontainermetrics]\n      processors: [batch, resourcedetection, transform/ecsmetrics]\n      exporters: [otlp/last9]\n    logs:\n      receivers: [fluentforward]\n      processors: [transform/firelens, batch, resourcedetection]\n      exporters: [otlp/last9]\n"
+        }
+      ],
+      "user": "0",
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/otel-collector",
+          "awslogs-region": "<YOUR_REGION>",
+          "awslogs-stream-prefix": "otel"
+        }
+      }
+    }
+  ]
+}
