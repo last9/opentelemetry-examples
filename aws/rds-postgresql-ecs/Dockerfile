@@ -1,7 +1,7 @@
 # Custom OpenTelemetry Collector image with RDS CA bundle
 # Use this if you need to customize the collector
 
-FROM otel/opentelemetry-collector-contrib:0.91.0
+FROM otel/opentelemetry-collector-contrib:0.142.0
 
 # Download RDS CA bundle for TLS connections
 USER root

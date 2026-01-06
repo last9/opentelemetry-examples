@@ -9,7 +9,7 @@ version: '3.8'
 services:
   # OpenTelemetry Collector - metrics and logs
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.91.0
+    image: otel/opentelemetry-collector-contrib:0.142.0
     container_name: postgresql-collector
     command: ["--config=/etc/otel/config.yaml"]
     volumes:
@@ -66,7 +66,34 @@ services:
       - COLLECTION_INTERVAL=30
       - SLOW_QUERY_THRESHOLD_MS=100
       - EXPLAIN_SAMPLE_RATE=100
-      - OUTPUT_FORMAT=json
+      - OUTPUT_FORMAT=otlp
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_AUTH_HEADER=${LAST9_AUTH_HEADER}
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - collector-network
+
+  # CloudWatch Collector - RDS host metrics (CPU, memory, IOPS, etc.)
+  cloudwatch-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.cloudwatch
+    container_name: cloudwatch-collector
+    profiles: ["cloudwatch"]
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - RDS_INSTANCE_ID=${RDS_INSTANCE_ID}
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - COLLECTION_INTERVAL=60
+      - CLOUDWATCH_PERIOD=60
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_AUTH_HEADER=${LAST9_AUTH_HEADER}
     depends_on:
       otel-collector:
         condition: service_healthy

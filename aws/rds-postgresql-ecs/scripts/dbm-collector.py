@@ -26,6 +26,13 @@ from dataclasses import dataclass, asdict
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+# OpenTelemetry imports
+from opentelemetry import metrics
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.sdk.resources import Resource
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -187,6 +194,7 @@ class DBMCollector:
         self.conn = None
         self.explain_count = 0
         self.last_statements: Dict[int, Dict] = {}  # For computing deltas
+        self.pg_version = None
 
     def connect(self) -> None:
         """Establish database connection."""
@@ -201,7 +209,14 @@ class DBMCollector:
                 connect_timeout=10,
             )
             self.conn.autocommit = True
-            logger.info(f"Connected to {self.config.pg_host}:{self.config.pg_port}/{self.config.pg_database}")
+
+            # Detect PostgreSQL version
+            with self.conn.cursor() as cur:
+                cur.execute("SHOW server_version")
+                version_str = cur.fetchone()[0]
+                # Extract major version (e.g., "11.22" -> 11, "15.4" -> 15)
+                self.pg_version = int(version_str.split('.')[0])
+                logger.info(f"Connected to PostgreSQL {self.pg_version} at {self.config.pg_host}:{self.config.pg_port}/{self.config.pg_database}")
         except Exception as e:
             logger.error(f"Failed to connect: {e}")
             raise
@@ -271,16 +286,25 @@ class DBMCollector:
         timestamp = datetime.now(timezone.utc).isoformat()
 
         try:
+            # Use version-appropriate column names
+            # PostgreSQL 13+ uses total_exec_time, mean_exec_time
+            # PostgreSQL 11-12 uses total_time, mean_time
+            if self.pg_version >= 13:
+                time_cols = "s.total_exec_time as total_time_ms, s.mean_exec_time as mean_time_ms"
+                order_by = "s.total_exec_time DESC"
+            else:
+                time_cols = "s.total_time as total_time_ms, s.mean_time as mean_time_ms"
+                order_by = "s.total_time DESC"
+
             with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
+                query = f"""
                     SELECT
                         s.queryid,
                         d.datname as database,
                         pg_get_userbyid(s.userid) as username,
                         left(s.query, 4096) as query,
                         s.calls,
-                        s.total_exec_time as total_time_ms,
-                        s.mean_exec_time as mean_time_ms,
+                        {time_cols},
                         s.rows,
                         s.shared_blks_hit,
                         s.shared_blks_read,
@@ -290,9 +314,10 @@ class DBMCollector:
                     JOIN pg_database d ON d.oid = s.dbid
                     WHERE s.calls > 0
                       AND d.datname NOT IN ('template0', 'template1', 'rdsadmin')
-                    ORDER BY s.total_exec_time DESC
+                    ORDER BY {order_by}
                     LIMIT 200
-                """)
+                """
+                cur.execute(query)
 
                 for row in cur.fetchall():
                     metrics.append(QueryMetric(
@@ -511,12 +536,190 @@ def output_json(data: Dict[str, Any]) -> None:
     print(json.dumps(data, indent=2, default=str))
 
 
-def output_otlp(data: Dict[str, Any], config: Config) -> None:
+def setup_otlp_exporter(config: Config) -> metrics.Meter:
+    """Setup OTLP exporter and return a meter for creating metrics."""
+    # Parse auth header
+    headers = {}
+    if config.otlp_auth:
+        if config.otlp_auth.startswith('Basic '):
+            headers['Authorization'] = config.otlp_auth
+        else:
+            headers['Authorization'] = f'Basic {config.otlp_auth}'
+
+    # Create resource with metadata
+    resource = Resource.create({
+        "service.name": "postgresql-dbm-collector",
+        "deployment.environment": config.environment,
+        "db.system": "postgresql",
+        "db.instance.id": config.rds_instance_id,
+        "cloud.provider": "aws",
+        "cloud.platform": "aws_rds",
+        "cloud.region": config.aws_region,
+        "postgresql.database.name": config.pg_database,
+    })
+
+    # Create OTLP exporter
+    exporter = OTLPMetricExporter(
+        endpoint=f"{config.otlp_endpoint}/v1/metrics",
+        headers=headers,
+    )
+
+    # Create metric reader with export interval matching collection interval
+    reader = PeriodicExportingMetricReader(
+        exporter,
+        export_interval_millis=config.collection_interval * 1000,
+    )
+
+    # Create meter provider
+    provider = MeterProvider(
+        resource=resource,
+        metric_readers=[reader],
+    )
+
+    # Set global meter provider
+    metrics.set_meter_provider(provider)
+
+    # Return meter for creating instruments
+    return metrics.get_meter("postgresql.dbm")
+
+
+def output_otlp(data: Dict[str, Any], meter: metrics.Meter) -> None:
     """Output data via OTLP to Last9."""
-    # TODO: Implement OTLP export
-    # For now, this would integrate with the OTEL Collector via OTLP
-    logger.info("OTLP export not yet implemented - use JSON output with OTEL Collector")
-    output_json(data)
+
+    # Create/get metric instruments (these are cached by name)
+    query_calls = meter.create_counter(
+        "postgresql.dbm.query.calls",
+        description="Number of times the query was executed",
+        unit="1",
+    )
+
+    query_total_time = meter.create_counter(
+        "postgresql.dbm.query.total_time",
+        description="Total execution time for the query",
+        unit="ms",
+    )
+
+    query_mean_time = meter.create_gauge(
+        "postgresql.dbm.query.mean_time",
+        description="Mean execution time per call",
+        unit="ms",
+    )
+
+    query_rows = meter.create_counter(
+        "postgresql.dbm.query.rows",
+        description="Total number of rows retrieved or affected",
+        unit="1",
+    )
+
+    query_buffer_hits = meter.create_counter(
+        "postgresql.dbm.query.buffer.hits",
+        description="Shared blocks hit (buffer cache hits)",
+        unit="1",
+    )
+
+    query_buffer_reads = meter.create_counter(
+        "postgresql.dbm.query.buffer.reads",
+        description="Shared blocks read from disk",
+        unit="1",
+    )
+
+    query_io_read_time = meter.create_counter(
+        "postgresql.dbm.query.io.read_time",
+        description="Time spent reading blocks from disk",
+        unit="ms",
+    )
+
+    query_io_write_time = meter.create_counter(
+        "postgresql.dbm.query.io.write_time",
+        description="Time spent writing blocks to disk",
+        unit="ms",
+    )
+
+    active_queries = meter.create_gauge(
+        "postgresql.dbm.active_queries",
+        description="Number of active queries",
+        unit="1",
+    )
+
+    wait_events_count = meter.create_gauge(
+        "postgresql.dbm.wait_events",
+        description="Number of processes waiting on events",
+        unit="1",
+    )
+
+    blocking_queries_count = meter.create_gauge(
+        "postgresql.dbm.blocking_queries",
+        description="Number of blocking queries",
+        unit="1",
+    )
+
+    query_info = meter.create_gauge(
+        "postgresql.dbm.query_info",
+        description="Query information mapping signature to query text",
+        unit="1",
+    )
+
+    # Record query metrics from pg_stat_statements
+    for metric in data.get('query_metrics', []):
+        attributes = {
+            "database": metric['database'],
+            "username": metric['username'],
+            "query_signature": metric['query_signature'],
+        }
+
+        # Record cumulative metrics
+        query_calls.add(metric['calls'], attributes)
+        query_total_time.add(metric['total_time_ms'], attributes)
+        query_rows.add(metric['rows'], attributes)
+        query_buffer_hits.add(metric['shared_blks_hit'], attributes)
+        query_buffer_reads.add(metric['shared_blks_read'], attributes)
+        query_io_read_time.add(metric['blk_read_time_ms'], attributes)
+        query_io_write_time.add(metric['blk_write_time_ms'], attributes)
+
+        # Record query info (mapping signature to query text)
+        # Truncate query to avoid label size limits (max 200 chars)
+        query_text = metric['query'][:200] if len(metric['query']) > 200 else metric['query']
+        query_info.set(
+            1,  # Always 1, this is just an info metric
+            {
+                "database": metric['database'],
+                "username": metric['username'],
+                "query_signature": metric['query_signature'],
+                "query": query_text,
+                "query_id": str(metric['query_id']),
+            }
+        )
+
+    # Record active query count
+    active_queries.set(
+        len(data.get('query_samples', [])),
+        {"database": data['metadata']['database']}
+    )
+
+    # Record wait events
+    for event in data.get('wait_events', []):
+        wait_events_count.set(
+            event['count'],
+            {
+                "database": event['database'],
+                "wait_event_type": event['wait_event_type'],
+                "wait_event": event['wait_event'],
+            }
+        )
+
+    # Record blocking queries count
+    blocking_queries_count.set(
+        len(data.get('blocking_queries', [])),
+        {"database": data['metadata']['database']}
+    )
+
+    logger.info(
+        f"Exported to OTLP: "
+        f"{len(data.get('query_metrics', []))} query metrics, "
+        f"{len(data.get('query_samples', []))} active queries, "
+        f"{len(data.get('wait_events', []))} wait events, "
+        f"{len(data.get('blocking_queries', []))} blocking queries"
+    )
 
 
 # =============================================================================
@@ -527,6 +730,16 @@ def main():
     """Main entry point."""
     config = Config()
     collector = DBMCollector(config)
+    meter = None
+
+    # Setup OTLP exporter if needed
+    if config.output_format == 'otlp':
+        if not config.otlp_endpoint:
+            logger.error("OTLP endpoint not configured. Set LAST9_OTLP_ENDPOINT environment variable.")
+            sys.exit(1)
+
+        logger.info(f"Setting up OTLP exporter to {config.otlp_endpoint}")
+        meter = setup_otlp_exporter(config)
 
     try:
         collector.connect()
@@ -538,7 +751,7 @@ def main():
                 if config.output_format == 'json':
                     output_json(data)
                 elif config.output_format == 'otlp':
-                    output_otlp(data, config)
+                    output_otlp(data, meter)
 
                 # Summary log
                 logger.info(
@@ -559,6 +772,13 @@ def main():
         logger.info("Shutting down...")
     finally:
         collector.close()
+
+        # Shutdown OTLP exporter gracefully
+        if meter:
+            provider = metrics.get_meter_provider()
+            if hasattr(provider, 'shutdown'):
+                logger.info("Shutting down OTLP exporter...")
+                provider.shutdown()
 
 
 if __name__ == '__main__':

@@ -210,7 +210,7 @@ export class PostgreSQLCollectorStack extends cdk.Stack {
 
     // Main collector container
     const collectorContainer = taskDefinition.addContainer('otel-collector', {
-      image: ecs.ContainerImage.fromRegistry('otel/opentelemetry-collector-contrib:0.91.0'),
+      image: ecs.ContainerImage.fromRegistry('otel/opentelemetry-collector-contrib:0.142.0'),
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'collector',
         logGroup,

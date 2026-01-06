@@ -27,7 +27,7 @@ Parameters:
 
   Last9OtlpEndpoint:
     Type: String
-    Description: Last9 OTLP endpoint URL (e.g., https://otlp.last9.io)
+    Description: Last9 OTLP endpoint URL (e.g., YOUR_LAST9_ENDPOINT)
     AllowedPattern: 'https://.*'
     ConstraintDescription: Must be a valid HTTPS URL
 
@@ -43,7 +43,7 @@ Parameters:
 
   CollectorImage:
     Type: String
-    Default: 'otel/opentelemetry-collector-contrib:0.91.0'
+    Default: 'otel/opentelemetry-collector-contrib:0.142.0'
     Description: Docker image for the OpenTelemetry Collector
 
   TaskCpu:

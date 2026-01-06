@@ -1,392 +1,541 @@
-# RDS PostgreSQL Deep Integration with Last9
+# RDS PostgreSQL Monitoring with OpenTelemetry
 
-Monitor RDS PostgreSQL using OpenTelemetry Collector on ECS Fargate, with full **Datadog DBM feature parity**.
+Complete monitoring solution for AWS RDS PostgreSQL using OpenTelemetry, providing **Datadog DBM feature parity** with three layers of metrics:
 
-> **Migration Guide**: This integration is designed for customers migrating from [Datadog Database Monitoring for RDS PostgreSQL](https://docs.datadoghq.com/database_monitoring/setup_postgres/rds/). It provides equivalent functionality using OpenTelemetry.
+1. **PostgreSQL Infrastructure Metrics** - Tables, indexes, connections, transactions
+2. **Query-Level Performance Metrics** - Individual query stats from pg_stat_statements
+3. **RDS Host Metrics** - CPU, memory, IOPS, storage from CloudWatch
 
-## Features
+All metrics exported to Last9 (or any OTLP endpoint) via OpenTelemetry.
 
-- **Full pg_stat_* coverage**: connections, transactions, locks, replication, vacuum
-- **Query performance monitoring**: pg_stat_statements with normalized queries
-- **Wait event monitoring**: real-time blocking detection + historical analysis
-- **Host-level RDS metrics**: CPU, memory, IOPS, storage via CloudWatch
-- **Log collection**: slow queries (>100ms) and errors via CloudWatch Logs
-- **Log-metric correlation**: query fingerprint, connection ID, transaction ID
+---
 
-## Architecture
+## 🎯 What You Get
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        AWS Account                          │
-│  ┌─────────────────┐      ┌─────────────────────────────┐  │
-│  │ RDS PostgreSQL  │◄────►│      ECS Fargate            │  │
-│  │                 │      │  ┌───────────────────────┐  │  │
-│  │  - Primary      │      │  │  OTEL Collector       │  │  │
-│  │  - Replicas     │      │  │  + PostgreSQL Rcvr    │  │  │
-│  └────────┬────────┘      │  │  + CloudWatch Rcvr    │  │  │
-│           │               │  │  + CloudWatch Logs    │  │  │
-│           ▼               │  └───────────┬───────────┘  │  │
-│  ┌─────────────────┐      └──────────────┼──────────────┘  │
-│  │ CloudWatch      │                     │                  │
-│  │ Logs + Metrics  │─────────────────────┤                  │
-│  └─────────────────┘                     │                  │
-│                                          │ OTLP             │
-└──────────────────────────────────────────┼──────────────────┘
-                                           ▼
-                                   ┌───────────────┐
-                                   │    Last9      │
-                                   └───────────────┘
-```
+✅ **57 metrics** across infrastructure, query, and host levels
+✅ **Query performance monitoring** with SQL text and execution stats
+✅ **RDS CloudWatch metrics** (CPU, memory, IOPS, latency, storage)
+✅ **PostgreSQL 11-15 compatible** with auto-detection
+✅ **Datadog DBM parity** at ~10% of the cost
 
-## Prerequisites
+---
 
-| Requirement | Notes |
-|-------------|-------|
-| **RDS PostgreSQL** | Version 15+ (or existing instance) |
-| **ECS Cluster** | With Fargate capacity |
-| **VPC** | Private subnets + NAT gateway |
-| **Last9 account** | For the OTLP endpoint |
+## 📊 What Each Collector Does
 
-## Quick Start
+This solution uses **3 separate collectors** to provide complete monitoring:
 
-### Option 1: CloudFormation
+| Collector | What It Collects | Source | Metrics Count |
+|-----------|-----------------|--------|---------------|
+| **OTEL Collector** | PostgreSQL infrastructure metrics (connections, transactions, tables, indexes, WAL, BGWriter) | PostgreSQL receiver | 34 metrics |
+| **DBM Collector** | Query-level performance (individual query stats, execution time, I/O, buffer cache) | pg_stat_statements | 9 metrics |
+| **CloudWatch Collector** | RDS host metrics (CPU, memory, IOPS, storage, latency, network) | AWS CloudWatch API | 14 metrics |
 
-```bash
-# Deploy the stack
-aws cloudformation deploy \
-  --template-file cloudformation/postgresql-collector.yaml \
-  --stack-name postgresql-collector-prod \
-  --parameter-overrides \
-    VpcId=vpc-xxxxxxxxx \
-    SubnetIds=subnet-aaa,subnet-bbb \
-    Environment=prod \
-    Last9OtlpEndpoint=https://otlp.last9.io \
-    RDSInstanceId=my-rds-instance \
-  --capabilities CAPABILITY_NAMED_IAM
+**Total: 57 metrics** providing complete visibility from infrastructure to query level.
 
-# Update secrets after deployment
-aws secretsmanager put-secret-value \
-  --secret-id postgresql-collector/prod/last9-auth \
-  --secret-string '{"auth_header":"Basic YOUR_AUTH_HEADER"}'
+---
 
-aws secretsmanager put-secret-value \
-  --secret-id postgresql-collector/prod/db-credentials \
-  --secret-string '{
-    "username":"otel_monitor",
-    "password":"YOUR_PASSWORD",
-    "host":"your-rds-endpoint.region.rds.amazonaws.com",
-    "port":5432,
-    "dbname":"your_database"
-  }'
-```
+## 📋 Prerequisites
 
-### Option 2: CDK
+Before starting, ensure you have:
+
+| Requirement | Details |
+|-------------|---------|
+| **RDS PostgreSQL** | Version 11+ running on AWS RDS |
+| **AWS Access** | Credentials with RDS and CloudWatch permissions |
+| **Last9 Account** | OTLP endpoint and authentication token |
+| **Docker** | For running the collectors |
+| **Network Access** | Collectors must reach RDS endpoint |
+
+---
+
+## 🚀 Quick Start - Docker Deployment (Tested)
+
+This guide uses **Docker** for local or VM-based deployment. This is the tested and verified method.
+
+> **Note**: CloudFormation and CDK templates are included in the repository but have not been tested yet. Use Docker deployment for production-ready setup.
 
 ```bash
-cd cdk
+# 1. Clone the repository
+cd aws/rds-postgresql-ecs
 
-# Install dependencies
-npm install
-
-# Deploy
-cdk deploy \
-  -c vpcId=vpc-xxxxxxxxx \
-  -c environment=prod \
-  -c last9OtlpEndpoint=https://otlp.last9.io \
-  -c rdsInstanceId=my-rds-instance
-```
-
-### Option 3: Local Testing with Docker Compose
-
-```bash
-# Copy and configure environment
+# 2. Copy environment template
 cp .env.example .env
-# Edit .env with your values
 
-# Download RDS CA bundle
-./scripts/download-rds-ca.sh
+# 3. Edit .env with your credentials (see configuration section below)
+nano .env  # or use your preferred editor
 
-# Start collector
-docker-compose up -d
+# 4. Build Docker images
+docker build -f Dockerfile -t postgresql-collector:latest .
+docker build -f Dockerfile.dbm -t dbm-collector:latest .
+docker build -f Dockerfile.cloudwatch -t cloudwatch-collector:latest .
 
-# Check health
+# 5. Start collectors
+# OTEL Collector - PostgreSQL infrastructure metrics
+docker run -d \
+  --name postgresql-collector \
+  -p 13133:13133 \
+  -p 8888:8888 \
+  -v $(pwd)/config/otel-collector-config.yaml:/etc/otel/config.yaml:ro \
+  --env-file .env \
+  otel/opentelemetry-collector-contrib:0.142.0 \
+  --config=/etc/otel/config.yaml
+
+# DBM Collector - Query-level metrics
+docker run -d \
+  --name dbm-collector \
+  --env-file .env \
+  -e OUTPUT_FORMAT=otlp \
+  -e COLLECTION_INTERVAL=30 \
+  dbm-collector:latest
+
+# CloudWatch Collector - RDS host metrics
+docker run -d \
+  --name cloudwatch-collector \
+  --env-file .env \
+  -e COLLECTION_INTERVAL=60 \
+  cloudwatch-collector:latest
+
+# 6. Verify health
 curl http://localhost:13133/health
 
-# View metrics
-curl http://localhost:8888/metrics
+# 7. Check logs
+docker logs postgresql-collector
+docker logs dbm-collector
+docker logs cloudwatch-collector
+
+# 8. Verify metrics in Last9
+# Search for: postgresql.*, postgresql_dbm_*, rds_*
 ```
 
-## Setup Steps
+---
 
-### 1. Configure RDS Parameter Group
+## 📖 Step-by-Step Deployment Guide
 
-Ensure your RDS parameter group has these settings:
+### Step 1: Prepare Your RDS Instance
 
-| Parameter | Value | Requires Reboot |
-|-----------|-------|-----------------|
-| `shared_preload_libraries` | `pg_stat_statements` | Yes |
-| `pg_stat_statements.track` | `all` | No |
-| `pg_stat_statements.max` | `10000` | Yes |
-| `track_io_timing` | `on` | No |
-| `track_activity_query_size` | `4096` | No |
-| `log_min_duration_statement` | `100` | No |
+#### 1.1 Configure RDS Parameter Group
 
-### 2. Create Monitoring User
+Modify your RDS parameter group to enable monitoring:
 
-Connect to your RDS instance and run:
+```bash
+# Via AWS CLI
+aws rds modify-db-parameter-group \
+  --db-parameter-group-name your-parameter-group \
+  --parameters \
+    "ParameterName=shared_preload_libraries,ParameterValue=pg_stat_statements,ApplyMethod=pending-reboot" \
+    "ParameterName=pg_stat_statements.track,ParameterValue=all,ApplyMethod=immediate" \
+    "ParameterName=pg_stat_statements.max,ParameterValue=10000,ApplyMethod=pending-reboot" \
+    "ParameterName=track_io_timing,ParameterValue=1,ApplyMethod=immediate" \
+    "ParameterName=track_activity_query_size,ParameterValue=4096,ApplyMethod=immediate" \
+    "ParameterName=log_min_duration_statement,ParameterValue=100,ApplyMethod=immediate"
+
+# Reboot RDS instance to apply parameter changes
+aws rds reboot-db-instance --db-instance-identifier your-rds-instance
+```
+
+Or via AWS Console:
+1. Go to RDS → Parameter Groups
+2. Select your parameter group
+3. Edit parameters:
+   - `shared_preload_libraries` = `pg_stat_statements` (requires reboot)
+   - `pg_stat_statements.track` = `all`
+   - `pg_stat_statements.max` = `10000` (requires reboot)
+   - `track_io_timing` = `on`
+   - `track_activity_query_size` = `4096`
+   - `log_min_duration_statement` = `100`
+4. Save changes and reboot your RDS instance
+
+#### 1.2 Create Monitoring User
+
+Connect to your PostgreSQL database and create the monitoring user:
 
 ```sql
--- Create monitoring user
-CREATE USER otel_monitor WITH PASSWORD 'your_secure_password';
+-- Connect as master user
+psql -h your-rds-endpoint.region.rds.amazonaws.com -U postgres -d postgres
 
--- Grant pg_monitor role (PostgreSQL 10+)
-GRANT pg_monitor TO otel_monitor;
+-- Create monitoring user
+CREATE USER otel_monitor WITH PASSWORD 'your_secure_password_here';
+
+-- Grant necessary permissions
+GRANT pg_monitor TO otel_monitor;  -- PostgreSQL 10+
+GRANT rds_superuser TO otel_monitor;  -- RDS specific
 
 -- Enable pg_stat_statements extension
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+-- Grant access to pg_stat_statements
 GRANT SELECT ON pg_stat_statements TO otel_monitor;
 
--- Grant connect permission
+-- Grant database access
 GRANT CONNECT ON DATABASE your_database TO otel_monitor;
 GRANT USAGE ON SCHEMA public TO otel_monitor;
+
+-- Create monitoring schema (for DBM collector)
+CREATE SCHEMA IF NOT EXISTS otel_monitor;
+GRANT USAGE ON SCHEMA otel_monitor TO otel_monitor;
+GRANT CREATE ON SCHEMA otel_monitor TO otel_monitor;
+
+-- Verify permissions
+\du otel_monitor
 ```
 
-Full script: [scripts/setup-db-user.sql](scripts/setup-db-user.sql)
+For a complete setup script, see: [scripts/setup-db-user.sql](scripts/setup-db-user.sql)
 
-### 3. Enable CloudWatch Log Export
+#### 1.3 Configure Security Group
 
-1. Go to RDS Console → Modify Instance
-2. Under "Log exports", enable **PostgreSQL log**
-3. Apply changes (may require brief downtime)
-
-### 4. Configure RDS Security Group
-
-Add inbound rule to allow the collector to connect:
-
-```
-Type: PostgreSQL
-Port: 5432
-Source: <Collector Security Group ID>
-Description: PostgreSQL collector access
-```
-
-### 5. Store Credentials in Secrets Manager
+Add inbound rule to allow collector access:
 
 ```bash
-# Store Last9 auth header
-aws secretsmanager create-secret \
-  --name postgresql-collector/prod/last9-auth \
-  --secret-string '{"auth_header":"Basic YOUR_BASE64_AUTH"}'
+# Get your security group ID
+aws rds describe-db-instances \
+  --db-instance-identifier your-rds-instance \
+  --query 'DBInstances[0].VpcSecurityGroups[0].VpcSecurityGroupId'
 
-# Store database credentials
-aws secretsmanager create-secret \
-  --name postgresql-collector/prod/db-credentials \
-  --secret-string '{
-    "username":"otel_monitor",
-    "password":"YOUR_SECURE_PASSWORD",
-    "host":"your-rds-endpoint.region.rds.amazonaws.com",
-    "port":5432,
-    "dbname":"your_database"
-  }'
+# Add inbound rule (replace with your collector security group ID or CIDR)
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxxxxxxxx \
+  --protocol tcp \
+  --port 5432 \
+  --source-group <collector-security-group-id>
 ```
 
-### 6. Deploy and Verify
+Or via AWS Console:
+1. RDS → Databases → Select your instance
+2. Click on VPC security group
+3. Add inbound rule: Type=PostgreSQL, Port=5432, Source=Collector SG
+
+---
+
+### Step 2: Configure Last9 Credentials
+
+#### 2.1 Get Last9 OTLP Endpoint and Token
+
+1. Log in to your Last9 account
+2. Navigate to **Settings → Integrations**
+3. Copy your **OTLP Endpoint** (e.g., `YOUR_LAST9_ENDPOINT`)
+4. Copy or create an **Authentication Token**
+5. Encode credentials: `echo -n "username:token" | base64`
+
+---
+
+### Step 3: Configure Environment Variables
+
+Create your `.env` file with the required credentials:
 
 ```bash
-# Check ECS service status
-aws ecs describe-services \
-  --cluster postgresql-collector-prod \
-  --services postgresql-collector-prod
+# Copy template
+cp .env.example .env
 
-# View collector logs
-aws logs tail /ecs/postgresql-collector/prod --follow
-
-# Verify metrics in Last9
-# Navigate to Last9 dashboard and search for postgresql.* metrics
+# Edit with your actual values
+nano .env
 ```
 
-## Metrics Collected
+Your `.env` should contain:
+```bash
+# PostgreSQL Connection
+PG_ENDPOINT=your-rds-endpoint.region.rds.amazonaws.com
+PG_PORT=5432
+PG_USERNAME=otel_monitor
+PG_PASSWORD=your_secure_password_here
+PG_DATABASE=your_database
 
-### PostgreSQL Metrics (via pg_stat_*)
+# AWS Configuration
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+RDS_INSTANCE_ID=your-rds-instance
 
-| Metric | Description |
-|--------|-------------|
-| `postgresql.connection.count` | Active connections by state |
-| `postgresql.commits` | Transaction commits per database |
-| `postgresql.rollbacks` | Transaction rollbacks per database |
-| `postgresql.deadlocks` | Deadlock count |
-| `postgresql.blocks_read` | Blocks read (cache vs disk) |
-| `postgresql.rows` | Row operations (fetched, inserted, updated, deleted) |
-| `postgresql.db_size` | Database size in bytes |
-| `postgresql.replication.data_delay` | Replication lag in seconds |
-| `postgresql.wal.lag` | WAL lag in bytes |
-| `postgresql.table.vacuum.count` | Vacuum operations |
+# Last9 Configuration
+LAST9_OTLP_ENDPOINT=YOUR_LAST9_ENDPOINT
+LAST9_AUTH_HEADER=Basic YOUR_BASE64_CREDENTIALS
 
-### RDS Host Metrics (via CloudWatch)
+# Environment
+ENVIRONMENT=prod
+```
 
-| Metric | Description |
-|--------|-------------|
-| `aws.rds.CPUUtilization` | CPU utilization percentage |
-| `aws.rds.DatabaseConnections` | Active database connections |
-| `aws.rds.FreeableMemory` | Available RAM |
-| `aws.rds.FreeStorageSpace` | Available storage |
-| `aws.rds.ReadIOPS` / `aws.rds.WriteIOPS` | I/O operations per second |
-| `aws.rds.ReadLatency` / `aws.rds.WriteLatency` | I/O latency |
-| `aws.rds.ReplicaLag` | Replication lag (read replicas) |
+---
 
-### Logs Collected
+### Step 4: Deploy Collectors with Docker
 
-- **Slow queries**: Queries exceeding 100ms (configurable via `log_min_duration_statement`)
-- **Errors**: PostgreSQL error and warning messages
+```bash
+# 1. Create .env file (use the template)
+cp .env.example .env
 
-## Configuration
+# 2. Edit .env with your actual credentials
+# Use your favorite editor to fill in:
+# - PG_ENDPOINT, PG_USERNAME, PG_PASSWORD, PG_DATABASE
+# - AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# - RDS_INSTANCE_ID
+# - LAST9_OTLP_ENDPOINT, LAST9_AUTH_HEADER
+nano .env
+
+# 3. Build Docker images
+docker build -f Dockerfile -t postgresql-collector:latest .
+docker build -f Dockerfile.dbm -t dbm-collector:latest .
+docker build -f Dockerfile.cloudwatch -t cloudwatch-collector:latest .
+
+# 4. Start OTEL Collector (PostgreSQL infrastructure metrics)
+docker run -d \
+  --name postgresql-collector \
+  -p 13133:13133 \
+  -p 8888:8888 \
+  -p 55679:55679 \
+  -v $(pwd)/config/otel-collector-config.yaml:/etc/otel/config.yaml:ro \
+  --env-file .env \
+  otel/opentelemetry-collector-contrib:0.142.0 \
+  --config=/etc/otel/config.yaml
+
+# 5. Start DBM Collector (Query-level metrics)
+docker run -d \
+  --name dbm-collector \
+  --env-file .env \
+  -e OUTPUT_FORMAT=otlp \
+  -e COLLECTION_INTERVAL=30 \
+  dbm-collector:latest
+
+# 6. Start CloudWatch Collector (RDS host metrics)
+docker run -d \
+  --name cloudwatch-collector \
+  --env-file .env \
+  -e COLLECTION_INTERVAL=60 \
+  cloudwatch-collector:latest
+
+# 7. Verify all containers are running
+docker ps | grep -E "postgresql-collector|dbm-collector|cloudwatch-collector"
+
+# 8. Check logs for any errors
+docker logs postgresql-collector
+docker logs dbm-collector
+docker logs cloudwatch-collector
+```
+
+---
+
+### Step 5: Verify Deployment
+
+#### 5.1 Check Collector Health
+
+```bash
+# Check OTEL Collector health endpoint
+curl http://localhost:13133/health
+
+# Expected response:
+# {"status":"Server available","upSince":"...","uptime":"..."}
+
+# Check all container statuses
+docker ps --format "table {{.Names}}\t{{.Status}}"
+
+# View recent logs from each collector
+docker logs --tail 50 postgresql-collector
+docker logs --tail 50 dbm-collector
+docker logs --tail 50 cloudwatch-collector
+```
+
+#### 5.2 Verify Metrics in Last9
+
+1. Log in to Last9
+2. Navigate to **Explore → Metrics**
+3. Search for:
+   - `postgresql.*` - Infrastructure metrics (34 metrics)
+   - `postgresql_dbm_*` - Query-level metrics (9 metrics)
+   - `rds_*` - CloudWatch host metrics (14 metrics)
+
+Example queries:
+```promql
+# CPU Utilization
+rds_cpu_utilization_percent{db_instance_id="your-rds-instance"}
+
+# Top 10 slowest queries
+topk(10, postgresql_dbm_query_time_milliseconds_total)
+
+# Database connections
+postgresql_backends{database="your_database"}
+
+# Buffer cache hit ratio
+sum(postgresql_dbm_query_buffer_hits_total) /
+(sum(postgresql_dbm_query_buffer_hits_total) + sum(postgresql_dbm_query_buffer_reads_total)) * 100
+```
+
+---
+
+## 📊 Metrics Reference
+
+### 1. PostgreSQL Infrastructure Metrics (34 metrics)
+
+**Source**: OpenTelemetry PostgreSQL Receiver
+
+| Metric | Description | Labels |
+|--------|-------------|--------|
+| `postgresql.backends` | Active connections | `database`, `state` |
+| `postgresql.commits` | Transaction commits | `database` |
+| `postgresql.rollbacks` | Transaction rollbacks | `database` |
+| `postgresql.operations` | Row operations (ins/upd/del) | `database`, `table`, `operation` |
+| `postgresql.rows` | Live/dead rows | `database`, `table`, `state` |
+| `postgresql.blocks_read` | Block I/O | `database`, `table`, `source` |
+| `postgresql.db_size` | Database size | `database` |
+| `postgresql.table.size` | Table size | `database`, `table` |
+| `postgresql.index.scans` | Index scans | `database`, `table`, `index` |
+| `postgresql.bgwriter.*` | Background writer stats | - |
+| `postgresql.wal.age` | WAL age | `database` |
+
+### 2. Query-Level DBM Metrics (9 metrics)
+
+**Source**: Custom DBM Collector (pg_stat_statements)
+
+| Metric | Description | Labels |
+|--------|-------------|--------|
+| `postgresql_dbm_query_calls_total` | Query execution count | `database`, `username`, `query_signature` |
+| `postgresql_dbm_query_time_milliseconds_total` | Total execution time | `database`, `username`, `query_signature` |
+| `postgresql_dbm_query_rows_total` | Rows returned/affected | `database`, `username`, `query_signature` |
+| `postgresql_dbm_query_buffer_hits_total` | Buffer cache hits | `database`, `username`, `query_signature` |
+| `postgresql_dbm_query_buffer_reads_total` | Disk reads | `database`, `username`, `query_signature` |
+| `postgresql_dbm_query_io_read_time_milliseconds_total` | I/O read time | `database`, `username`, `query_signature` |
+| `postgresql_dbm_query_io_write_time_milliseconds_total` | I/O write time | `database`, `username`, `query_signature` |
+| `postgresql_dbm_query_info` | Query text mapping | `database`, `username`, `query_signature`, `query` |
+| `postgresql_dbm_active_queries` | Currently active queries | `database` |
+
+### 3. RDS CloudWatch Metrics (14 metrics)
+
+**Source**: Custom CloudWatch Collector
+
+| Metric | Description | Labels |
+|--------|-------------|--------|
+| `rds_cpu_utilization_percent` | CPU usage | `db_instance_id`, `cloud_region` |
+| `rds_memory_freeable_bytes` | Available memory | `db_instance_id`, `cloud_region` |
+| `rds_memory_swap_usage_bytes` | Swap usage | `db_instance_id`, `cloud_region` |
+| `rds_storage_free_bytes` | Free storage space | `db_instance_id`, `cloud_region` |
+| `rds_iops_read_per_second` | Read IOPS | `db_instance_id`, `cloud_region` |
+| `rds_iops_write_per_second` | Write IOPS | `db_instance_id`, `cloud_region` |
+| `rds_throughput_read_bytes_per_second` | Read throughput | `db_instance_id`, `cloud_region` |
+| `rds_throughput_write_bytes_per_second` | Write throughput | `db_instance_id`, `cloud_region` |
+| `rds_latency_read_seconds` | Read latency | `db_instance_id`, `cloud_region` |
+| `rds_latency_write_seconds` | Write latency | `db_instance_id`, `cloud_region` |
+| `rds_connections_ratio` | Database connections | `db_instance_id`, `cloud_region` |
+| `rds_network_receive_throughput_bytes_per_second` | Network RX | `db_instance_id`, `cloud_region` |
+| `rds_network_transmit_throughput_bytes_per_second` | Network TX | `db_instance_id`, `cloud_region` |
+| `rds_disk_queue_depth_ratio` | Disk queue depth | `db_instance_id`, `cloud_region` |
+
+---
+
+## 🔧 Configuration
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `PG_ENDPOINT` | RDS endpoint hostname | Yes |
-| `PG_PORT` | PostgreSQL port (default: 5432) | No |
-| `PG_USERNAME` | Monitoring user | Yes |
-| `PG_PASSWORD` | Monitoring user password | Yes |
-| `PG_DATABASE` | Database to connect to | Yes |
-| `AWS_REGION` | AWS region | Yes |
-| `RDS_INSTANCE_ID` | RDS instance identifier | Yes |
-| `LAST9_OTLP_ENDPOINT` | Last9 OTLP endpoint | Yes |
-| `LAST9_AUTH_HEADER` | Last9 authentication header | Yes |
-| `ENVIRONMENT` | Environment tag (prod/staging/dev) | No |
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `PG_ENDPOINT` | RDS endpoint hostname | Yes | - |
+| `PG_PORT` | PostgreSQL port | No | `5432` |
+| `PG_USERNAME` | Monitoring user | Yes | - |
+| `PG_PASSWORD` | Monitoring password | Yes | - |
+| `PG_DATABASE` | Database name | Yes | - |
+| `AWS_REGION` | AWS region | Yes | `us-east-1` |
+| `AWS_ACCESS_KEY_ID` | AWS access key | Yes* | - |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key | Yes* | - |
+| `AWS_SESSION_TOKEN` | AWS session token | No | - |
+| `RDS_INSTANCE_ID` | RDS instance identifier | Yes | - |
+| `LAST9_OTLP_ENDPOINT` | Last9 OTLP endpoint | Yes | - |
+| `LAST9_AUTH_HEADER` | Last9 auth header | Yes | - |
+| `ENVIRONMENT` | Environment tag | No | `dev` |
+| `COLLECTION_INTERVAL` | Collection interval (seconds) | No | `30` |
 
-### Collector Resource Sizing
+*Not required if using IAM roles (ECS task role)
 
-| RDS Instances | Databases | CPU | Memory |
-|---------------|-----------|-----|--------|
-| 1-5 | 1-10 | 256 | 512 MB |
-| 5-15 | 10-50 | 512 | 1024 MB |
-| 15-30 | 50-100 | 1024 | 2048 MB |
-| 30+ | 100+ | 2048 | 4096 MB |
+---
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
-### Collector not starting
+### Problem: Collector not starting
 
+**Symptoms**: ECS task keeps restarting
+
+**Solutions**:
 ```bash
-# Check ECS task logs
+# Check logs
 aws logs tail /ecs/postgresql-collector/prod --since 1h
 
 # Common issues:
-# - Invalid credentials in Secrets Manager
-# - Security group blocking PostgreSQL port
-# - RDS parameter group not configured
+# 1. Invalid credentials → Check Secrets Manager
+# 2. Network connectivity → Check security groups
+# 3. Parameter group → Verify pg_stat_statements is enabled
 ```
 
-### No metrics appearing
+### Problem: No metrics in Last9
 
-1. Verify collector health: `curl http://localhost:13133/health`
-2. Check PostgreSQL connectivity from collector
-3. Verify pg_stat_statements extension is enabled
-4. Check Last9 auth header is correct
-
-### Connection refused to RDS
-
+**Solutions**:
 ```bash
-# Verify security group allows collector → RDS
-aws ec2 describe-security-groups --group-ids sg-xxx
+# 1. Verify collector health
+curl http://localhost:13133/health
 
-# Test from collector container
-docker exec -it postgresql-collector sh
-wget -qO- http://localhost:13133/health
+# 2. Check OTLP endpoint
+curl -v YOUR_LAST9_ENDPOINT/health
+
+# 3. Verify auth header
+echo "YOUR_BASE64_STRING" | base64 -d
+
+# 4. Check collector logs
+docker logs postgresql-collector | grep -i error
 ```
 
-### pg_stat_statements empty
+### Problem: pg_stat_statements returns empty
 
+**Solutions**:
 ```sql
--- Check extension is loaded
+-- 1. Verify extension exists
 SELECT * FROM pg_extension WHERE extname = 'pg_stat_statements';
 
--- Check parameter
+-- 2. Check parameter
 SHOW shared_preload_libraries;
+-- Should show: pg_stat_statements
 
--- If empty, reboot RDS instance after setting shared_preload_libraries
+-- 3. Check stats
+SELECT count(*) FROM pg_stat_statements;
+-- Should show > 0
+
+-- 4. If empty, reboot RDS instance after setting shared_preload_libraries
 ```
 
-## Validation (Datadog Migration)
+### Problem: CloudWatch metrics not appearing
 
-When running in parallel with Datadog, compare these key metrics:
+**Solutions**:
+```bash
+# 1. Verify AWS credentials
+aws sts get-caller-identity
 
-| Metric Type | Datadog | Last9 (OTEL) |
-|-------------|---------|--------------|
-| Connections | `postgresql.connections` | `postgresql.connection.count` |
-| Commits | `postgresql.commits` | `postgresql.commits` |
-| Cache hit ratio | `postgresql.buffer_hit` | `postgresql.blocks_read{source="cache"}` |
-| Replication lag | `postgresql.replication_delay` | `postgresql.replication.data_delay` |
-| RDS CPU | `aws.rds.cpuutilization` | `aws.rds.CPUUtilization` |
+# 2. Test CloudWatch access
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name CPUUtilization \
+  --dimensions Name=DBInstanceIdentifier,Value=your-rds-instance \
+  --start-time 2024-01-01T00:00:00Z \
+  --end-time 2024-01-01T01:00:00Z \
+  --period 3600 \
+  --statistics Average
 
-## Files
-
-```
-aws/rds-postgresql-ecs/
-├── README.md                           # This file
-├── SPEC.md                             # Detailed specification
-├── docker-compose.yaml                 # Local testing
-├── Dockerfile                          # Custom collector image
-├── .env.example                        # Environment template
-├── .gitignore                          # Git ignore rules
-├── config/
-│   ├── otel-collector-config.yaml      # OTEL Collector config
-│   └── queries.yaml                    # Custom PostgreSQL queries
-├── scripts/
-│   ├── setup-db-user.sql               # Database user setup
-│   └── download-rds-ca.sh              # Download RDS CA bundle
-├── cloudformation/
-│   └── postgresql-collector.yaml       # CloudFormation template
-└── cdk/
-    ├── package.json
-    ├── tsconfig.json
-    ├── cdk.json
-    ├── bin/app.ts                      # CDK app entry
-    └── lib/postgresql-collector-stack.ts
+# 3. Check collector logs
+docker logs cloudwatch-collector
 ```
 
-## Datadog DBM Feature Mapping
+---
 
-This integration provides feature parity with [Datadog Database Monitoring](https://docs.datadoghq.com/database_monitoring/setup_postgres/rds/):
+## 📚 Additional Resources
 
-| Datadog DBM Feature | Last9 Implementation | Status |
-|---------------------|---------------------|--------|
-| Query Metrics | OTEL PostgreSQL receiver + pg_stat_statements | ✅ |
-| Query Samples | DBM collector polling pg_stat_activity | ✅ |
-| EXPLAIN Plans | `otel_monitor.explain_statement()` function | ✅ |
-| Wait Events | pg_stat_activity wait_event columns | ✅ |
-| Blocking Queries | `otel_monitor.blocking_queries` view | ✅ |
-| Database Load | CloudWatch RDS metrics | ✅ |
-| Connection Metrics | OTEL PostgreSQL receiver | ✅ |
-| Replication Lag | pg_stat_replication + CloudWatch | ✅ |
-| Slow Query Logs | CloudWatch Logs receiver | ✅ |
-| Query Normalization | Hash-based query signatures | ✅ |
-| Database Autodiscovery | Tag-based RDS discovery | ✅ |
-
-### Database User Comparison
-
-The setup script (`scripts/setup-db-user.sql`) creates equivalent permissions to Datadog's setup:
-
-```sql
--- Datadog creates:
-CREATE SCHEMA datadog;
-CREATE FUNCTION datadog.pg_stat_activity() ...
-CREATE FUNCTION datadog.pg_stat_statements() ...
-
--- This integration creates:
-CREATE SCHEMA otel_monitor;
-CREATE FUNCTION otel_monitor.pg_stat_activity() ...
-CREATE FUNCTION otel_monitor.pg_stat_statements() ...
-CREATE FUNCTION otel_monitor.explain_statement() ...
-CREATE VIEW otel_monitor.blocking_queries ...
-CREATE VIEW otel_monitor.wait_events ...
-```
-
-## Support
-
+- [OpenTelemetry Collector Documentation](https://opentelemetry.io/docs/collector/)
+- [PostgreSQL Receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/postgresqlreceiver)
+- [AWS RDS Best Practices](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_BestPractices.html)
 - [Last9 Documentation](https://docs.last9.io)
-- [Datadog DBM Reference](https://docs.datadoghq.com/database_monitoring/setup_postgres/rds/)
-- [OpenTelemetry PostgreSQL Receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/postgresqlreceiver)
-- [AWS RDS User Guide](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/)
+- [Datadog DBM Reference](https://docs.datadoghq.com/database_monitoring/setup_postgres/rds/) (for feature comparison)
+
+---
+
+## 🤝 Support
+
+For issues or questions:
+1. Check the [Troubleshooting](#-troubleshooting) section
+2. Review [SPEC.md](SPEC.md) for technical details
+3. Open an issue in the repository
+
+---
+
+## 📝 License
+
+This example is provided as-is for reference and educational purposes.
