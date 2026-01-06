@@ -1,0 +1,158 @@
+# OpenTelemetry Collector Configuration for RDS PostgreSQL Deep Integration
+# Migrating from Datadog DBM to Last9 via OTLP
+
+receivers:
+  # PostgreSQL metrics receiver - connects directly to RDS
+  postgresql:
+    endpoint: ${env:PG_ENDPOINT}:${env:PG_PORT}
+    transport: tcp
+    username: ${env:PG_USERNAME}
+    password: ${env:PG_PASSWORD}
+    databases:
+      - ${env:PG_DATABASE}
+    collection_interval: 30s
+    tls:
+      insecure: false
+      insecure_skip_verify: false
+      ca_file: /etc/ssl/certs/rds-combined-ca-bundle.pem
+    # All default metrics will be collected
+
+  # Note: CloudWatch metrics receiver for RDS is not directly supported
+  # PostgreSQL receiver provides comprehensive database metrics
+  # CloudWatch RDS metrics are collected via the separate cloudwatch-collector container
+
+  # Prometheus receiver for collector self-monitoring
+  prometheus/self:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector-self'
+          scrape_interval: 30s
+          static_configs:
+            - targets: ['localhost:8888']
+              labels:
+                service: postgresql-collector
+
+processors:
+  # Batch processing for efficiency
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+    send_batch_max_size: 1500
+
+  # Memory limiter for stability
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  # Add resource attributes to all telemetry
+  resource:
+    attributes:
+      - key: service.name
+        value: postgresql-collector
+        action: upsert
+      - key: service.version
+        value: "1.0.0"
+        action: upsert
+      - key: deployment.environment
+        value: ${env:ENVIRONMENT}
+        action: upsert
+      - key: db.system
+        value: postgresql
+        action: upsert
+      - key: cloud.provider
+        value: aws
+        action: upsert
+      - key: cloud.platform
+        value: aws_rds
+        action: upsert
+      - key: cloud.region
+        value: ${env:AWS_REGION}
+        action: upsert
+      - key: db.instance.id
+        value: ${env:RDS_INSTANCE_ID}
+        action: upsert
+
+  # Transform processor to promote resource attributes to metric labels
+  transform/metrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          # Promote resource attributes to data point attributes so they become Prometheus labels
+          - set(attributes["db_system"], "postgresql")
+          - set(attributes["database"], resource.attributes["postgresql.database.name"])
+          - set(attributes["table"], resource.attributes["postgresql.table.name"])
+          - set(attributes["cloud_region"], resource.attributes["cloud.region"])
+          - set(attributes["cloud_provider"], resource.attributes["cloud.provider"])
+          - set(attributes["cloud_platform"], resource.attributes["cloud.platform"])
+          - set(attributes["db_instance_id"], resource.attributes["db.instance.id"])
+          - set(attributes["environment"], resource.attributes["deployment.environment"])
+          - set(attributes["service_name"], resource.attributes["service.name"])
+    # NOTE: Resource attributes don't automatically become Prometheus labels in OTLP export
+    # We must explicitly promote them to data point attributes using the transform processor
+
+  # Filter processor to drop noisy metrics if needed
+  filter/metrics:
+    metrics:
+      exclude:
+        match_type: regexp
+        metric_names:
+          - ".*_total$"  # Exclude if duplicating counters
+
+exporters:
+  # Last9 OTLP exporter
+  otlp/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_AUTH_HEADER}
+    tls:
+      insecure: false
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+  # Debug exporter for troubleshooting (disable in production)
+  debug:
+    verbosity: detailed
+    sampling_initial: 2
+    sampling_thereafter: 2
+
+extensions:
+  # Health check endpoint for ECS health checks
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /health
+
+  # Performance profiling pages
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, zpages]
+
+  pipelines:
+    # Metrics pipeline
+    metrics:
+      receivers: [postgresql, prometheus/self]
+      processors: [memory_limiter, transform/metrics, resource, batch]
+      exporters: [otlp/last9, debug]
+
+  telemetry:
+    logs:
+      level: info
+      encoding: json
+      output_paths: [stdout]
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888

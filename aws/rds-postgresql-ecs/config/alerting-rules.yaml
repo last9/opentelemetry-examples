@@ -1,0 +1,260 @@
+# Alerting Rules for PostgreSQL Monitoring
+# Import these into Last9 or your alerting system
+
+# ==============================================================================
+# Critical Alerts - Immediate attention required
+# ==============================================================================
+
+groups:
+  - name: postgresql-critical
+    rules:
+      # High connection usage - database may become unavailable
+      - alert: PostgreSQLHighConnections
+        expr: |
+          (postgresql_connection_count / postgresql_connection_max) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL connections above 90% of max"
+          description: |
+            Database {{ $labels.db_instance_id }} has {{ $value | humanizePercentage }}
+            of max connections in use. Risk of connection exhaustion.
+          runbook_url: https://docs.last9.io/runbooks/postgresql-high-connections
+
+      # Critical replication lag - data loss risk
+      - alert: PostgreSQLReplicationLagCritical
+        expr: |
+          postgresql_replication_data_delay > 60
+        for: 2m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL replication lag exceeds 60 seconds"
+          description: |
+            Replica {{ $labels.replica_address }} is {{ $value | humanizeDuration }}
+            behind primary. Risk of data inconsistency.
+          runbook_url: https://docs.last9.io/runbooks/postgresql-replication-lag
+
+      # Deadlocks detected
+      - alert: PostgreSQLDeadlocks
+        expr: |
+          rate(postgresql_deadlocks[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL deadlocks detected"
+          description: |
+            Database {{ $labels.db_name }} is experiencing deadlocks.
+            Rate: {{ $value | humanize }} per second.
+          runbook_url: https://docs.last9.io/runbooks/postgresql-deadlocks
+
+      # Long-running blocking queries
+      - alert: PostgreSQLBlockingQueries
+        expr: |
+          pg_blocking_queries_blocked_duration_seconds > 300
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "Long-running blocking queries detected"
+          description: |
+            Query blocked for {{ $value | humanizeDuration }} on {{ $labels.database }}.
+            Blocking PID: {{ $labels.blocking_pid }}
+          runbook_url: https://docs.last9.io/runbooks/postgresql-blocking-queries
+
+      # RDS storage nearly full
+      - alert: RDSStorageCritical
+        expr: |
+          aws_rds_FreeStorageSpace < 5368709120  # 5GB
+        for: 5m
+        labels:
+          severity: critical
+          service: rds
+        annotations:
+          summary: "RDS storage space critically low"
+          description: |
+            RDS instance {{ $labels.DBInstanceIdentifier }} has only
+            {{ $value | humanize1024 }}B free storage.
+          runbook_url: https://docs.last9.io/runbooks/rds-storage-full
+
+      # Collector down
+      - alert: PostgreSQLCollectorDown
+        expr: |
+          up{job="postgresql-collector"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: monitoring
+        annotations:
+          summary: "PostgreSQL collector is down"
+          description: "The PostgreSQL monitoring collector is not running."
+          runbook_url: https://docs.last9.io/runbooks/collector-down
+
+# ==============================================================================
+# Warning Alerts - Attention needed, not immediately critical
+# ==============================================================================
+
+  - name: postgresql-warning
+    rules:
+      # Connection usage trending high
+      - alert: PostgreSQLHighConnectionsWarning
+        expr: |
+          (postgresql_connection_count / postgresql_connection_max) > 0.75
+        for: 10m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL connections above 75% of max"
+          description: |
+            Database {{ $labels.db_instance_id }} has {{ $value | humanizePercentage }}
+            of max connections. Consider scaling or connection pooling.
+
+      # Replication lag warning
+      - alert: PostgreSQLReplicationLagWarning
+        expr: |
+          postgresql_replication_data_delay > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL replication lag exceeds 10 seconds"
+          description: |
+            Replica {{ $labels.replica_address }} is {{ $value | humanizeDuration }} behind.
+
+      # High slow query rate
+      - alert: PostgreSQLSlowQueries
+        expr: |
+          rate(pg_slow_queries_count[5m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "High rate of slow queries"
+          description: |
+            Database {{ $labels.db_name }} has {{ $value | humanize }} slow queries/sec.
+            Consider query optimization or indexing.
+
+      # Cache hit ratio low
+      - alert: PostgreSQLCacheHitRatioLow
+        expr: |
+          (postgresql_blocks_read{source="cache"} /
+           (postgresql_blocks_read{source="cache"} + postgresql_blocks_read{source="disk"})) < 0.95
+        for: 15m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL cache hit ratio below 95%"
+          description: |
+            Database {{ $labels.db_name }} has cache hit ratio of {{ $value | humanizePercentage }}.
+            Consider increasing shared_buffers.
+
+      # Storage space warning
+      - alert: RDSStorageWarning
+        expr: |
+          aws_rds_FreeStorageSpace < 10737418240  # 10GB
+        for: 30m
+        labels:
+          severity: warning
+          service: rds
+        annotations:
+          summary: "RDS free storage space below 10GB"
+          description: |
+            RDS instance {{ $labels.DBInstanceIdentifier }} has
+            {{ $value | humanize1024 }}B free storage.
+
+      # High CPU
+      - alert: RDSHighCPU
+        expr: |
+          aws_rds_CPUUtilization > 80
+        for: 15m
+        labels:
+          severity: warning
+          service: rds
+        annotations:
+          summary: "RDS CPU utilization above 80%"
+          description: |
+            RDS instance {{ $labels.DBInstanceIdentifier }} CPU at {{ $value }}%.
+
+      # Memory pressure
+      - alert: RDSLowMemory
+        expr: |
+          aws_rds_FreeableMemory < 536870912  # 512MB
+        for: 10m
+        labels:
+          severity: warning
+          service: rds
+        annotations:
+          summary: "RDS freeable memory below 512MB"
+          description: |
+            RDS instance {{ $labels.DBInstanceIdentifier }} has only
+            {{ $value | humanize1024 }}B freeable memory.
+
+      # High disk queue
+      - alert: RDSHighDiskQueue
+        expr: |
+          aws_rds_DiskQueueDepth > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: rds
+        annotations:
+          summary: "RDS disk queue depth high"
+          description: |
+            RDS instance {{ $labels.DBInstanceIdentifier }} has disk queue depth of {{ $value }}.
+            I/O bottleneck likely.
+
+# ==============================================================================
+# Collector Health Alerts
+# ==============================================================================
+
+  - name: collector-health
+    rules:
+      # Scrape errors
+      - alert: CollectorScrapeErrors
+        expr: |
+          rate(otelcol_receiver_refused_metric_points[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitoring
+        annotations:
+          summary: "PostgreSQL collector experiencing scrape errors"
+          description: |
+            Collector is refusing {{ $value | humanize }} metric points per second.
+
+      # High memory usage
+      - alert: CollectorHighMemory
+        expr: |
+          otelcol_process_memory_rss > 400000000  # 400MB
+        for: 10m
+        labels:
+          severity: warning
+          service: monitoring
+        annotations:
+          summary: "PostgreSQL collector memory usage high"
+          description: |
+            Collector is using {{ $value | humanize1024 }}B of memory.
+
+      # Export failures
+      - alert: CollectorExportFailures
+        expr: |
+          rate(otelcol_exporter_send_failed_metric_points[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitoring
+        annotations:
+          summary: "PostgreSQL collector failing to export metrics"
+          description: |
+            Collector is failing to export {{ $value | humanize }} metric points per second.
+            Check Last9 connectivity.

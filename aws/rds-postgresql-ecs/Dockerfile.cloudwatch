@@ -1,0 +1,20 @@
+# CloudWatch Collector - RDS host metrics from CloudWatch
+# Collects CPU, memory, IOPS, network, etc. from AWS CloudWatch
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY scripts/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy collector script
+COPY scripts/cloudwatch-collector.py .
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD pgrep -f cloudwatch-collector.py || exit 1
+
+# Run collector
+CMD ["python", "-u", "cloudwatch-collector.py"]

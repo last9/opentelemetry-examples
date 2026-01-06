@@ -1,0 +1,10 @@
+# DBM Collector Python dependencies
+psycopg2-binary>=2.9.9
+
+# CloudWatch Collector dependencies
+boto3>=1.34.0
+
+# OpenTelemetry for OTLP export
+opentelemetry-api>=1.22.0
+opentelemetry-sdk>=1.22.0
+opentelemetry-exporter-otlp-proto-http>=1.22.0

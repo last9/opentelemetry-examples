@@ -1,0 +1,30 @@
+# DBM Collector - Query samples, explain plans, wait events
+# Provides Datadog DBM feature parity for Last9
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download RDS CA bundle
+RUN wget -q https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+    -O /etc/ssl/certs/rds-combined-ca-bundle.pem
+
+# Install Python dependencies
+COPY scripts/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy collector script
+COPY scripts/dbm-collector.py .
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD pgrep -f dbm-collector.py || exit 1
+
+# Run collector
+CMD ["python", "-u", "dbm-collector.py"]
