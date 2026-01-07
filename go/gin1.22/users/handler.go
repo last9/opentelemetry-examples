@@ -5,27 +5,21 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.opentelemetry.io/otel/attribute"
-	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type UsersHandler struct {
-	controller *UsersController // Changed from UsersControllers to UsersController
-	tracer     oteltrace.Tracer
+	controller *UsersController
 }
 
-func NewUsersHandler(c *UsersController, t oteltrace.Tracer) *UsersHandler {
+func NewUsersHandler(c *UsersController) *UsersHandler {
 	return &UsersHandler{
 		controller: c,
-		tracer:     t,
 	}
 }
 
 func (u *UsersHandler) GetUsers(c *gin.Context) {
-	ctx, span := u.tracer.Start(c.Request.Context(), "GetUsers")
-	defer span.End()
-
-	users, err := u.controller.GetUsers(ctx)
+	// go-agent automatically creates spans for Gin handlers
+	users, err := u.controller.GetUsers(c.Request.Context())
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to fetch users"})
 		return
@@ -34,11 +28,6 @@ func (u *UsersHandler) GetUsers(c *gin.Context) {
 }
 
 func (u *UsersHandler) GetUser(c *gin.Context) {
-	_, span := u.tracer.Start(c.Request.Context(), "GetUser", oteltrace.WithAttributes(
-		attribute.String("user.id", c.Param("id")),
-	))
-	defer span.End()
-
 	id := c.Param("id")
 	user, err := u.controller.GetUser(c.Request.Context(), id)
 	if err != nil {
@@ -49,9 +38,7 @@ func (u *UsersHandler) GetUser(c *gin.Context) {
 }
 
 func (u *UsersHandler) CreateUser(c *gin.Context) {
-	log.Println("here")
-	_, span := u.tracer.Start(c.Request.Context(), "CreateUser")
-	defer span.End()
+	log.Println("Creating user")
 	var newUser User
 	if err := c.ShouldBindJSON(&newUser); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid input data"})
@@ -66,17 +53,11 @@ func (u *UsersHandler) CreateUser(c *gin.Context) {
 }
 
 func (u *UsersHandler) UpdateUser(c *gin.Context) {
-	_, span := u.tracer.Start(c.Request.Context(), "UpdateUser", oteltrace.WithAttributes(
-		attribute.String("user.id", c.Param("id")),
-	))
-
-	defer span.End()
-
 	id := c.Param("id")
-	idInt, err := strconv.ParseInt(id, 2, 32)
-
+	idInt, err := strconv.ParseInt(id, 10, 32)
 	if err != nil {
 		c.JSON(400, gin.H{"message": "Invalid ID"})
+		return
 	}
 
 	name := c.PostForm("name")
@@ -89,16 +70,11 @@ func (u *UsersHandler) UpdateUser(c *gin.Context) {
 }
 
 func (u *UsersHandler) DeleteUser(c *gin.Context) {
-	_, span := u.tracer.Start(c.Request.Context(), "UpdateUser", oteltrace.WithAttributes(
-		attribute.String("user.id", c.Param("id")),
-	))
-	defer span.End()
-
 	id := c.Param("id")
-	idInt, err := strconv.ParseInt(id, 2, 32)
-
+	idInt, err := strconv.ParseInt(id, 10, 32)
 	if err != nil {
 		c.JSON(400, gin.H{"message": "Invalid ID"})
+		return
 	}
 
 	err = u.controller.DeleteUser(c.Request.Context(), int(idInt))

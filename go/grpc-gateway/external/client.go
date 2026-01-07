@@ -8,10 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
+	httpagent "github.com/last9/go-agent/integrations/http"
 )
 
 type Client struct {
@@ -34,92 +31,52 @@ type UserInfo struct {
 	MemberSince time.Time `json:"member_since"`
 }
 
-// NewClient creates a new external API client with OTel instrumentation
+// NewClient creates a new external API client with go-agent instrumentation
 func NewClient(baseURL string) *Client {
 	return &Client{
-		httpClient: &http.Client{
+		httpClient: httpagent.NewClient(&http.Client{
 			Timeout: 10 * time.Second,
-			Transport: otelhttp.NewTransport(
-				http.DefaultTransport,
-				otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
-					return fmt.Sprintf("HTTP %s %s", r.Method, r.URL.Path)
-				}),
-			),
-		},
+		}),
 		baseURL: baseURL,
 	}
 }
 
 // GetInspirationalQuote fetches a random inspirational quote
 // This simulates calling an external API service
+// Automatically instrumented by go-agent HTTP client
 func (c *Client) GetInspirationalQuote(ctx context.Context) (*Quote, error) {
-	tracer := otel.Tracer("external-api-client")
-	ctx, span := tracer.Start(ctx, "GetInspirationalQuote",
-		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(
-			attribute.String("external.service", "quotable"),
-			attribute.String("external.operation", "get_random_quote"),
-		),
-	)
-	defer span.End()
-
 	// Use a real public API for quotes
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.quotable.io/random", nil)
 	if err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("failed to fetch quote: %w", err)
 	}
 	defer resp.Body.Close()
 
-	span.SetAttributes(
-		attribute.Int("http.status_code", resp.StatusCode),
-		attribute.String("http.response.content_type", resp.Header.Get("Content-Type")),
-	)
-
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		span.RecordError(err)
-		return nil, err
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var quote Quote
 	if err := json.Unmarshal(body, &quote); err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("failed to parse quote: %w", err)
 	}
-
-	span.SetAttributes(
-		attribute.String("quote.author", quote.Author),
-		attribute.Int("quote.length", len(quote.Content)),
-	)
 
 	return &quote, nil
 }
 
 // EnrichUserInfo simulates fetching additional user information from an external service
+// Note: This is a simulated method without actual HTTP calls
 func (c *Client) EnrichUserInfo(ctx context.Context, name string) (*UserInfo, error) {
-	tracer := otel.Tracer("external-api-client")
-	ctx, span := tracer.Start(ctx, "EnrichUserInfo",
-		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(
-			attribute.String("external.service", "user-enrichment"),
-			attribute.String("user.name", name),
-		),
-	)
-	defer span.End()
-
 	// Simulate external API call with some processing time
 	time.Sleep(50 * time.Millisecond)
 
@@ -142,26 +99,12 @@ func (c *Client) EnrichUserInfo(ctx context.Context, name string) (*UserInfo, er
 		MemberSince: time.Now().Add(-time.Duration(hash%365) * 24 * time.Hour),
 	}
 
-	span.SetAttributes(
-		attribute.String("user.location", userInfo.Location),
-		attribute.String("user.timezone", userInfo.Timezone),
-	)
-
 	return userInfo, nil
 }
 
 // GetWeatherInfo simulates fetching weather information
+// Note: This is a simulated method without actual HTTP calls
 func (c *Client) GetWeatherInfo(ctx context.Context, location string) (string, error) {
-	tracer := otel.Tracer("external-api-client")
-	ctx, span := tracer.Start(ctx, "GetWeatherInfo",
-		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(
-			attribute.String("external.service", "weather-api"),
-			attribute.String("location", location),
-		),
-	)
-	defer span.End()
-
 	// Simulate external API call
 	time.Sleep(30 * time.Millisecond)
 
@@ -179,25 +122,12 @@ func (c *Client) GetWeatherInfo(ctx context.Context, location string) (string, e
 
 	weatherCondition := weather[hash%len(weather)]
 
-	span.SetAttributes(
-		attribute.String("weather.condition", weatherCondition),
-	)
-
 	return weatherCondition, nil
 }
 
 // BatchLookup simulates a batch API call to fetch multiple pieces of data
+// Note: This is a simulated method without actual HTTP calls
 func (c *Client) BatchLookup(ctx context.Context, names []string) (map[string]*UserInfo, error) {
-	tracer := otel.Tracer("external-api-client")
-	ctx, span := tracer.Start(ctx, "BatchLookup",
-		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(
-			attribute.String("external.service", "batch-api"),
-			attribute.Int("batch.size", len(names)),
-		),
-	)
-	defer span.End()
-
 	// Simulate batch API call - slightly more efficient than individual calls
 	time.Sleep(time.Duration(20*len(names)) * time.Millisecond)
 
@@ -205,15 +135,10 @@ func (c *Client) BatchLookup(ctx context.Context, names []string) (map[string]*U
 	for _, name := range names {
 		userInfo, err := c.EnrichUserInfo(ctx, name)
 		if err != nil {
-			span.RecordError(err)
 			continue
 		}
 		results[name] = userInfo
 	}
-
-	span.SetAttributes(
-		attribute.Int("batch.results", len(results)),
-	)
 
 	return results, nil
 }
