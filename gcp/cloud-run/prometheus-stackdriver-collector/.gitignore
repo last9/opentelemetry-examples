@@ -1,0 +1,25 @@
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+
+# Prometheus data
+/prometheus/
+/data/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+*.tar
+*.gz
