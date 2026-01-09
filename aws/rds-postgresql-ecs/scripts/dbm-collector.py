@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
 PostgreSQL DBM Collector for Last9
-Collects Database Monitoring data similar to Datadog DBM and exports via OTLP.
+Collects comprehensive Database Monitoring data and exports via OTLP.
 
-This script provides feature parity with Datadog's Database Monitoring:
+This script provides enterprise-grade query-level monitoring:
 - Query samples from pg_stat_activity
 - Query metrics from pg_stat_statements
 - Explain plans (sampled)
 - Wait events
 - Blocking queries
-
-Reference: https://docs.datadoghq.com/database_monitoring/setup_postgres/rds/
 """
 
 import os
@@ -152,7 +150,7 @@ class BlockingQuery:
 def normalize_query(query: str) -> str:
     """
     Normalize a query by replacing literals with placeholders.
-    This matches Datadog's query normalization behavior.
+    This provides consistent query signatures for aggregation.
     """
     if not query:
         return ''

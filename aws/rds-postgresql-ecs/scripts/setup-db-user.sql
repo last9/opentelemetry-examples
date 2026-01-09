@@ -1,12 +1,10 @@
 -- =============================================================================
 -- PostgreSQL Monitoring User Setup Script
 -- For RDS PostgreSQL Deep Integration with Last9
--- Matches Datadog DBM setup requirements for migration parity
 -- =============================================================================
--- Reference: https://docs.datadoghq.com/database_monitoring/setup_postgres/rds/
 
--- This script creates a dedicated monitoring user with the same permissions
--- that Datadog DBM requires, ensuring seamless migration.
+-- This script creates a dedicated monitoring user with appropriate permissions
+-- for comprehensive database monitoring without requiring superuser access.
 
 -- Run this script as the master user (usually 'postgres' on RDS)
 -- Execute on EACH database you want to monitor
@@ -37,7 +35,7 @@ GRANT pg_monitor TO otel_monitor;
 -- =============================================================================
 -- STEP 3: Create dedicated schema for monitoring functions
 -- =============================================================================
--- Datadog uses 'datadog' schema; we use 'otel_monitor' for clarity
+-- We use 'otel_monitor' schema for organizing monitoring functions
 
 CREATE SCHEMA IF NOT EXISTS otel_monitor;
 GRANT USAGE ON SCHEMA otel_monitor TO otel_monitor;
@@ -61,7 +59,7 @@ END
 $$;
 
 -- =============================================================================
--- STEP 5: Create wrapper functions (SECURITY DEFINER pattern from Datadog)
+-- STEP 5: Create wrapper functions (SECURITY DEFINER pattern)
 -- =============================================================================
 -- These functions allow the monitoring user to access stats without direct grants
 

@@ -1,0 +1,960 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RDS PostgreSQL Monitoring with OpenTelemetry - Deploys collectors to monitor RDS and export metrics to Last9'
+
+# ==============================================================================
+# Metadata
+# ==============================================================================
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "RDS Configuration"
+        Parameters:
+          - RDSInstanceId
+          - DatabaseName
+          - MasterUsername
+          - MasterPassword
+      - Label:
+          default: "Last9 Configuration"
+        Parameters:
+          - Last9OtlpEndpoint
+          - Last9Username
+          - Last9Password
+      - Label:
+          default: "Optional Configuration"
+        Parameters:
+          - Environment
+          - CreateMonitoringUser
+    ParameterLabels:
+      RDSInstanceId:
+        default: "RDS Instance ID"
+      Last9OtlpEndpoint:
+        default: "Last9 OTLP Endpoint URL"
+      Last9Username:
+        default: "Last9 Username"
+      Last9Password:
+        default: "Last9 Password"
+
+# ==============================================================================
+# Parameters
+# ==============================================================================
+Parameters:
+  RDSInstanceId:
+    Type: String
+    Description: RDS PostgreSQL Instance Identifier (e.g., my-postgres-db)
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9-]*'
+    ConstraintDescription: Must be a valid RDS instance identifier
+
+  DatabaseName:
+    Type: String
+    Description: PostgreSQL database name to monitor
+    Default: postgres
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9_]*'
+
+  MasterUsername:
+    Type: String
+    Description: RDS master username (for initial setup only)
+    Default: postgres
+    NoEcho: false
+
+  MasterPassword:
+    Type: String
+    Description: RDS master password (for creating monitoring user)
+    NoEcho: true
+    MinLength: 8
+
+  Last9OtlpEndpoint:
+    Type: String
+    Description: Last9 OTLP endpoint (e.g., https://your-endpoint.last9.io/v1/metrics)
+    AllowedPattern: 'https://.*'
+    ConstraintDescription: Must be a valid HTTPS URL
+
+  Last9Username:
+    Type: String
+    Description: Last9 username for authentication
+
+  Last9Password:
+    Type: String
+    Description: Last9 password or API token
+    NoEcho: true
+    MinLength: 8
+
+  Last9AuthHeader:
+    Type: String
+    Default: ''
+    Description: Last9 Basic Auth header (optional, will be auto-generated from username:password if not provided)
+    NoEcho: true
+
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging, dev]
+    Description: Environment name for tagging
+
+  CreateMonitoringUser:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: |
+      IMPORTANT: Create monitoring DB user automatically?
+      'true' = Lambda executes CREATE USER, GRANT, CREATE EXTENSION, CREATE SCHEMA on your database
+      'false' = Skip automatic creation, create user manually (RECOMMENDED for production)
+      See SAFETY_AUDIT.md for details
+
+  ExistingDBUsername:
+    Type: String
+    Default: ''
+    Description: Existing database username (only used if CreateMonitoringUser=false)
+    NoEcho: false
+
+  ExistingDBPassword:
+    Type: String
+    Default: ''
+    Description: Existing database password (only used if CreateMonitoringUser=false)
+    NoEcho: true
+
+  DBMCollectorImage:
+    Type: String
+    Default: ''
+    Description: DBM Collector image URI (leave empty to use account ECR)
+
+  CloudWatchCollectorImage:
+    Type: String
+    Default: ''
+    Description: CloudWatch Collector image URI (leave empty to use account ECR)
+
+# ==============================================================================
+# Conditions
+# ==============================================================================
+Conditions:
+  ShouldCreateMonitoringUser: !Equals [!Ref CreateMonitoringUser, 'true']
+  UseExistingUser: !Equals [!Ref CreateMonitoringUser, 'false']
+  UseDefaultDBMImage: !Equals [!Ref DBMCollectorImage, '']
+  UseDefaultCloudWatchImage: !Equals [!Ref CloudWatchCollectorImage, '']
+  UseProvidedAuthHeader: !Not [!Equals [!Ref Last9AuthHeader, '']]
+  UseGeneratedAuthHeader: !Equals [!Ref Last9AuthHeader, '']
+
+# ==============================================================================
+# Resources
+# ==============================================================================
+Resources:
+
+  # ============================================================================
+  # Custom Resource: RDS Auto-Discovery
+  # ============================================================================
+  RDSDiscoveryFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-rds-discovery'
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt RDSDiscoveryRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import traceback
+
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Delete':
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      return
+
+                  rds = boto3.client('rds')
+                  ec2 = boto3.client('ec2')
+
+                  instance_id = event['ResourceProperties']['InstanceId']
+
+                  # Get RDS instance details
+                  response = rds.describe_db_instances(DBInstanceIdentifier=instance_id)
+                  db = response['DBInstances'][0]
+
+                  # Extract details
+                  endpoint = db['Endpoint']['Address']
+                  port = db['Endpoint']['Port']
+                  vpc_id = db['DBSubnetGroup']['VpcId']
+                  subnet_ids = [subnet['SubnetIdentifier'] for subnet in db['DBSubnetGroup']['Subnets']]
+                  security_group_ids = [sg['VpcSecurityGroupId'] for sg in db['VpcSecurityGroups']]
+                  engine_version = db['EngineVersion']
+
+                  # Get AZs for subnets
+                  subnets = ec2.describe_subnets(SubnetIds=subnet_ids)
+                  availability_zones = [s['AvailabilityZone'] for s in subnets['Subnets']]
+
+                  # Find private subnets in same VPC for ECS
+                  all_subnets = ec2.describe_subnets(
+                      Filters=[
+                          {'Name': 'vpc-id', 'Values': [vpc_id]},
+                          {'Name': 'availability-zone', 'Values': availability_zones}
+                      ]
+                  )
+
+                  # Prefer private subnets (those with route to NAT gateway)
+                  private_subnet_ids = []
+                  for subnet in all_subnets['Subnets']:
+                      # Check if subnet has route to NAT gateway or is private
+                      route_tables = ec2.describe_route_tables(
+                          Filters=[{'Name': 'association.subnet-id', 'Values': [subnet['SubnetId']]}]
+                      )
+                      if not route_tables['RouteTables']:
+                          # Check VPC main route table
+                          route_tables = ec2.describe_route_tables(
+                              Filters=[
+                                  {'Name': 'vpc-id', 'Values': [vpc_id]},
+                                  {'Name': 'association.main', 'Values': ['true']}
+                              ]
+                          )
+
+                      for rt in route_tables['RouteTables']:
+                          has_igw = any(r.get('GatewayId', '').startswith('igw-') for r in rt.get('Routes', []))
+                          has_nat = any(r.get('NatGatewayId', '').startswith('nat-') for r in rt.get('Routes', []))
+
+                          # If has NAT or no IGW, it's private
+                          if has_nat or not has_igw:
+                              private_subnet_ids.append(subnet['SubnetId'])
+                              break
+
+                  # Fall back to RDS subnets if no private subnets found
+                  ecs_subnet_ids = private_subnet_ids[:2] if private_subnet_ids else subnet_ids[:2]
+
+                  response_data = {
+                      'Endpoint': endpoint,
+                      'Port': str(port),
+                      'VpcId': vpc_id,
+                      'SubnetIds': ','.join(ecs_subnet_ids),
+                      'RDSSecurityGroupIds': ','.join(security_group_ids),
+                      'EngineVersion': engine_version,
+                      'Region': context.invoked_function_arn.split(':')[3]
+                  }
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  print(traceback.format_exc())
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  RDSDiscoveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RDSDiscovery
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:DescribeDBInstances
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeSecurityGroups
+                Resource: '*'
+
+  RDSInfo:
+    Type: Custom::RDSDiscovery
+    Properties:
+      ServiceToken: !GetAtt RDSDiscoveryFunction.Arn
+      InstanceId: !Ref RDSInstanceId
+
+  # ============================================================================
+  # Custom Resource: Database User Setup
+  # ============================================================================
+  DBSetupFunction:
+    Type: AWS::Lambda::Function
+    Condition: ShouldCreateMonitoringUser
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-db-setup'
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt DBSetupRole.Arn
+      Timeout: 120
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref DBSetupSecurityGroup
+        SubnetIds: !Split [',', !GetAtt RDSInfo.SubnetIds]
+      Layers:
+        - !Sub 'arn:aws:lambda:${AWS::Region}:898466741470:layer:psycopg2-py311:1'
+      Environment:
+        Variables:
+          DB_SECRET_ARN: !Ref MonitoringUserSecret
+          MASTER_SECRET_ARN: !Ref MasterUserSecret
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import cfnresponse
+          import traceback
+
+          try:
+              import psycopg2
+          except ImportError:
+              # For local testing
+              psycopg2 = None
+
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Delete':
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      return
+
+                  secrets = boto3.client('secretsmanager')
+
+                  # Get database credentials
+                  master_secret = json.loads(
+                      secrets.get_secret_value(SecretId=event['ResourceProperties']['MasterSecretArn'])['SecretString']
+                  )
+
+                  monitor_secret = json.loads(
+                      secrets.get_secret_value(SecretId=event['ResourceProperties']['MonitorSecretArn'])['SecretString']
+                  )
+
+                  # Connect as master user
+                  conn = psycopg2.connect(
+                      host=master_secret['host'],
+                      port=master_secret['port'],
+                      database=master_secret['dbname'],
+                      user=master_secret['username'],
+                      password=master_secret['password'],
+                      connect_timeout=10
+                  )
+                  conn.autocommit = True
+                  cursor = conn.cursor()
+
+                  # Create monitoring user
+                  monitor_user = monitor_secret['username']
+                  monitor_pass = monitor_secret['password']
+
+                  # Check if user exists
+                  cursor.execute(
+                      "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                      (monitor_user,)
+                  )
+                  user_exists = cursor.fetchone() is not None
+
+                  if not user_exists:
+                      cursor.execute(f"CREATE USER {monitor_user} WITH PASSWORD %s", (monitor_pass,))
+                  else:
+                      cursor.execute(f"ALTER USER {monitor_user} WITH PASSWORD %s", (monitor_pass,))
+
+                  # Grant permissions
+                  cursor.execute(f"GRANT pg_monitor TO {monitor_user}")
+                  cursor.execute(f"GRANT rds_superuser TO {monitor_user}")
+
+                  # Enable extensions
+                  cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
+
+                  # Grant access
+                  cursor.execute(f"GRANT SELECT ON pg_stat_statements TO {monitor_user}")
+                  cursor.execute(f"GRANT CONNECT ON DATABASE {master_secret['dbname']} TO {monitor_user}")
+                  cursor.execute(f"GRANT USAGE ON SCHEMA public TO {monitor_user}")
+
+                  # Create monitoring schema
+                  cursor.execute("CREATE SCHEMA IF NOT EXISTS otel_monitor")
+                  cursor.execute(f"GRANT USAGE ON SCHEMA otel_monitor TO {monitor_user}")
+                  cursor.execute(f"GRANT CREATE ON SCHEMA otel_monitor TO {monitor_user}")
+
+                  cursor.close()
+                  conn.close()
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                      'Message': f'Successfully created monitoring user {monitor_user}'
+                  })
+
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  print(traceback.format_exc())
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {
+                      'Error': str(e),
+                      'Help': 'Check that: 1) RDS is accessible, 2) Security groups allow Lambda, 3) Master credentials are correct, 4) pg_stat_statements is in parameter group'
+                  })
+
+  DBSetupRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldCreateMonitoringUser
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: SecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref MasterUserSecret
+                  - !Ref MonitoringUserSecret
+
+  DBSetup:
+    Type: Custom::DBSetup
+    Condition: ShouldCreateMonitoringUser
+    DependsOn:
+      - DBSetupSecurityGroupIngress
+    Properties:
+      ServiceToken: !GetAtt DBSetupFunction.Arn
+      MasterSecretArn: !Ref MasterUserSecret
+      MonitorSecretArn: !Ref MonitoringUserSecret
+
+  # ============================================================================
+  # Secrets Manager
+  # ============================================================================
+  Last9AuthSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${AWS::StackName}/last9-credentials'
+      Description: Last9 OTLP authentication credentials
+      SecretString: !If
+        - UseProvidedAuthHeader
+        - !Sub |
+            {
+              "username": "${Last9Username}",
+              "password": "${Last9Password}",
+              "endpoint": "${Last9OtlpEndpoint}",
+              "auth_header": "${Last9AuthHeader}"
+            }
+        - !Sub |
+            {
+              "username": "${Last9Username}",
+              "password": "${Last9Password}",
+              "endpoint": "${Last9OtlpEndpoint}",
+              "auth_header": "Basic ${Last9Base64Auth.EncodedValue}"
+            }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  Last9Base64Auth:
+    Type: Custom::Base64Encode
+    Condition: UseGeneratedAuthHeader
+    Properties:
+      ServiceToken: !GetAtt Base64EncodeFunction.Arn
+      InputString: !Sub '${Last9Username}:${Last9Password}'
+
+  Base64EncodeFunction:
+    Type: AWS::Lambda::Function
+    Condition: UseGeneratedAuthHeader
+    Properties:
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt Base64EncodeRole.Arn
+      Code:
+        ZipFile: |
+          import base64
+          import cfnresponse
+
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Delete':
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      return
+
+                  input_string = event['ResourceProperties']['InputString']
+                  encoded = base64.b64encode(input_string.encode()).decode()
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                      'EncodedValue': encoded
+                  })
+              except Exception as e:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  Base64EncodeRole:
+    Type: AWS::IAM::Role
+    Condition: UseGeneratedAuthHeader
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  MasterUserSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${AWS::StackName}/master-credentials'
+      Description: RDS master user credentials (temporary, for setup only)
+      SecretString: !Sub |
+        {
+          "username": "${MasterUsername}",
+          "password": "${MasterPassword}",
+          "host": "${RDSInfo.Endpoint}",
+          "port": ${RDSInfo.Port},
+          "dbname": "${DatabaseName}"
+        }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  MonitoringUserSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: ShouldCreateMonitoringUser
+    Properties:
+      Name: !Sub '${AWS::StackName}/monitoring-credentials'
+      Description: PostgreSQL monitoring user credentials
+      GenerateSecretString:
+        SecretStringTemplate: !Sub |
+          {
+            "username": "otel_monitor",
+            "host": "${RDSInfo.Endpoint}",
+            "port": ${RDSInfo.Port},
+            "dbname": "${DatabaseName}"
+          }
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  ExistingUserSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: UseExistingUser
+    Properties:
+      Name: !Sub '${AWS::StackName}/existing-user-credentials'
+      Description: Existing PostgreSQL user credentials
+      SecretString: !Sub |
+        {
+          "username": "${ExistingDBUsername}",
+          "password": "${ExistingDBPassword}",
+          "host": "${RDSInfo.Endpoint}",
+          "port": ${RDSInfo.Port},
+          "dbname": "${DatabaseName}"
+        }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # Security Groups
+  # ============================================================================
+  CollectorSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub '${AWS::StackName}-collector'
+      GroupDescription: Security group for PostgreSQL collectors
+      VpcId: !GetAtt RDSInfo.VpcId
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-collector'
+        - Key: Environment
+          Value: !Ref Environment
+
+  RDSSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Select [0, !Split [',', !GetAtt RDSInfo.RDSSecurityGroupIds]]
+      IpProtocol: tcp
+      FromPort: !GetAtt RDSInfo.Port
+      ToPort: !GetAtt RDSInfo.Port
+      SourceSecurityGroupId: !Ref CollectorSecurityGroup
+      Description: Allow PostgreSQL from collectors
+
+  # Lambda needs access to RDS for setup
+  DBSetupSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: ShouldCreateMonitoringUser
+    Properties:
+      GroupId: !Select [0, !Split [',', !GetAtt RDSInfo.RDSSecurityGroupIds]]
+      IpProtocol: tcp
+      FromPort: !GetAtt RDSInfo.Port
+      ToPort: !GetAtt RDSInfo.Port
+      SourceSecurityGroupId: !Ref DBSetupSecurityGroup
+      Description: Allow PostgreSQL from setup Lambda
+
+  DBSetupSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: ShouldCreateMonitoringUser
+    Properties:
+      GroupName: !Sub '${AWS::StackName}-db-setup'
+      GroupDescription: Security group for DB setup Lambda
+      VpcId: !GetAtt RDSInfo.VpcId
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-db-setup'
+
+  # ============================================================================
+  # IAM Roles
+  # ============================================================================
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-execution'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref Last9AuthSecret
+                  - !If
+                    - ShouldCreateMonitoringUser
+                    - !Ref MonitoringUserSecret
+                    - !Ref ExistingUserSecret
+        - PolicyName: ECRAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: '*'
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-task'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudWatchAndRDSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:ListMetrics
+                  - rds:DescribeDBInstances
+                  - rds:ListTagsForResource
+                Resource: '*'
+
+  # ============================================================================
+  # ECS Cluster
+  # ============================================================================
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${AWS::StackName}'
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # CloudWatch Logs
+  # ============================================================================
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${AWS::StackName}'
+      RetentionInDays: 14
+
+  # ============================================================================
+  # ECS Task Definition - All 3 Collectors in One Task
+  # ============================================================================
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}'
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        # Container 1: OTEL Collector (PostgreSQL Infrastructure Metrics)
+        - Name: otel-collector
+          Image: otel/opentelemetry-collector-contrib:0.142.0
+          Essential: true
+          Command:
+            - '--config'
+            - 'env:OTEL_CONFIG'
+          Environment:
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: PG_ENDPOINT
+              Value: !GetAtt RDSInfo.Endpoint
+            - Name: PG_PORT
+              Value: !GetAtt RDSInfo.Port
+            - Name: DB_NAME
+              Value: !Ref DatabaseName
+            - Name: RDS_INSTANCE_ID
+              Value: !Ref RDSInstanceId
+            - Name: LAST9_ENDPOINT
+              Value: !Ref Last9OtlpEndpoint
+            - Name: OTEL_CONFIG
+              Value: !Sub |
+                receivers:
+                  postgresql:
+                    endpoint: ${!env:PG_ENDPOINT}:${!env:PG_PORT}
+                    transport: tcp
+                    username: ${!env:PG_USERNAME}
+                    password: ${!env:PG_PASSWORD}
+                    databases:
+                      - ${!env:DB_NAME}
+                    tls:
+                      insecure: false
+                      insecure_skip_verify: true
+                    collection_interval: 30s
+
+                processors:
+                  batch:
+                    timeout: 10s
+                    send_batch_size: 1024
+
+                  resource:
+                    attributes:
+                      - key: service.name
+                        value: rds-postgresql-monitoring
+                        action: upsert
+                      - key: deployment.environment
+                        value: ${!env:ENVIRONMENT}
+                        action: upsert
+                      - key: cloud.provider
+                        value: aws
+                        action: upsert
+                      - key: cloud.region
+                        value: ${!env:AWS_REGION}
+                        action: upsert
+                      - key: db.system
+                        value: postgresql
+                        action: upsert
+                      - key: db.instance.id
+                        value: ${!env:RDS_INSTANCE_ID}
+                        action: upsert
+
+                exporters:
+                  otlphttp:
+                    endpoint: ${!env:LAST9_ENDPOINT}
+                    headers:
+                      Authorization: ${!env:LAST9_AUTH_HEADER}
+                    compression: gzip
+
+                extensions:
+                  health_check:
+                    endpoint: 0.0.0.0:13133
+                    path: /health
+
+                service:
+                  extensions: [health_check]
+                  pipelines:
+                    metrics:
+                      receivers: [postgresql]
+                      processors: [resource, batch]
+                      exporters: [otlphttp]
+          Secrets:
+            - Name: PG_USERNAME
+              ValueFrom: !If
+                - ShouldCreateMonitoringUser
+                - !Sub '${MonitoringUserSecret}:username::'
+                - !Sub '${ExistingUserSecret}:username::'
+            - Name: PG_PASSWORD
+              ValueFrom: !If
+                - ShouldCreateMonitoringUser
+                - !Sub '${MonitoringUserSecret}:password::'
+                - !Sub '${ExistingUserSecret}:password::'
+            - Name: LAST9_AUTH_HEADER
+              ValueFrom: !Sub '${Last9AuthSecret}:auth_header::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: otel-collector
+
+        # Container 2: DBM Collector (Query-Level Metrics)
+        - Name: dbm-collector
+          Image: !If
+            - UseDefaultDBMImage
+            - !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/postgresql-dbm-collector:latest'
+            - !Ref DBMCollectorImage
+          Essential: false
+          Environment:
+            - Name: OUTPUT_FORMAT
+              Value: otlp
+            - Name: COLLECTION_INTERVAL
+              Value: '30'
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+          Secrets:
+            - Name: PG_ENDPOINT
+              ValueFrom: !If
+                - ShouldCreateMonitoringUser
+                - !Sub '${MonitoringUserSecret}:host::'
+                - !Sub '${ExistingUserSecret}:host::'
+            - Name: PG_PORT
+              ValueFrom: !If
+                - ShouldCreateMonitoringUser
+                - !Sub '${MonitoringUserSecret}:port::'
+                - !Sub '${ExistingUserSecret}:port::'
+            - Name: PG_USERNAME
+              ValueFrom: !If
+                - ShouldCreateMonitoringUser
+                - !Sub '${MonitoringUserSecret}:username::'
+                - !Sub '${ExistingUserSecret}:username::'
+            - Name: PG_PASSWORD
+              ValueFrom: !If
+                - ShouldCreateMonitoringUser
+                - !Sub '${MonitoringUserSecret}:password::'
+                - !Sub '${ExistingUserSecret}:password::'
+            - Name: PG_DATABASE
+              ValueFrom: !If
+                - ShouldCreateMonitoringUser
+                - !Sub '${MonitoringUserSecret}:dbname::'
+                - !Sub '${ExistingUserSecret}:dbname::'
+            - Name: LAST9_OTLP_ENDPOINT
+              ValueFrom: !Sub '${Last9AuthSecret}:endpoint::'
+            - Name: LAST9_AUTH_HEADER
+              ValueFrom: !Sub '${Last9AuthSecret}:auth_header::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: dbm-collector
+
+        # Container 3: CloudWatch Collector (RDS Host Metrics)
+        - Name: cloudwatch-collector
+          Image: !If
+            - UseDefaultCloudWatchImage
+            - !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/cloudwatch-rds-collector:latest'
+            - !Ref CloudWatchCollectorImage
+          Essential: false
+          Environment:
+            - Name: COLLECTION_INTERVAL
+              Value: '60'
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: RDS_INSTANCE_ID
+              Value: !Ref RDSInstanceId
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+          Secrets:
+            - Name: LAST9_OTLP_ENDPOINT
+              ValueFrom: !Sub '${Last9AuthSecret}:endpoint::'
+            - Name: LAST9_AUTH_HEADER
+              ValueFrom: !Sub '${Last9AuthSecret}:auth_header::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: cloudwatch-collector
+
+  # ============================================================================
+  # ECS Service
+  # ============================================================================
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - LogGroup
+      - RDSSecurityGroupIngress
+    Properties:
+      ServiceName: !Sub '${AWS::StackName}'
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref CollectorSecurityGroup
+          Subnets: !Split [',', !GetAtt RDSInfo.SubnetIds]
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 0
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      EnableECSManagedTags: true
+      PropagateTags: SERVICE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+# ==============================================================================
+# Outputs
+# ==============================================================================
+Outputs:
+  ClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
+
+  ServiceName:
+    Description: ECS Service Name
+    Value: !GetAtt Service.Name
+
+  LogGroupName:
+    Description: CloudWatch Logs - Check collector logs here
+    Value: !Ref LogGroup
+
+  RDSEndpoint:
+    Description: Auto-discovered RDS Endpoint
+    Value: !GetAtt RDSInfo.Endpoint
+
+  VerificationSteps:
+    Description: Next steps to verify deployment
+    Value: !Sub |
+      ✅ Deployment Complete!
+
+      1. Check collector logs:
+         aws logs tail /ecs/${AWS::StackName} --follow
+
+      2. Verify metrics in Last9:
+         - Search for: postgresql.*, postgresql_dbm_*, rds_*
+         - Dashboard: https://app.last9.io
+
+      3. Monitor ECS service:
+         aws ecs describe-services --cluster ${ECSCluster} --services ${Service.Name}
+
+      4. Important: Update your RDS parameter group if not done:
+         - shared_preload_libraries = pg_stat_statements (requires reboot)
+         - pg_stat_statements.track = all
+         - track_io_timing = on
