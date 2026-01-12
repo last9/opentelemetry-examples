@@ -53,3 +53,7 @@ gem 'opentelemetry-exporter-otlp'
 gem 'opentelemetry-instrumentation-all'
 
 gem 'dotenv-rails', groups: [:development, :test]
+
+# For rich traces with child spans
+gem 'redis', '~> 5.0'
+gem 'faraday', '~> 2.0'
