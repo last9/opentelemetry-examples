@@ -9,10 +9,8 @@ import (
 	"os"
 	"strings"
 
+	dbagent "github.com/last9/go-agent/integrations/database"
 	_ "github.com/lib/pq"
-	"go.nhat.io/otelsql"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-
 	"github.com/redis/go-redis/v9"
 )
 
@@ -23,33 +21,20 @@ type UsersController struct {
 }
 
 func initDB() (*sql.DB, error) {
-	driverName, err := otelsql.Register("postgres",
-		// Read more about the options here: https://github.com/nhatthm/otelsql?tab=readme-ov-file#options
-		otelsql.AllowRoot(),
-		otelsql.TraceQueryWithoutArgs(),
-		otelsql.TraceRowsClose(),
-		otelsql.TraceRowsAffected(),
-		otelsql.WithDatabaseName("otel_demo"), // database name
-		otelsql.WithSystem(semconv.DBSystemPostgreSQL),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to register driver: %v", err)
-	}
-
 	dsn := getEnv("DATABASE_URL", dsnName)
 
-	db, err := sql.Open(driverName, dsn)
+	// Open database with go-agent (automatic instrumentation)
+	db, err := dbagent.Open(dbagent.Config{
+		DriverName:   "postgres",
+		DSN:          dsn,
+		DatabaseName: "otel_demo",
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
 	if err := ensureSchema(db); err != nil {
 		return nil, fmt.Errorf("failed to ensure schema: %v", err)
-	}
-
-	// Record stats to expose metrics
-	if err := otelsql.RecordStats(db); err != nil {
-		return nil, err
 	}
 
 	return db, nil
