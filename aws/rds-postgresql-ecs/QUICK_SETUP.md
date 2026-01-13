@@ -57,7 +57,15 @@ ENVIRONMENT=prod
 
 # Database user creation (RECOMMENDED: false for production)
 CREATE_MONITORING_USER=false
+
+# IMPORTANT: If CREATE_MONITORING_USER=false, you MUST provide:
+PG_USERNAME=otel_monitor                       # Your monitoring username
+PG_PASSWORD=<your-monitoring-password>         # Your monitoring password
 ```
+
+**If `CREATE_MONITORING_USER=false`**, you must:
+1. **Manually create the monitoring user** in PostgreSQL first (see Troubleshooting section)
+2. **Add `PG_USERNAME` and `PG_PASSWORD`** to your `.env` file
 
 **Save and close the file.**
 
@@ -145,15 +153,134 @@ aws logs tail /ecs/rds-postgresql-monitoring-prod --since 10m | grep -i error
 
 **Solution 3:** Verify credentials in `.env` are correct
 
-### Problem: "Connection refused" in logs
+### Problem: "Connection refused" or "Connection timeout" in logs
 
-**Fix:** Check security groups allow ECS to connect to RDS
+This means the ECS containers cannot reach your RDS instance over the network.
+
+**Cause:** Security group rules not allowing traffic from ECS to RDS
+
+**Fix 1: Verify security group ingress rules were added**
+
+The CloudFormation stack automatically adds ingress rules to ALL your RDS security groups. Check if they were created:
 
 ```bash
-# This should show your RDS security groups
-aws rds describe-db-instances \
+# Get your RDS security group IDs
+RDS_SG_IDS=$(aws rds describe-db-instances \
   --db-instance-identifier <your-rds-instance-id> \
-  --query 'DBInstances[0].VpcSecurityGroups'
+  --query 'DBInstances[0].VpcSecurityGroups[*].VpcSecurityGroupId' \
+  --output text)
+
+# Get collector security group
+COLLECTOR_SG=$(aws cloudformation describe-stacks \
+  --stack-name rds-postgresql-monitoring-prod \
+  --query 'Stacks[0].Outputs[?OutputKey==`CollectorSecurityGroup`].OutputValue' \
+  --output text)
+
+# Check each RDS security group has ingress from collector
+for sg in $RDS_SG_IDS; do
+  echo "Checking $sg..."
+  aws ec2 describe-security-groups \
+    --group-ids $sg \
+    --query "SecurityGroups[0].IpPermissions[?contains(UserIdGroupPairs[].GroupId, '$COLLECTOR_SG')]"
+done
+```
+
+**Expected:** You should see TCP port 5432 rules allowing traffic from the collector security group.
+
+**Fix 2: If rules are missing, manually add them**
+
+```bash
+# Add ingress rule to each RDS security group
+for sg in $RDS_SG_IDS; do
+  aws ec2 authorize-security-group-ingress \
+    --group-id $sg \
+    --protocol tcp \
+    --port 5432 \
+    --source-group $COLLECTOR_SG \
+    --description "Allow PostgreSQL from monitoring collectors"
+done
+```
+
+**Fix 3: Check if RDS is in a private subnet with no NAT**
+
+If your RDS is in a private subnet with no internet access, ensure the ECS tasks are deployed in the same VPC and can reach RDS directly:
+
+```bash
+# Verify ECS tasks are in the same VPC as RDS
+aws ecs describe-tasks \
+  --cluster rds-postgresql-monitoring-prod \
+  --tasks $(aws ecs list-tasks --cluster rds-postgresql-monitoring-prod --query 'taskArns[0]' --output text) \
+  --query 'tasks[0].attachments[0].details[?name==`subnetId`].value' \
+  --output text
+```
+
+### Problem: "Lambda layer permission denied" (CREATE_MONITORING_USER=true)
+
+If you get an error like:
+```
+User is not authorized to perform lambda:GetLayerVersion on resource
+```
+
+This means the CloudFormation template references a Lambda layer from a different AWS account that you cannot access.
+
+**Solution: Create your own psycopg2 layer**
+
+```bash
+# 1. Create layer directory
+mkdir -p psycopg2-layer/python/lib/python3.11/site-packages
+
+# 2. Install psycopg2-binary
+pip install psycopg2-binary -t psycopg2-layer/python/lib/python3.11/site-packages
+
+# 3. Create ZIP
+cd psycopg2-layer
+zip -r ../psycopg2-layer.zip .
+cd ..
+
+# 4. Publish to your AWS account
+aws lambda publish-layer-version \
+  --layer-name psycopg2-py311 \
+  --zip-file fileb://psycopg2-layer.zip \
+  --compatible-runtimes python3.11 \
+  --region ap-south-1
+
+# 5. Note the returned LayerVersionArn (e.g., arn:aws:lambda:ap-south-1:YOUR-ACCOUNT:layer:psycopg2-py311:1)
+
+# 6. Add to your .env
+echo "PSYCOPG2_LAYER_ARN=arn:aws:lambda:ap-south-1:YOUR-ACCOUNT:layer:psycopg2-py311:1" >> .env
+
+# 7. Re-deploy
+./quick-setup.sh
+```
+
+**Recommended alternative**: Set `CREATE_MONITORING_USER=false` and create the database user manually (see below).
+
+### Problem: "Empty environment variable PG_USERNAME/PG_PASSWORD"
+
+This means you set `CREATE_MONITORING_USER=false` but didn't provide credentials.
+
+**Fix:** Create monitoring user manually and add credentials to .env
+
+```bash
+# 1. Connect to PostgreSQL
+psql -h <your-rds-endpoint> -U postgres -d postgres
+
+# 2. Create monitoring user
+CREATE USER otel_monitor WITH PASSWORD 'YourSecurePassword123!';
+GRANT pg_monitor TO otel_monitor;
+GRANT rds_superuser TO otel_monitor;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+GRANT SELECT ON pg_stat_statements TO otel_monitor;
+GRANT USAGE ON SCHEMA public TO otel_monitor;
+CREATE SCHEMA IF NOT EXISTS otel_monitor;
+GRANT USAGE, CREATE ON SCHEMA otel_monitor TO otel_monitor;
+
+# 3. Add to .env file
+echo "PG_USERNAME=otel_monitor" >> .env
+echo "PG_PASSWORD=YourSecurePassword123!" >> .env
+
+# 4. Re-deploy
+./quick-setup.sh
 ```
 
 ### Problem: No query-level metrics

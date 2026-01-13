@@ -123,6 +123,15 @@ Parameters:
     Default: ''
     Description: CloudWatch Collector image URI (leave empty to use account ECR)
 
+  Psycopg2LayerArn:
+    Type: String
+    Default: ''
+    Description: |
+      Optional: ARN of psycopg2 Lambda layer for your region/account.
+      Only needed if CREATE_MONITORING_USER=true.
+      Leave empty to skip Lambda layer (CREATE_MONITORING_USER must be false).
+      See README.md for instructions on creating this layer.
+
 # ==============================================================================
 # Conditions
 # ==============================================================================
@@ -133,6 +142,7 @@ Conditions:
   UseDefaultCloudWatchImage: !Equals [!Ref CloudWatchCollectorImage, '']
   UseProvidedAuthHeader: !Not [!Equals [!Ref Last9AuthHeader, '']]
   UseGeneratedAuthHeader: !Equals [!Ref Last9AuthHeader, '']
+  UsePsycopg2Layer: !Not [!Equals [!Ref Psycopg2LayerArn, '']]
 
 # ==============================================================================
 # Resources
@@ -283,8 +293,10 @@ Resources:
         SecurityGroupIds:
           - !Ref DBSetupSecurityGroup
         SubnetIds: !Split [',', !GetAtt RDSInfo.SubnetIds]
-      Layers:
-        - !Sub 'arn:aws:lambda:${AWS::Region}:898466741470:layer:psycopg2-py311:1'
+      Layers: !If
+        - UsePsycopg2Layer
+        - [!Ref Psycopg2LayerArn]
+        - !Ref AWS::NoValue
       Environment:
         Variables:
           DB_SECRET_ARN: !Ref MonitoringUserSecret
@@ -565,27 +577,120 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  RDSSecurityGroupIngress:
-    Type: AWS::EC2::SecurityGroupIngress
+  # Add ingress rules to ALL RDS security groups (not just the first one)
+  RDSSecurityGroupIngressFunction:
+    Type: AWS::Lambda::Function
     Properties:
-      GroupId: !Select [0, !Split [',', !GetAtt RDSInfo.RDSSecurityGroupIds]]
-      IpProtocol: tcp
-      FromPort: !GetAtt RDSInfo.Port
-      ToPort: !GetAtt RDSInfo.Port
-      SourceSecurityGroupId: !Ref CollectorSecurityGroup
-      Description: Allow PostgreSQL from collectors
+      FunctionName: !Sub '${AWS::StackName}-sg-setup'
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt RDSSecurityGroupIngressRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
 
-  # Lambda needs access to RDS for setup
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Delete':
+                      # Clean up ingress rules on delete
+                      ec2 = boto3.client('ec2')
+                      sg_ids = event['ResourceProperties']['RDSSecurityGroupIds'].split(',')
+                      collector_sg = event['ResourceProperties']['CollectorSecurityGroup']
+                      port = int(event['ResourceProperties']['Port'])
+
+                      for sg_id in sg_ids:
+                          try:
+                              ec2.revoke_security_group_ingress(
+                                  GroupId=sg_id,
+                                  IpPermissions=[{
+                                      'IpProtocol': 'tcp',
+                                      'FromPort': port,
+                                      'ToPort': port,
+                                      'UserIdGroupPairs': [{'GroupId': collector_sg}]
+                                  }]
+                              )
+                          except Exception as e:
+                              print(f"Failed to revoke from {sg_id}: {e}")
+
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      return
+
+                  ec2 = boto3.client('ec2')
+                  sg_ids = event['ResourceProperties']['RDSSecurityGroupIds'].split(',')
+                  collector_sg = event['ResourceProperties']['CollectorSecurityGroup']
+                  port = int(event['ResourceProperties']['Port'])
+
+                  # Add ingress rule to each RDS security group
+                  for sg_id in sg_ids:
+                      try:
+                          ec2.authorize_security_group_ingress(
+                              GroupId=sg_id,
+                              IpPermissions=[{
+                                  'IpProtocol': 'tcp',
+                                  'FromPort': port,
+                                  'ToPort': port,
+                                  'UserIdGroupPairs': [{'GroupId': collector_sg}],
+                                  'IpProtocolRanges': []
+                              }]
+                          )
+                          print(f"Added ingress to {sg_id}")
+                      except ec2.exceptions.ClientError as e:
+                          if 'InvalidPermission.Duplicate' in str(e):
+                              print(f"Rule already exists in {sg_id}")
+                          else:
+                              raise
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                      'SecurityGroupsUpdated': ','.join(sg_ids)
+                  })
+
+              except Exception as e:
+                  print(f"Error: {e}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  RDSSecurityGroupIngressRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecurityGroupAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:DescribeSecurityGroups
+                Resource: '*'
+
+  RDSSecurityGroupIngress:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt RDSSecurityGroupIngressFunction.Arn
+      RDSSecurityGroupIds: !GetAtt RDSInfo.RDSSecurityGroupIds
+      CollectorSecurityGroup: !Ref CollectorSecurityGroup
+      Port: !GetAtt RDSInfo.Port
+
+  # Lambda needs access to RDS for setup (all security groups)
   DBSetupSecurityGroupIngress:
-    Type: AWS::EC2::SecurityGroupIngress
+    Type: AWS::CloudFormation::CustomResource
     Condition: ShouldCreateMonitoringUser
     Properties:
-      GroupId: !Select [0, !Split [',', !GetAtt RDSInfo.RDSSecurityGroupIds]]
-      IpProtocol: tcp
-      FromPort: !GetAtt RDSInfo.Port
-      ToPort: !GetAtt RDSInfo.Port
-      SourceSecurityGroupId: !Ref DBSetupSecurityGroup
-      Description: Allow PostgreSQL from setup Lambda
+      ServiceToken: !GetAtt RDSSecurityGroupIngressFunction.Arn
+      RDSSecurityGroupIds: !GetAtt RDSInfo.RDSSecurityGroupIds
+      CollectorSecurityGroup: !Ref DBSetupSecurityGroup
+      Port: !GetAtt RDSInfo.Port
 
   DBSetupSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -938,6 +1043,12 @@ Outputs:
   RDSEndpoint:
     Description: Auto-discovered RDS Endpoint
     Value: !GetAtt RDSInfo.Endpoint
+
+  CollectorSecurityGroup:
+    Description: Security group used by collector containers (for troubleshooting)
+    Value: !Ref CollectorSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-collector-sg'
 
   VerificationSteps:
     Description: Next steps to verify deployment
