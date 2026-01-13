@@ -631,8 +631,7 @@ Resources:
                                   'IpProtocol': 'tcp',
                                   'FromPort': port,
                                   'ToPort': port,
-                                  'UserIdGroupPairs': [{'GroupId': collector_sg}],
-                                  'IpProtocolRanges': []
+                                  'UserIdGroupPairs': [{'GroupId': collector_sg}]
                               }]
                           )
                           print(f"Added ingress to {sg_id}")
