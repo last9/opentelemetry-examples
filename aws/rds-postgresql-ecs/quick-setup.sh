@@ -230,6 +230,21 @@ collect_configuration() {
             print_info "Skipping automatic user creation (from .env)"
         fi
     fi
+
+    # Validate required credentials when not creating user automatically
+    if [ "$CREATE_MONITORING_USER" = "false" ]; then
+        if [ -z "$PG_USERNAME" ] || [ -z "$PG_PASSWORD" ]; then
+            echo ""
+            print_error "ERROR: When CREATE_MONITORING_USER=false, you must provide:"
+            echo "  - PG_USERNAME=<your-monitoring-username>"
+            echo "  - PG_PASSWORD=<your-monitoring-password>"
+            echo ""
+            print_info "Add these to your .env file, then re-run this script."
+            print_info "See quick_setup.md for instructions on creating the monitoring user."
+            exit 1
+        fi
+        print_success "Using provided monitoring credentials: $PG_USERNAME"
+    fi
 }
 
 # ==============================================================================
@@ -339,6 +354,7 @@ deploy_stack() {
             ParameterKey=CreateMonitoringUser,ParameterValue="$CREATE_MONITORING_USER" \
             ParameterKey=ExistingDBUsername,ParameterValue="${PG_USERNAME:-}" \
             ParameterKey=ExistingDBPassword,ParameterValue="${PG_PASSWORD:-}" \
+            ParameterKey=Psycopg2LayerArn,ParameterValue="${PSYCOPG2_LAYER_ARN:-}" \
         --capabilities CAPABILITY_NAMED_IAM \
         --tags \
             Key=Environment,Value="$ENVIRONMENT" \
