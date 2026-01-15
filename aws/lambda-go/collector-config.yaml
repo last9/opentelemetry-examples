@@ -1,0 +1,21 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+      http:
+        endpoint: localhost:4318
+
+exporters:
+  otlp:
+    endpoint: <YOUR_OTLP_ENDPOINT>:443
+    headers:
+      authorization: Basic <your-base64-credentials>
+    tls:
+      insecure: false
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp]
