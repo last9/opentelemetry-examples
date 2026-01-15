@@ -1,0 +1,26 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Go dependencies
+/vendor/
+go.sum
+
+# Build artifacts
+bootstrap
+function.zip
+*.json
+!test-payload.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
