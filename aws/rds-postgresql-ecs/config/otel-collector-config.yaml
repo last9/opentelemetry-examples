@@ -8,6 +8,11 @@ receivers:
     transport: tcp
     username: ${env:PG_USERNAME}
     password: ${env:PG_PASSWORD}
+    # Monitor all databases on the RDS instance
+    # When connected to 'postgres', the receiver sees instance-wide metrics for ALL databases
+    # via system catalogs (pg_stat_database, etc.)
+    # For query-level monitoring (pg_stat_statements), you must run setup-db-user.sql
+    # on each database you want to monitor
     databases:
       - ${env:PG_DATABASE}
     collection_interval: 30s
