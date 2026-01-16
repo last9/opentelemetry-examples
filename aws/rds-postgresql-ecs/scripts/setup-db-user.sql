@@ -186,32 +186,75 @@ GRANT SELECT ON otel_monitor.wait_events TO otel_monitor;
 -- STEP 9: Create slow queries view
 -- =============================================================================
 
-CREATE OR REPLACE VIEW otel_monitor.slow_queries AS
-SELECT
-    pid,
-    datname AS database,
-    usename AS username,
-    application_name,
-    client_addr,
-    backend_start,
-    xact_start,
-    query_start,
-    state_change,
-    wait_event_type,
-    wait_event,
-    state,
-    backend_xid,
-    backend_xmin,
-    left(query, 4096) AS query,
-    query_id,
-    EXTRACT(EPOCH FROM (now() - query_start)) AS duration_seconds
-FROM pg_catalog.pg_stat_activity
-WHERE state = 'active'
-    AND query NOT LIKE '%pg_stat_activity%'
-    AND query NOT LIKE '%otel_monitor%'
-    AND backend_type = 'client backend'
-    AND query_start < now() - interval '100 milliseconds'
-ORDER BY duration_seconds DESC;
+-- Create slow_queries view with version compatibility
+-- query_id is only available in PostgreSQL 14+, so we conditionally include it
+DO $$
+BEGIN
+    -- Check PostgreSQL version
+    IF current_setting('server_version_num')::integer >= 140000 THEN
+        -- PostgreSQL 14+ with query_id
+        EXECUTE '
+            CREATE OR REPLACE VIEW otel_monitor.slow_queries AS
+            SELECT
+                pid,
+                datname AS database,
+                usename AS username,
+                application_name,
+                client_addr,
+                backend_start,
+                xact_start,
+                query_start,
+                state_change,
+                wait_event_type,
+                wait_event,
+                state,
+                backend_xid,
+                backend_xmin,
+                left(query, 4096) AS query,
+                query_id,
+                EXTRACT(EPOCH FROM (now() - query_start)) AS duration_seconds
+            FROM pg_catalog.pg_stat_activity
+            WHERE state = ''active''
+                AND query NOT LIKE ''%pg_stat_activity%''
+                AND query NOT LIKE ''%otel_monitor%''
+                AND backend_type = ''client backend''
+                AND query_start < now() - interval ''100 milliseconds''
+            ORDER BY duration_seconds DESC;
+        ';
+        RAISE NOTICE 'Created slow_queries view with query_id (PostgreSQL 14+)';
+    ELSE
+        -- PostgreSQL 11-13 without query_id
+        EXECUTE '
+            CREATE OR REPLACE VIEW otel_monitor.slow_queries AS
+            SELECT
+                pid,
+                datname AS database,
+                usename AS username,
+                application_name,
+                client_addr,
+                backend_start,
+                xact_start,
+                query_start,
+                state_change,
+                wait_event_type,
+                wait_event,
+                state,
+                backend_xid,
+                backend_xmin,
+                left(query, 4096) AS query,
+                EXTRACT(EPOCH FROM (now() - query_start)) AS duration_seconds
+            FROM pg_catalog.pg_stat_activity
+            WHERE state = ''active''
+                AND query NOT LIKE ''%pg_stat_activity%''
+                AND query NOT LIKE ''%otel_monitor%''
+                AND backend_type = ''client backend''
+                AND query_start < now() - interval ''100 milliseconds''
+            ORDER BY duration_seconds DESC;
+        ';
+        RAISE NOTICE 'Created slow_queries view without query_id (PostgreSQL < 14)';
+    END IF;
+END
+$$;
 
 GRANT SELECT ON otel_monitor.slow_queries TO otel_monitor;
 
@@ -234,7 +277,15 @@ ALTER ROLE otel_monitor SET search_path = "$user", public, otel_monitor;
 -- STEP 12: Grant CONNECT to database
 -- =============================================================================
 
-GRANT CONNECT ON DATABASE current_database() TO otel_monitor;
+DO $$
+DECLARE
+    db_name TEXT;
+BEGIN
+    SELECT current_database() INTO db_name;
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO otel_monitor', db_name);
+    RAISE NOTICE 'Granted CONNECT on database % to otel_monitor', db_name;
+END
+$$;
 
 -- =============================================================================
 -- VERIFICATION QUERIES
