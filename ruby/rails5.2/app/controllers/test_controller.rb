@@ -38,12 +38,10 @@ class TestController < ApplicationController
     render json: { input: params[:n], result: result }
   end
 
-  # Endpoint that simulates an error
+  # Endpoint that simulates an error - exception will be captured by OTel
+  # Test with: curl http://localhost:3000/error
   def error
-    # This will generate an error trace
-    raise StandardError, "Simulated error for testing traces"
-  rescue => e
-    render json: { error: e.message }, status: 500
+    raise StandardError, "Simulated error for testing OTel exception tracking"
   end
 
   # Endpoint with nested spans
@@ -99,4 +97,5 @@ class TestController < ApplicationController
     return n if n <= 1
     fibonacci(n - 1) + fibonacci(n - 2)
   end
+
 end
