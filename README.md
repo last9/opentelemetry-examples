@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blue?logo=opentelemetry)](https://opentelemetry.io/)
 [![Last9](https://img.shields.io/badge/Last9-compatible-purple)](https://last9.io)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/last9/opentelemetry-examples/pulls)
 
 Production-ready examples for instrumenting applications with [OpenTelemetry](https://opentelemetry.io/) and sending telemetry data (traces, metrics, and logs) to [Last9](https://last9.io) or any OTLP-compatible observability platform.
 
@@ -13,7 +13,7 @@ Getting OpenTelemetry instrumentation right can be tricky. This repository provi
 
 - **Copy-paste ready examples** - Each example is a complete, working application
 - **Real-world patterns** - Covers HTTP servers, databases, message queues, external APIs, and more
-- **Multiple languages** - Go, Python, JavaScript/Node.js, Ruby, Java, PHP, .NET, Elixir, and Kotlin
+- **Multiple languages** - Go, Python, JavaScript/Node.js, Ruby, Java, PHP, .NET, and Elixir
 - **Cloud-native deployments** - AWS (ECS, Lambda, EC2), GCP (Cloud Run), Kubernetes
 - **Collector configurations** - Ready-to-use OTel Collector configs for various use cases
 
@@ -95,7 +95,6 @@ Getting OpenTelemetry instrumentation right can be tricky. This repository provi
 |-----------|-------------|---------|
 | Spring Boot | Popular Java framework | Traces, Metrics |
 | Tomcat | Servlet container | Traces |
-| JBoss EAP | Enterprise application platform | Traces |
 
 ### PHP (`php/`)
 
@@ -112,7 +111,6 @@ Getting OpenTelemetry instrumentation right can be tricky. This repository provi
 |-----------|----------|-----------|-------------|
 | `dotnet/` | .NET | ASP.NET Core | Web API example |
 | `elixir/` | Elixir | Phoenix | Functional web framework |
-| `kotlin/` | Kotlin | KMP | Real User Monitoring |
 
 ### Frontend
 
@@ -153,7 +151,6 @@ Pre-configured collector setups for common use cases:
 | Nginx Metrics | Nginx server metrics |
 | MariaDB | Database metrics |
 | Oracle | Oracle DB monitoring |
-| Multiline Logs | Stack trace aggregation |
 | YACE Metrics | AWS CloudWatch exporter |
 
 ### Migration Guides
