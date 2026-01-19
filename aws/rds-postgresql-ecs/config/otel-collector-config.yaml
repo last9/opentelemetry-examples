@@ -13,8 +13,7 @@ receivers:
     # via system catalogs (pg_stat_database, etc.)
     # For query-level monitoring (pg_stat_statements), you must run setup-db-user.sql
     # on each database you want to monitor
-    databases:
-      - ${env:PG_DATABASE}
+    # Note: Omitting the 'databases' parameter allows the receiver to auto-discover all databases
     collection_interval: 30s
     tls:
       insecure: false
@@ -83,18 +82,28 @@ processors:
     metric_statements:
       - context: datapoint
         statements:
-          # Promote resource attributes to data point attributes so they become Prometheus labels
+          # Always set db_system for all PostgreSQL metrics
           - set(attributes["db_system"], "postgresql")
-          - set(attributes["database"], resource.attributes["postgresql.database.name"])
-          - set(attributes["table"], resource.attributes["postgresql.table.name"])
-          - set(attributes["cloud_region"], resource.attributes["cloud.region"])
-          - set(attributes["cloud_provider"], resource.attributes["cloud.provider"])
-          - set(attributes["cloud_platform"], resource.attributes["cloud.platform"])
-          - set(attributes["db_instance_id"], resource.attributes["db.instance.id"])
-          - set(attributes["environment"], resource.attributes["deployment.environment"])
-          - set(attributes["service_name"], resource.attributes["service.name"])
+
+          # Always set these from resource processor (always available)
+          - set(attributes["db_instance_id"], resource.attributes["db.instance.id"]) where resource.attributes["db.instance.id"] != nil
+          - set(attributes["environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil
+          - set(attributes["cloud_region"], resource.attributes["cloud.region"]) where resource.attributes["cloud.region"] != nil
+          - set(attributes["cloud_provider"], resource.attributes["cloud.provider"]) where resource.attributes["cloud.provider"] != nil
+          - set(attributes["cloud_platform"], resource.attributes["cloud.platform"]) where resource.attributes["cloud.platform"] != nil
+          - set(attributes["service_name"], resource.attributes["service.name"]) where resource.attributes["service.name"] != nil
+
+          # Conditionally set database name (only if metric has it)
+          - set(attributes["database"], resource.attributes["postgresql.database.name"]) where resource.attributes["postgresql.database.name"] != nil
+
+          # Conditionally set table name (only if metric has it)
+          - set(attributes["table"], resource.attributes["postgresql.table.name"]) where resource.attributes["postgresql.table.name"] != nil
+
+          # For instance-wide metrics without database, set a default label for easier filtering
+          - set(attributes["database"], "_instance_wide") where resource.attributes["postgresql.database.name"] == nil and attributes["database"] == nil
     # NOTE: Resource attributes don't automatically become Prometheus labels in OTLP export
     # We must explicitly promote them to data point attributes using the transform processor
+    # Instance-wide metrics will have database="_instance_wide" for consistent filtering
 
   # Filter processor to drop noisy metrics if needed
   filter/metrics:
