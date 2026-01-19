@@ -355,7 +355,17 @@ Then run this full script on each database to create the schema and functions.
 -- To remove all monitoring objects:
 DROP SCHEMA IF EXISTS otel_monitor CASCADE;
 REVOKE pg_monitor FROM otel_monitor;
-REVOKE CONNECT ON DATABASE current_database() FROM otel_monitor;
+
+-- Revoke CONNECT using dynamic SQL (same pattern as GRANT above)
+DO $$
+DECLARE
+    db_name TEXT;
+BEGIN
+    SELECT current_database() INTO db_name;
+    EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM otel_monitor', db_name);
+END
+$$;
+
 DROP USER IF EXISTS otel_monitor;
 */
 

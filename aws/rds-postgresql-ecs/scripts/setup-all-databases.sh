@@ -158,7 +158,6 @@ IFS=',' read -ra DB_ARRAY <<< "$DATABASES"
 TOTAL=${#DB_ARRAY[@]}
 SUCCESS=0
 FAILED=0
-SKIPPED=0
 
 print_info ""
 print_info "Starting setup on $TOTAL database(s)..."
@@ -197,9 +196,6 @@ print_info "Total databases: $TOTAL"
 print_success "Successful: $SUCCESS"
 if [[ $FAILED -gt 0 ]]; then
     print_error "Failed: $FAILED"
-fi
-if [[ $SKIPPED -gt 0 ]]; then
-    print_warning "Skipped: $SKIPPED"
 fi
 print_info "==================================================================="
 
