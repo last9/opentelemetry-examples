@@ -54,6 +54,8 @@ PG_ENDPOINT=your-rds-endpoint.rds.amazonaws.com
 PG_PORT=5432
 PG_USERNAME=otel_monitor
 PG_PASSWORD=your-password
+# IMPORTANT: Keep PG_DATABASE=postgres to monitor ALL databases
+# The collector connects to 'postgres' but sees metrics for all databases
 PG_DATABASE=postgres
 
 # AWS Configuration
@@ -68,18 +70,51 @@ LAST9_AUTH_HEADER=Basic <base64-encoded-user:pass>
 ENVIRONMENT=prod
 ```
 
+**Note about multi-database monitoring:**
+- The `PG_DATABASE` variable specifies which database the collector connects to
+- When connected to the `postgres` database, the collector can see instance-wide metrics for ALL databases via system catalogs (pg_stat_database, etc.)
+- However, for query-level monitoring (pg_stat_statements), you must run `setup-db-user.sql` on each database (see Step 2)
+
 #### Step 2: Create Monitoring User
 
-Run this SQL script as master user:
+**IMPORTANT: If you have multiple databases on your RDS instance, you must run the setup on EACH database.**
+
+**Option 1: Automated Setup (Recommended for multiple databases)**
+
+Run this helper script to automatically set up monitoring on all databases:
 
 ```bash
-psql -h your-rds-endpoint -U postgres -d postgres -f scripts/setup-db-user.sql
+cd scripts
+export PGPASSWORD='your-master-password'
+./setup-all-databases.sh -h your-rds-endpoint -U postgres
 ```
 
 **What it does:**
-- Creates `otel_monitor` user with read-only access
+- Auto-detects all databases on your RDS instance
+- Runs setup on each database automatically
+- Creates `otel_monitor` user (once)
+- Creates monitoring schema, views, and functions in each database
+- Shows progress and summary report
+
+**Option 2: Manual Setup (Single database)**
+
+If you only have one database or want to set up specific databases:
+
+```bash
+psql -h your-rds-endpoint -U postgres -d your_database_name -f scripts/setup-db-user.sql
+```
+
+**For multiple databases, repeat for each:**
+```bash
+psql -h your-rds-endpoint -U postgres -d database1 -f scripts/setup-db-user.sql
+psql -h your-rds-endpoint -U postgres -d database2 -f scripts/setup-db-user.sql
+psql -h your-rds-endpoint -U postgres -d database3 -f scripts/setup-db-user.sql
+```
+
+**What it does:**
+- Creates `otel_monitor` user with read-only access (if not exists)
 - Grants `pg_monitor` role
-- Creates helper functions for monitoring
+- Creates helper functions and views for monitoring
 - Enables `pg_stat_statements` extension
 
 #### Step 3: Build Docker Images

@@ -43,7 +43,7 @@ nano .env  # or use any text editor
 ```bash
 # Your RDS Details
 RDS_INSTANCE_ID=<your-rds-instance-id>        # Find in AWS Console → RDS
-DATABASE_NAME=postgres                         # Your database name
+DATABASE_NAME=postgres                         # Keep as 'postgres' to monitor ALL databases
 MASTER_USERNAME=postgres                       # RDS master username
 MASTER_PASSWORD=<your-rds-password>           # RDS master password
 
@@ -64,10 +64,81 @@ PG_PASSWORD=<your-monitoring-password>         # Your monitoring password
 ```
 
 **If `CREATE_MONITORING_USER=false`**, you must:
-1. **Manually create the monitoring user** in PostgreSQL first (see Troubleshooting section)
+1. **Manually create the monitoring user** in PostgreSQL first (see Database Setup section below)
 2. **Add `PG_USERNAME` and `PG_PASSWORD`** to your `.env` file
 
 **Save and close the file.**
+
+---
+
+## Step 1.5: Setup Database Monitoring (REQUIRED if CREATE_MONITORING_USER=false)
+
+**⚠️ IMPORTANT: This step is REQUIRED if you have multiple databases on your RDS instance!**
+
+The monitoring setup must be run on **EACH** database you want to monitor. The setup creates monitoring views and functions that are database-specific.
+
+### Option A: Automated Setup (Recommended)
+
+Use the helper script to automatically set up all databases:
+
+```bash
+cd scripts
+export PGPASSWORD='your-master-password'
+./setup-all-databases.sh -h your-rds-endpoint.rds.amazonaws.com -U postgres
+```
+
+**What it does:**
+- Auto-detects all databases on your RDS instance
+- Creates `otel_monitor` user (once)
+- Sets up monitoring schema, views, and functions in each database
+- Shows progress with colored output
+
+**Example output:**
+```
+[INFO] Found databases: app_db,analytics_db,postgres
+[INFO] Starting setup on 3 database(s)...
+[SUCCESS] ✓ Setup completed successfully for database: app_db
+[SUCCESS] ✓ Setup completed successfully for database: analytics_db
+[SUCCESS] ✓ Setup completed successfully for database: postgres
+[SUCCESS] All databases setup successfully!
+```
+
+### Option B: Manual Setup
+
+For a single database or specific databases only:
+
+```bash
+cd scripts
+export PGPASSWORD='your-master-password'
+psql -h your-rds-endpoint.rds.amazonaws.com -U postgres -d database_name -f setup-db-user.sql
+```
+
+**For multiple databases, repeat for each:**
+```bash
+psql -h your-rds-endpoint -U postgres -d app_db -f setup-db-user.sql
+psql -h your-rds-endpoint -U postgres -d analytics_db -f setup-db-user.sql
+psql -h your-rds-endpoint -U postgres -d reporting_db -f setup-db-user.sql
+```
+
+### Verify Setup
+
+After running the setup, verify it worked:
+
+```bash
+psql -h your-rds-endpoint -U postgres -d your_database -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'otel_monitor';"
+```
+
+**Expected output:** Should show `otel_monitor` schema exists.
+
+### Important Note on Multi-Database Monitoring
+
+The OpenTelemetry collector connects to the `postgres` database (specified in `DATABASE_NAME` or `PG_DATABASE`), but it automatically collects instance-wide metrics for **all databases** via PostgreSQL system catalogs (like `pg_stat_database`).
+
+**However**, for query-level monitoring from `pg_stat_statements`, you must run the setup script on each database individually. This is why Step 1.5 is critical if you have multiple databases.
+
+**In summary:**
+- ✅ **Instance metrics** (connections, transactions, etc.) - Collected for all databases automatically
+- ⚠️ **Query-level metrics** (pg_stat_statements) - Only collected from databases where you ran the setup script
 
 ---
 
