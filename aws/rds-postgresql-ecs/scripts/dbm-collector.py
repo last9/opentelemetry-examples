@@ -581,7 +581,7 @@ def setup_otlp_exporter(config: Config) -> metrics.Meter:
     return metrics.get_meter("postgresql.dbm")
 
 
-def output_otlp(data: Dict[str, Any], meter: metrics.Meter) -> None:
+def output_otlp(data: Dict[str, Any], meter: metrics.Meter, config: Config) -> None:
     """Output data via OTLP to Last9."""
 
     # Create/get metric instruments (these are cached by name)
@@ -659,10 +659,18 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter) -> None:
 
     # Record query metrics from pg_stat_statements
     for metric in data.get('query_metrics', []):
+        # Create a short, readable query preview (max 100 chars)
+        query_text = metric['query'].strip()
+        query_text_preview = query_text[:100]
+        if len(query_text) > 100:
+            query_text_preview += "..."
+
         attributes = {
+            "db_instance_id": config.rds_instance_id,
             "database": metric['database'],
             "username": metric['username'],
             "query_signature": metric['query_signature'],
+            "query_text_preview": query_text_preview,  # Add readable SQL preview
         }
 
         # Record cumulative metrics
@@ -680,6 +688,7 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter) -> None:
         query_info.set(
             1,  # Always 1, this is just an info metric
             {
+                "db_instance_id": config.rds_instance_id,
                 "database": metric['database'],
                 "username": metric['username'],
                 "query_signature": metric['query_signature'],
@@ -691,7 +700,10 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter) -> None:
     # Record active query count
     active_queries.set(
         len(data.get('query_samples', [])),
-        {"database": data['metadata']['database']}
+        {
+            "db_instance_id": config.rds_instance_id,
+            "database": data['metadata']['database']
+        }
     )
 
     # Record wait events
@@ -699,6 +711,7 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter) -> None:
         wait_events_count.set(
             event['count'],
             {
+                "db_instance_id": config.rds_instance_id,
                 "database": event['database'],
                 "wait_event_type": event['wait_event_type'],
                 "wait_event": event['wait_event'],
@@ -708,7 +721,10 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter) -> None:
     # Record blocking queries count
     blocking_queries_count.set(
         len(data.get('blocking_queries', [])),
-        {"database": data['metadata']['database']}
+        {
+            "db_instance_id": config.rds_instance_id,
+            "database": data['metadata']['database']
+        }
     )
 
     logger.info(
@@ -749,7 +765,7 @@ def main():
                 if config.output_format == 'json':
                     output_json(data)
                 elif config.output_format == 'otlp':
-                    output_otlp(data, meter)
+                    output_otlp(data, meter, config)
 
                 # Summary log
                 logger.info(

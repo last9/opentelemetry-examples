@@ -47,7 +47,7 @@ Parameters:
 
   DatabaseName:
     Type: String
-    Description: PostgreSQL database name to monitor
+    Description: PostgreSQL database name for creating monitoring user (monitors ALL databases regardless of this value)
     Default: postgres
     AllowedPattern: '[a-zA-Z][a-zA-Z0-9_]*'
 
@@ -526,13 +526,17 @@ Resources:
       Name: !Sub '${AWS::StackName}/monitoring-credentials'
       Description: PostgreSQL monitoring user credentials
       GenerateSecretString:
-        SecretStringTemplate: !Sub |
-          {
-            "username": "otel_monitor",
-            "host": "${RDSInfo.Endpoint}",
-            "port": ${RDSInfo.Port},
-            "dbname": "${DatabaseName}"
-          }
+        SecretStringTemplate: !Sub
+          - |
+            {
+              "username": "otel_monitor",
+              "host": "${Endpoint}",
+              "port": ${Port},
+              "dbname": "${DBName}"
+            }
+          - Endpoint: !GetAtt RDSInfo.Endpoint
+            Port: !GetAtt RDSInfo.Port
+            DBName: !Ref DatabaseName
         GenerateStringKey: password
         PasswordLength: 32
         ExcludePunctuation: true
@@ -546,14 +550,20 @@ Resources:
     Properties:
       Name: !Sub '${AWS::StackName}/existing-user-credentials'
       Description: Existing PostgreSQL user credentials
-      SecretString: !Sub |
-        {
-          "username": "${ExistingDBUsername}",
-          "password": "${ExistingDBPassword}",
-          "host": "${RDSInfo.Endpoint}",
-          "port": ${RDSInfo.Port},
-          "dbname": "${DatabaseName}"
-        }
+      SecretString: !Sub
+        - |
+          {
+            "username": "${Username}",
+            "password": "${Password}",
+            "host": "${Endpoint}",
+            "port": ${Port},
+            "dbname": "${DBName}"
+          }
+        - Username: !Ref ExistingDBUsername
+          Password: !Ref ExistingDBPassword
+          Endpoint: !GetAtt RDSInfo.Endpoint
+          Port: !GetAtt RDSInfo.Port
+          DBName: !Ref DatabaseName
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -826,8 +836,6 @@ Resources:
               Value: !GetAtt RDSInfo.Endpoint
             - Name: PG_PORT
               Value: !GetAtt RDSInfo.Port
-            - Name: DB_NAME
-              Value: !Ref DatabaseName
             - Name: RDS_INSTANCE_ID
               Value: !Ref RDSInstanceId
             - Name: LAST9_ENDPOINT
@@ -840,8 +848,8 @@ Resources:
                     transport: tcp
                     username: ${!env:PG_USERNAME}
                     password: ${!env:PG_PASSWORD}
-                    databases:
-                      - ${!env:DB_NAME}
+                    # Monitor all databases on the instance by not specifying databases filter
+                    # databases parameter omitted = monitor all databases
                     tls:
                       insecure: false
                       insecure_skip_verify: true
@@ -873,6 +881,19 @@ Resources:
                         value: ${!env:RDS_INSTANCE_ID}
                         action: upsert
 
+                  transform/metrics:
+                    metric_statements:
+                      - context: datapoint
+                        statements:
+                          - set(attributes["db_system"], "postgresql")
+                          - set(attributes["db_instance_id"], resource.attributes["db.instance.id"]) where resource.attributes["db.instance.id"] != nil
+                          - set(attributes["environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil
+                          - set(attributes["cloud_region"], resource.attributes["cloud.region"]) where resource.attributes["cloud.region"] != nil
+                          - set(attributes["cloud_provider"], resource.attributes["cloud.provider"]) where resource.attributes["cloud.provider"] != nil
+                          - set(attributes["service_name"], resource.attributes["service.name"]) where resource.attributes["service.name"] != nil
+                          - set(attributes["database"], resource.attributes["postgresql.database.name"]) where resource.attributes["postgresql.database.name"] != nil
+                          - set(attributes["table"], resource.attributes["postgresql.table.name"]) where resource.attributes["postgresql.table.name"] != nil
+
                 exporters:
                   otlphttp:
                     endpoint: ${!env:LAST9_ENDPOINT}
@@ -890,7 +911,7 @@ Resources:
                   pipelines:
                     metrics:
                       receivers: [postgresql]
-                      processors: [resource, batch]
+                      processors: [resource, transform/metrics, batch]
                       exporters: [otlphttp]
           Secrets:
             - Name: PG_USERNAME
@@ -926,6 +947,10 @@ Resources:
               Value: '30'
             - Name: ENVIRONMENT
               Value: !Ref Environment
+            - Name: RDS_INSTANCE_ID
+              Value: !Ref RDSInstanceId
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
           Secrets:
             - Name: PG_ENDPOINT
               ValueFrom: !If

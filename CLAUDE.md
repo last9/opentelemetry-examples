@@ -75,11 +75,56 @@ Thumbs.db
 ## Example Format
 
 Each example should have:
-1. `README.md` - Quick start guide
+1. `README.md` - Quick start guide (this is the ONLY documentation file needed)
 2. `docker-compose.yaml` - For easy local testing (when applicable)
 3. `.env.example` - Environment variable template
 4. `.gitignore` - Ignore secrets, deps, binaries
 5. Source code with OTel instrumentation
+
+## Documentation Rules
+
+### One README Per Example - No Extra Docs
+
+**Do NOT create** additional documentation files like:
+- `QUICK_SETUP.md`
+- `GETTING_STARTED.md`
+- `INSTALLATION.md`
+- `SETUP.md`
+- `GUIDE.md`
+- `TUTORIAL.md`
+- `CONTRIBUTING.md` (at example level)
+- `CHANGELOG.md` (at example level)
+
+**Why:** Multiple docs files create maintenance burden, become stale, and confuse users. All setup instructions belong in `README.md`.
+
+**If content feels too long for README:**
+1. Simplify the setup process instead of documenting complexity
+2. Use collapsible sections (`<details>`) for optional/advanced content
+3. Link to external Last9 docs for detailed explanations
+
+### README Structure
+
+Keep READMEs focused and concise:
+```
+# Example Name
+Brief description (1-2 sentences)
+
+## Prerequisites
+- List requirements
+
+## Quick Start
+1. Step one
+2. Step two
+3. Step three
+
+## Configuration
+Environment variables table
+
+## Verification
+How to confirm it's working
+```
+
+Avoid verbose explanations - link to Last9 docs instead.
 
 ## Credentials in Examples
 
