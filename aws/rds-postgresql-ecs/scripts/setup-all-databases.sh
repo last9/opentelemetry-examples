@@ -137,9 +137,16 @@ if [[ -z "$DATABASES" ]]; then
     print_info "Auto-detecting databases..."
 
     # Get list of databases, excluding templates and system databases
-    DATABASES=$(PAGER=cat psql -h "$HOST" -p "$PORT" -U "$USER" -d postgres -t -P pager=off -c \
-        "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('rdsadmin') ORDER BY datname;" \
-        2>/dev/null | tr -d ' ' | grep -v '^$' | paste -sd ',' -)
+    # Use /dev/tty only if it exists and PGPASSWORD is not set (interactive mode)
+    if [[ -z "$PGPASSWORD" ]] && [[ -c /dev/tty ]]; then
+        DATABASES=$(PAGER=cat psql -h "$HOST" -p "$PORT" -U "$USER" -d postgres -t -P pager=off -c \
+            "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('rdsadmin') ORDER BY datname;" \
+            < /dev/tty 2>/dev/null | tr -d ' ' | grep -v '^$' | paste -sd ',' -)
+    else
+        DATABASES=$(PAGER=cat psql -h "$HOST" -p "$PORT" -U "$USER" -d postgres -t -P pager=off -c \
+            "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('rdsadmin') ORDER BY datname;" \
+            < /dev/null 2>/dev/null | tr -d ' ' | grep -v '^$' | paste -sd ',' -)
+    fi
 
     if [[ -z "$DATABASES" ]]; then
         print_error "Failed to detect databases. Please specify databases with -d option."
@@ -163,6 +170,9 @@ print_info ""
 print_info "Starting setup on $TOTAL database(s)..."
 print_info ""
 
+# Temporarily disable exit-on-error for the loop to prevent early termination
+set +e
+
 # Process each database
 for db in "${DB_ARRAY[@]}"; do
     # Trim whitespace
@@ -177,16 +187,38 @@ for db in "${DB_ARRAY[@]}"; do
     # 1. PAGER=cat - override system pager
     # 2. -P pager=off - PostgreSQL pager setting
     # 3. --pset=pager=off - Alternative pager setting
-    if PAGER=cat psql -h "$HOST" -p "$PORT" -U "$USER" -d "$db" -P pager=off --pset=pager=off -f "$SQL_SCRIPT" 2>&1; then
-        print_success "✓ Setup completed successfully for database: $db"
-        ((SUCCESS++))
+    # 4. < /dev/tty - Fix stdin consumption to prevent loop from breaking (interactive mode only)
+    if [[ -z "$PGPASSWORD" ]] && [[ -c /dev/tty ]]; then
+        # Interactive mode - use /dev/tty to fix stdin consumption in loop
+        PAGER=cat psql -h "$HOST" -p "$PORT" -U "$USER" -d "$db" -P pager=off --pset=pager=off -f "$SQL_SCRIPT" < /dev/tty > /tmp/psql_output_$$.log 2>&1
+        if [[ $? -eq 0 ]]; then
+            print_success "✓ Setup completed successfully for database: $db"
+            ((SUCCESS++))
+        else
+            print_error "✗ Setup failed for database: $db"
+            cat /tmp/psql_output_$$.log
+            ((FAILED++))
+        fi
+        rm -f /tmp/psql_output_$$.log
     else
-        print_error "✗ Setup failed for database: $db"
-        ((FAILED++))
+        # Non-interactive mode (PGPASSWORD set) or no tty - redirect stdin from /dev/null
+        PAGER=cat psql -h "$HOST" -p "$PORT" -U "$USER" -d "$db" -P pager=off --pset=pager=off -q -f "$SQL_SCRIPT" < /dev/null > /tmp/psql_output_$$.log 2>&1
+        if [[ $? -eq 0 ]]; then
+            print_success "✓ Setup completed successfully for database: $db"
+            ((SUCCESS++))
+        else
+            print_error "✗ Setup failed for database: $db"
+            grep -E "(ERROR|FATAL)" /tmp/psql_output_$$.log || cat /tmp/psql_output_$$.log | tail -20
+            ((FAILED++))
+        fi
+        rm -f /tmp/psql_output_$$.log
     fi
 
     print_info ""
 done
+
+# Re-enable exit-on-error
+set -e
 
 # Summary
 print_info "==================================================================="
