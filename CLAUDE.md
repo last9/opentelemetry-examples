@@ -6,7 +6,7 @@ Guidelines for creating and maintaining OpenTelemetry example code.
 
 This is Last9's collection of production-ready OpenTelemetry instrumentation examples. When a user asks about instrumenting an application with OpenTelemetry, you can reference examples in this repo by language/framework.
 
-**Languages:** Go, Python, JavaScript/Node.js, Ruby, Java, PHP, .NET, Elixir, Kotlin
+**Languages:** Go, Python, JavaScript/Node.js, Ruby, Java, PHP, .NET, Elixir
 **Cloud:** AWS (ECS, Lambda, EC2), GCP (Cloud Run), Kubernetes
 **Collector:** Pre-configured OTel Collector setups for various backends
 
