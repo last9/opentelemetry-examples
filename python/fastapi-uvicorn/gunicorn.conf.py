@@ -11,7 +11,7 @@ if platform.system() == "Darwin":
     os.environ["NO_PROXY"] = "*"
 
 # Server socket
-bind = "0.0.0.0:8005"
+bind = "0.0.0.0:8000"
 backlog = 2048
 
 # Worker processes (set to 1 on macOS to avoid fork issues)
