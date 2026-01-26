@@ -1,0 +1,371 @@
+# OpenTelemetry Collector - Oracle Monitoring Agent
+# Deploy on Oracle database server (or dedicated monitoring host)
+# Collects Oracle database metrics and forwards to datacenter gateway
+
+# Version: OpenTelemetry Collector Contrib v0.140.0
+# Environment: Windows Server 2019 / Linux
+# Role: Agent (Oracle metrics collection)
+
+receivers:
+  # Oracle Database Receiver - Collects performance metrics
+  oracledb:
+    # Oracle connection details
+    endpoint: localhost:1521  # CHANGE THIS: Oracle host:port
+    service: ORCL             # CHANGE THIS: Your Oracle service name (SID or Service Name)
+
+    # Authentication
+    username: last9_monitor
+    password: ${ORACLE_MONITOR_PASSWORD}  # From environment variable (DO NOT hardcode!)
+
+    # Collection interval
+    collection_interval: 60s  # Collect metrics every 60 seconds
+
+    # Metrics configuration - Enable comprehensive monitoring
+    metrics:
+      # CPU and Execution Statistics
+      oracledb.cpu_time:
+        enabled: true
+      oracledb.execute_count:
+        enabled: true
+
+      # Physical I/O
+      oracledb.physical_reads:
+        enabled: true
+      oracledb.physical_writes:
+        enabled: true
+      oracledb.physical_read_io_requests:
+        enabled: true
+      oracledb.physical_write_io_requests:
+        enabled: true
+
+      # Logical I/O
+      oracledb.consistent_gets:
+        enabled: true
+      oracledb.db_block_gets:
+        enabled: true
+      oracledb.logical_reads:
+        enabled: true
+
+      # Parse Statistics
+      oracledb.parse_count.hard:
+        enabled: true
+      oracledb.parse_count.total:
+        enabled: true
+
+      # Sessions
+      oracledb.sessions:
+        enabled: true
+      oracledb.session_count:
+        enabled: true
+
+      # Processes
+      oracledb.processes:
+        enabled: true
+      oracledb.processes.limit:
+        enabled: true
+
+      # Transactions
+      oracledb.user_commits:
+        enabled: true
+      oracledb.user_rollbacks:
+        enabled: true
+      oracledb.transactions:
+        enabled: true
+
+      # Tablespace Usage
+      oracledb.tablespace_usage:
+        enabled: true
+      oracledb.tablespace_size:
+        enabled: true
+
+      # Parallel Execution
+      oracledb.ddl_statements_parallelized:
+        enabled: true
+      oracledb.dml_statements_parallelized:
+        enabled: true
+      oracledb.parallel_operations_not_downgraded:
+        enabled: true
+      oracledb.parallel_operations_downgraded_1_to_25_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_25_to_50_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_50_to_75_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_75_to_99_pct:
+        enabled: true
+      oracledb.parallel_operations_downgraded_to_serial:
+        enabled: true
+      oracledb.queries_parallelized:
+        enabled: true
+
+      # Additional Performance Metrics
+      oracledb.physical_reads_direct:
+        enabled: true
+      oracledb.physical_writes_direct:
+        enabled: true
+      oracledb.enqueue_waits:
+        enabled: true
+      oracledb.enqueue_deadlocks:
+        enabled: true
+      oracledb.exchange_deadlocks:
+        enabled: true
+
+  # Host Metrics - Server performance (optional but recommended)
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+
+processors:
+  # Memory Limiter - Prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Batch Processor
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Resource Detection - Auto-detect cloud/host information
+  resourcedetection:
+    detectors: [env, system, azure, gcp, aws]
+    timeout: 5s
+    override: false
+
+  # Resource Processor - Add custom attributes
+  resource:
+    attributes:
+      # Database identification
+      - key: db.system
+        value: "oracle"
+        action: upsert
+
+      - key: db.name
+        value: "ORCL"  # CHANGE THIS: Your database name
+        action: upsert
+
+      - key: db.version
+        value: "19c"
+        action: upsert
+
+      # Environment context
+      - key: datacenter.name
+        value: "dc-primary"  # CHANGE THIS
+        action: upsert
+
+      - key: deployment.environment
+        value: "production"  # CHANGE THIS: production/staging/dev
+        action: upsert
+
+      - key: deployment.tier
+        value: "database"
+        action: upsert
+
+      # Team/ownership
+      - key: team.name
+        value: "database-team"  # CHANGE THIS
+        action: upsert
+
+exporters:
+  # OTLP Exporter - Forward to datacenter gateway
+  otlp/gateway:
+    endpoint: "dc-gateway-01.internal:4317"  # CHANGE THIS: Datacenter gateway
+
+    # TLS Configuration
+    tls:
+      insecure: false  # Always use TLS in production
+      cert_file: /etc/otel/certs/oracle-agent-cert.pem      # Windows: C:\ProgramData\otel\certs\
+      key_file: /etc/otel/certs/oracle-agent-key.pem        # Windows: C:\ProgramData\otel\certs\
+      ca_file: /etc/otel/certs/ca-cert.pem                  # Windows: C:\ProgramData\otel\certs\
+
+    # Retry configuration
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+    # Persistent queue
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+      storage: file_storage
+
+    timeout: 30s
+
+  # Debug Exporter - For troubleshooting (DISABLE in production)
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+extensions:
+  # File Storage - Persistent queue
+  file_storage:
+    directory: /var/lib/otelcol/queue  # Windows: C:\ProgramData\otel\queue
+    timeout: 10s
+    compaction:
+      on_start: true
+
+  # Health Check
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+
+  # pprof - Performance profiling
+  pprof:
+    endpoint: 127.0.0.1:1777
+
+  # zpages - Live debugging
+  zpages:
+    endpoint: 127.0.0.1:55679
+
+service:
+  extensions: [file_storage, health_check, pprof, zpages]
+
+  telemetry:
+    logs:
+      level: info  # Change to 'debug' for troubleshooting
+      initial_fields:
+        service: otelcol-oracle-agent
+
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888
+
+  pipelines:
+    # Metrics Pipeline - Oracle + Host metrics
+    metrics:
+      receivers: [oracledb, hostmetrics]
+      processors: [memory_limiter, resourcedetection, batch, resource]
+      exporters: [otlp/gateway]  # Remove 'debug' in production
+
+# Configuration Notes:
+#
+# 1. REQUIRED CHANGES:
+#    - oracledb.endpoint: Your Oracle host:port
+#    - oracledb.service: Your Oracle SID or service name
+#    - resource.db.name: Your database name
+#    - datacenter.name: Your datacenter identifier
+#    - deployment.environment: production/staging/dev
+#    - team.name: Your team name
+#    - otlp/gateway endpoint: Your datacenter gateway address
+#    - Certificate paths: Update for your OS (Windows vs Linux)
+#
+# 2. ORACLE CREDENTIALS:
+#    CRITICAL: Never hardcode passwords in this file!
+#
+#    Set password via environment variable:
+#
+#    Windows PowerShell:
+#    $env:ORACLE_MONITOR_PASSWORD = "YourSecurePassword"
+#    [Environment]::SetEnvironmentVariable("ORACLE_MONITOR_PASSWORD", "YourSecurePassword", "Machine")
+#
+#    Linux/Mac:
+#    export ORACLE_MONITOR_PASSWORD="YourSecurePassword"
+#
+#    Or use secrets management:
+#    - Windows: Windows Credential Manager
+#    - Linux: /etc/environment, systemd EnvironmentFile
+#    - Kubernetes: Secrets
+#    - AWS: Secrets Manager
+#
+# 3. ORACLE CONNECTION:
+#    Test connection before starting collector:
+#
+#    sqlplus last9_monitor/password@localhost:1521/ORCL
+#
+#    Verify permissions:
+#    SELECT * FROM V$SYSSTAT WHERE ROWNUM <= 10;
+#
+# 4. FIREWALL RULES:
+#    Outbound: Allow 4317 (gRPC) to datacenter gateway
+#    Inbound: Allow 13133 (health check), 8888 (metrics) for monitoring
+#    Oracle: Allow 1521 from collector host (if remote)
+#
+# 5. METRICS COLLECTION:
+#    The Oracle receiver queries V$ views every collection_interval (60s).
+#    Performance impact: <0.01% CPU on most databases.
+#
+#    To reduce frequency (less accurate, lower overhead):
+#    collection_interval: 120s  # Every 2 minutes
+#
+#    To increase frequency (more accurate, higher overhead):
+#    collection_interval: 30s   # Every 30 seconds
+#
+# 6. DEBUGGING:
+#    Test collector configuration:
+#    otelcol-contrib validate --config=config-oracle-agent.yaml
+#
+#    Check health:
+#    curl http://localhost:13133
+#
+#    View metrics:
+#    curl http://localhost:8888/metrics | grep oracledb
+#
+#    Check logs:
+#    Windows: C:\ProgramData\OpenTelemetry Collector\logs\otelcol.log
+#    Linux: journalctl -u otelcol-contrib -f
+#
+# 7. TROUBLESHOOTING:
+#    No metrics appearing:
+#    - Verify Oracle connection: sqlplus last9_monitor/pass@host:1521/ORCL
+#    - Check collector logs for connection errors
+#    - Verify permissions with verify-setup.sql
+#    - Test network connectivity: telnet oracle-host 1521
+#
+#    Permission denied errors:
+#    - Re-run grant-minimal-permissions.sql
+#    - Verify user is unlocked: ALTER USER last9_monitor ACCOUNT UNLOCK;
+#
+#    High memory usage:
+#    - Reduce batch size
+#    - Lower memory_limiter.limit_mib
+#    - Disable unnecessary metrics
+#
+# 8. PRODUCTION BEST PRACTICES:
+#    - Remove debug exporter
+#    - Use TLS for gateway connection
+#    - Monitor queue size (alert if >1GB)
+#    - Rotate credentials every 90 days
+#    - Review enabled metrics (disable unused ones)
+#    - Set up alerts for collector health
+#
+# 9. PERFORMANCE TUNING:
+#    For high-throughput databases:
+#    - Increase batch size: 2048-4096
+#    - Increase num_consumers: 20
+#    - Increase memory_limiter: 1024 MB
+#
+#    For resource-constrained hosts:
+#    - Reduce batch size: 512
+#    - Increase collection_interval: 120s
+#    - Disable host metrics if not needed
+#
+# 10. MULTI-TENANT / RAC:
+#     For Oracle RAC (Real Application Clusters):
+#     - Deploy agent on EACH node
+#     - Use node-specific service names
+#     - Add node identifier to resource attributes:
+#       - key: db.node
+#         value: "node1"
+#
+#     For Multitenant (CDB/PDB):
+#     - Connect to CDB for instance-level metrics
+#     - PDB metrics will be included automatically
