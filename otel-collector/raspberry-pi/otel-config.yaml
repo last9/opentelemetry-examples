@@ -23,6 +23,15 @@ receivers:
         mute_process_io_error: true
         mute_process_user_error: true
 
+  # Raspberry Pi temperature metrics (CPU, GPU, throttle state)
+  prometheus/pi_temp:
+    config:
+      scrape_configs:
+        - job_name: 'pi-temperature'
+          scrape_interval: 30s
+          static_configs:
+            - targets: ['localhost:9101']
+
 processors:
   batch:
     timeout: 10s
@@ -66,6 +75,6 @@ exporters:
 service:
   pipelines:
     metrics:
-      receivers: [hostmetrics]
+      receivers: [hostmetrics, prometheus/pi_temp]
       processors: [memory_limiter, batch, resourcedetection/system, resource/pi, transform/metrics]
       exporters: [otlp/last9]

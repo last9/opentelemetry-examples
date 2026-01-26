@@ -76,10 +76,37 @@ The configuration collects:
 | Network | Bytes sent/received, packets, errors |
 | Load | 1m, 5m, 15m averages |
 | Process | Count, states |
+| Temperature | CPU temp, GPU temp, throttle state |
 
-### Pi-Specific: CPU Temperature
+### Pi-Specific: CPU/GPU Temperature
 
-The `hostmetrics` receiver does not natively collect Raspberry Pi temperature. To add it, use a custom script with the `filestats` receiver (see Advanced Configuration below).
+The included `pi-temp-exporter.py` script exposes Raspberry Pi-specific metrics:
+
+| Metric | Description |
+|--------|-------------|
+| `rpi_cpu_temperature_celsius` | CPU temperature from thermal zone |
+| `rpi_gpu_temperature_celsius` | GPU temperature via vcgencmd |
+| `rpi_throttled` | Throttle state (0=OK) |
+| `rpi_undervoltage` | Undervoltage detected (1=yes, 0=no) |
+| `rpi_freq_capped` | Frequency capped (1=yes, 0=no) |
+| `rpi_throttling` | Currently throttled (1=yes, 0=no) |
+
+#### Install Temperature Exporter
+
+```bash
+# Copy the exporter script
+sudo cp pi-temp-exporter.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/pi-temp-exporter.py
+
+# Install and start the service
+sudo cp pi-temp-exporter.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable pi-temp-exporter
+sudo systemctl start pi-temp-exporter
+
+# Verify it's running
+curl http://localhost:9101/metrics
+```
 
 ## Verification
 
@@ -101,22 +128,6 @@ sudo otelcol-contrib --config /etc/otelcol-contrib/config.yaml
 Metrics should appear in your [Last9 dashboard](https://app.last9.io/) within a few minutes.
 
 ## Advanced Configuration
-
-<details>
-<summary>Add CPU Temperature Monitoring</summary>
-
-Create a script to expose temperature as a metric:
-
-```bash
-# /usr/local/bin/pi-temp-exporter.sh
-#!/bin/bash
-TEMP=$(cat /sys/class/thermal/thermal_zone0/temp)
-echo "pi_cpu_temperature_celsius $(echo "scale=2; $TEMP/1000" | bc)"
-```
-
-Add to crontab to write to a file, then use `filestats` receiver.
-
-</details>
 
 <details>
 <summary>Reduce Resource Usage</summary>
