@@ -14,7 +14,8 @@ receivers:
       filesystem:
       network:
       load:
-      process:
+      processes:  # Aggregate process statistics
+      process:    # Per-process metrics
         include:
           match_type: regexp
           names: [".*"]
@@ -54,9 +55,9 @@ processors:
 
 exporters:
   otlp/last9:
-    endpoint: <last9_otlp_endpoint>
+    endpoint: "otlp.last9.io:443"  # Replace with your Last9 OTLP endpoint
     headers:
-      "Authorization": "<last9_auth_header>"
+      "Authorization": "Basic <your-base64-encoded-credentials>"  # Replace with your Last9 auth header
 
   # Enable for local debugging
   # debug:

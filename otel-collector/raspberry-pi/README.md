@@ -16,21 +16,21 @@ Monitor your Raspberry Pi system metrics (CPU, memory, disk, network, temperatur
 uname -m
 ```
 
-- `armv7l` → 32-bit (use `linux_arm` package)
+- `armv7l` → 32-bit (use `linux_armv7` package)
 - `aarch64` → 64-bit (use `linux_arm64` package)
 
 ### 2. Install OpenTelemetry Collector
 
-**For 64-bit (arm64):**
+**For 64-bit (arm64) - Raspberry Pi 4/5:**
 ```bash
-wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.96.0/otelcol-contrib_0.96.0_linux_arm64.deb
-sudo dpkg -i otelcol-contrib_0.96.0_linux_arm64.deb
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.144.0/otelcol-contrib_0.144.0_linux_arm64.deb
+sudo dpkg -i otelcol-contrib_0.144.0_linux_arm64.deb
 ```
 
-**For 32-bit (armv7):**
+**For 32-bit (armv7) - Raspberry Pi 3 and older:**
 ```bash
-wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.96.0/otelcol-contrib_0.96.0_linux_arm.deb
-sudo dpkg -i otelcol-contrib_0.96.0_linux_arm.deb
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.144.0/otelcol-contrib_0.144.0_linux_armv7.deb
+sudo dpkg -i otelcol-contrib_0.144.0_linux_armv7.deb
 ```
 
 ### 3. Configure the Collector
@@ -45,9 +45,9 @@ Edit with your Last9 credentials:
 sudo nano /etc/otelcol-contrib/config.yaml
 ```
 
-Replace:
-- `<last9_otlp_endpoint>` → Your Last9 OTLP endpoint (e.g., `otlp.last9.io:443`)
-- `<last9_auth_header>` → Your Last9 auth header (e.g., `Basic <base64-encoded-credentials>`)
+Update the following values in the config:
+- `endpoint` → Your Last9 OTLP endpoint (default: `otlp.last9.io:443`)
+- `Authorization` → Your Last9 auth header (`Basic <base64-encoded-credentials>`)
 
 ### 4. Start the Collector
 
