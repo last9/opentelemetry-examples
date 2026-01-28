@@ -1,0 +1,80 @@
+receivers:
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      disk:
+      filesystem:
+      network:
+      load:
+      processes:  # Aggregate process statistics
+      process:    # Per-process metrics
+        include:
+          match_type: regexp
+          names: [".*"]
+        mute_process_exe_error: true
+        mute_process_io_error: true
+        mute_process_user_error: true
+
+  # Raspberry Pi temperature metrics (CPU, GPU, throttle state)
+  prometheus/pi_temp:
+    config:
+      scrape_configs:
+        - job_name: 'pi-temperature'
+          scrape_interval: 30s
+          static_configs:
+            - targets: ['localhost:9101']
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+
+  resource/pi:
+    attributes:
+      - key: device.type
+        value: raspberry-pi
+        action: upsert
+
+  transform/metrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["host.name"], resource.attributes["host.name"])
+          - set(attributes["os.type"], resource.attributes["os.type"])
+
+  # Memory limiter to prevent OOM on resource-constrained Pi
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 100
+    spike_limit_mib: 25
+
+exporters:
+  otlp/last9:
+    endpoint: "otlp.last9.io:443"  # Replace with your Last9 OTLP endpoint
+    headers:
+      "Authorization": "Basic <your-base64-encoded-credentials>"  # Replace with your Last9 auth header
+
+  # Enable for local debugging
+  # debug:
+  #   verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics, prometheus/pi_temp]
+      processors: [memory_limiter, batch, resourcedetection/system, resource/pi, transform/metrics]
+      exporters: [otlp/last9]
