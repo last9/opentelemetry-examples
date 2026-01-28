@@ -10,7 +10,7 @@ logger = Logger.new('logs/application.log', 'daily')
 logger.level = Logger::INFO
 logger.formatter = proc do |severity, datetime, progname, msg|
   {
-    timestamp: datetime.iso8601,
+    timestamp: datetime.strftime('%Y-%m-%dT%H:%M:%S%z'),
     level: severity,
     message: msg,
     service: 'ruby-app'
