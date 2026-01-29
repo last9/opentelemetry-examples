@@ -19,7 +19,13 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
 const { Resource, envDetector, processDetector, hostDetector } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
-const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-node');
+const {
+  BatchSpanProcessor,
+  TraceIdRatioBasedSampler,
+  ParentBasedSampler,
+  AlwaysOnSampler,
+  AlwaysOffSampler
+} = require('@opentelemetry/sdk-trace-node');
 const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { RuntimeNodeInstrumentation } = require('@opentelemetry/instrumentation-runtime-node');
 const { containerDetector } = require('@opentelemetry/resource-detector-container');
@@ -71,10 +77,39 @@ if (resourceAttrs) {
   });
 }
 
+/**
+ * Create a sampler based on environment variables.
+ * Supports standard OpenTelemetry sampler configuration:
+ * - OTEL_TRACES_SAMPLER: Sampler type (always_on, always_off, traceidratio, parentbased_*)
+ * - OTEL_TRACES_SAMPLER_ARG: Sampling ratio for ratio-based samplers (0.0 to 1.0)
+ */
+function createSampler() {
+  const samplerType = process.env.OTEL_TRACES_SAMPLER || 'parentbased_traceidratio';
+  const ratio = parseFloat(process.env.OTEL_TRACES_SAMPLER_ARG || '1.0');
+
+  switch (samplerType) {
+    case 'always_on':
+      return new AlwaysOnSampler();
+    case 'always_off':
+      return new AlwaysOffSampler();
+    case 'traceidratio':
+      return new TraceIdRatioBasedSampler(ratio);
+    case 'parentbased_always_on':
+      return new ParentBasedSampler({ root: new AlwaysOnSampler() });
+    case 'parentbased_always_off':
+      return new ParentBasedSampler({ root: new AlwaysOffSampler() });
+    case 'parentbased_traceidratio':
+    default:
+      return new ParentBasedSampler({ root: new TraceIdRatioBasedSampler(ratio) });
+  }
+}
+
 logger.info(`Initializing for service: ${serviceName}`);
 console.log('Service Name:', serviceName);
 console.log('Endpoint:', endpoint);
 console.log('Resource Attributes:', parsedResourceAttrs);
+console.log('Sampler:', process.env.OTEL_TRACES_SAMPLER || 'parentbased_traceidratio');
+console.log('Sampling Ratio:', process.env.OTEL_TRACES_SAMPLER_ARG || '1.0');
 
 // Configure OTLP trace exporter
 const traceExporter = new OTLPTraceExporter({
@@ -97,6 +132,7 @@ const sdk = new NodeSDK({
     'otel.sdk.version': '0.52.1',
     ...parsedResourceAttrs,
   }),
+  sampler: createSampler(),
   spanProcessors: [new BatchSpanProcessor(traceExporter)],
   instrumentations: [
     getNodeAutoInstrumentations({
@@ -151,6 +187,9 @@ try {
   console.log('  - Container/Docker detection');
   console.log('  - AWS EC2/ECS detection');
   console.log('  - Host and process detection');
+  console.log('✓ Sampling configured:');
+  console.log(`  - Sampler: ${process.env.OTEL_TRACES_SAMPLER || 'parentbased_traceidratio'}`);
+  console.log(`  - Ratio: ${process.env.OTEL_TRACES_SAMPLER_ARG || '1.0'}`);
   console.log('✓ Metrics export interval: 60 seconds');
   console.log('=================================================\n');
 

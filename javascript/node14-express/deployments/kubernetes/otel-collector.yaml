@@ -1,0 +1,209 @@
+# =============================================================================
+# OpenTelemetry Collector Deployment with Tail-Based Sampling
+# =============================================================================
+# Receives traces from all apps in the cluster, applies tail-based sampling,
+# and forwards sampled traces to Last9.
+#
+# Apply with:
+#   kubectl create namespace observability
+#   kubectl create secret generic last9-credentials \
+#     --from-literal=endpoint=https://otlp.last9.io \
+#     --from-literal=auth-header="Basic YOUR_TOKEN" \
+#     -n observability
+#   kubectl apply -f otel-collector.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: observability
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 400
+        spike_limit_mib: 100
+
+      # Tail-based sampling - keeps errors, slow traces, and 10% of rest
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 500        # Increase for high-throughput clusters
+        expected_new_traces_per_sec: 50
+        policies:
+          - name: always_sample_errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: always_sample_slow
+            type: latency
+            latency:
+              threshold_ms: 2000
+          - name: probabilistic_fallback
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 10
+
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+
+      # Add k8s metadata to spans
+      k8sattributes:
+        auth_type: "serviceAccount"
+        passthrough: false
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.namespace.name
+            - k8s.node.name
+
+    exporters:
+      otlp/last9:
+        endpoint: ${env:LAST9_OTLP_ENDPOINT}
+        headers:
+          Authorization: ${env:LAST9_AUTH_HEADER}
+        tls:
+          insecure: false
+
+      debug:
+        verbosity: basic
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, tail_sampling, batch]
+          exporters: [otlp/last9, debug]
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: observability
+  labels:
+    app: otel-collector
+spec:
+  replicas: 2  # For HA; use 1 for dev
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.118.0
+          args:
+            - --config=/etc/otel-collector/config.yaml
+          ports:
+            - containerPort: 4317  # OTLP gRPC
+            - containerPort: 4318  # OTLP HTTP
+          env:
+            - name: LAST9_OTLP_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: last9-credentials
+                  key: endpoint
+            - name: LAST9_AUTH_HEADER
+              valueFrom:
+                secretKeyRef:
+                  name: last9-credentials
+                  key: auth-header
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel-collector
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+  type: ClusterIP
+
+---
+# ServiceAccount for k8sattributes processor
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: observability
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "watch", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: observability
+roleRef:
+  kind: ClusterRole
+  name: otel-collector
+  apiGroup: rbac.authorization.k8s.io
