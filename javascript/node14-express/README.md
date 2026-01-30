@@ -154,11 +154,6 @@ node14-express/
 ├── docker-compose.yml          # Container orchestration (supports collector profile)
 ├── otel-collector-config.yaml  # Tail-based sampling configuration
 ├── test-traces.sh              # Automated testing script
-├── deployments/                # Deployment-specific configurations
-│   ├── pm2/                    # PM2 + Docker collector
-│   ├── kubernetes/             # K8s manifests
-│   ├── docker/                 # Docker Compose examples
-│   └── standalone/             # Systemd service setup
 └── README.md                   # This file
 ```
 
@@ -242,17 +237,6 @@ tail_sampling:
 - `decision_wait`: Time to wait for all spans (default: 10s)
 - `num_traces`: Max traces held in memory (default: 100)
 - Collector image must be `contrib` variant (has tail_sampling processor)
-
-### Deployment-Specific Examples
-
-See [`deployments/`](./deployments/) for complete configurations:
-
-| Environment | Directory | Description |
-|-------------|-----------|-------------|
-| **PM2** | `deployments/pm2/` | ecosystem.config.js + collector setup script |
-| **Kubernetes** | `deployments/kubernetes/` | Deployment, Service, RBAC, ConfigMap |
-| **Docker** | `deployments/docker/` | docker-compose with collector |
-| **Standalone** | `deployments/standalone/` | systemd service installation |
 
 ## Key Implementation Details
 
