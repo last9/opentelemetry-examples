@@ -1,0 +1,13 @@
+# Environment files (contain secrets)
+.env
+
+# Docker volumes
+data/
+volumes/
+
+# Logs
+*.log
+logs/
+
+# Oracle data
+oradata/

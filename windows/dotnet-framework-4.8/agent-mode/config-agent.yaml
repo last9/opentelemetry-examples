@@ -1,0 +1,254 @@
+# OpenTelemetry Collector - Agent Mode Configuration
+# Deploy on each Windows Server in air-gapped datacenter
+# Collects traces, metrics, and logs from local applications
+# Forwards to datacenter gateway
+
+# Version: OpenTelemetry Collector Contrib v0.140.0
+# Environment: Air-gapped Windows Server 2019
+# Role: Agent (per-host collector)
+
+receivers:
+  # OTLP Receiver - Receives telemetry from .NET Auto-Instrumentation
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        # No TLS needed for local communication
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Host Metrics - Windows Server performance metrics
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+          system.cpu.logical.count:
+            enabled: true
+
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+          system.memory.limit:
+            enabled: true
+          system.memory.usage:
+            enabled: true
+
+      disk:
+        metrics:
+          system.disk.io:
+            enabled: true
+          system.disk.operations:
+            enabled: true
+
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+          system.filesystem.usage:
+            enabled: true
+
+      network:
+        metrics:
+          system.network.connections:
+            enabled: true
+          system.network.io:
+            enabled: true
+
+      paging:
+        metrics:
+          system.paging.usage:
+            enabled: true
+
+      process:
+        mute_process_user_error: true
+        mute_process_io_error: true
+        mute_process_exe_error: true
+        metrics:
+          process.cpu.utilization:
+            enabled: true
+          process.memory.utilization:
+            enabled: true
+          process.threads:
+            enabled: true
+
+processors:
+  # Batch Processor - Groups telemetry for efficient transmission
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  # Memory Limiter - Prevents OOM issues
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Resource Processor - Add datacenter and host context
+  resource:
+    attributes:
+      # Datacenter identification
+      - key: datacenter.name
+        value: "dc-primary"  # CHANGE THIS
+        action: upsert
+
+      # Deployment tier
+      - key: deployment.tier
+        value: "agent"
+        action: upsert
+
+      # Environment
+      - key: deployment.environment
+        value: "production"  # CHANGE THIS: production/staging/dev
+        action: upsert
+
+      # Host information (will be auto-detected)
+      - key: host.name
+        from_attribute: host.name
+        action: upsert
+
+  # Attributes Processor - Add custom tags
+  attributes/custom:
+    actions:
+      # Add application team/owner
+      - key: team.name
+        value: "platform-team"  # CHANGE THIS
+        action: upsert
+
+exporters:
+  # OTLP Exporter - Forward to datacenter gateway
+  otlp/gateway:
+    endpoint: "dc-gateway-01.internal:4317"  # CHANGE THIS: Your datacenter gateway endpoint
+
+    # TLS Configuration (mTLS for security)
+    tls:
+      insecure: false  # Must use TLS in production
+      cert_file: C:\ProgramData\otel\certs\agent-cert.pem
+      key_file: C:\ProgramData\otel\certs\agent-key.pem
+      ca_file: C:\ProgramData\otel\certs\ca-cert.pem
+
+    # Retry configuration
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s  # 5 minutes
+
+    # Sending queue with persistent storage
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000  # Buffer 5000 batches
+      storage: file_storage  # Persist to disk (survives restarts)
+
+    # Timeout configuration
+    timeout: 30s
+
+  # Debug Exporter - For troubleshooting (DISABLE in production)
+  debug:
+    verbosity: basic
+    sampling_initial: 5  # Log first 5 traces
+    sampling_thereafter: 200  # Then 1 every 200
+
+extensions:
+  # File Storage - Persistent queue for network outages
+  file_storage:
+    directory: C:\ProgramData\otel\queue
+    timeout: 10s
+    compaction:
+      on_start: true  # Compact old data on restart
+      directory: C:\ProgramData\otel\queue
+      max_transaction_size: 65536
+
+  # Health Check - Monitor collector status
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+
+  # pprof - Performance profiling (optional, for debugging)
+  pprof:
+    endpoint: 127.0.0.1:1777
+
+  # zpages - Live debugging (optional)
+  zpages:
+    endpoint: 127.0.0.1:55679
+
+service:
+  # Enable extensions
+  extensions: [file_storage, health_check, pprof, zpages]
+
+  # Telemetry configuration
+  telemetry:
+    logs:
+      level: info  # Change to 'debug' for troubleshooting
+      initial_fields:
+        service: otelcol-agent
+
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888  # Prometheus metrics endpoint
+
+  # Pipelines
+  pipelines:
+    # Traces Pipeline - Application distributed traces
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource, attributes/custom]
+      exporters: [otlp/gateway]  # Remove 'debug' in production
+
+    # Metrics Pipeline - Application and host metrics
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [memory_limiter, batch, resource, attributes/custom]
+      exporters: [otlp/gateway]  # Remove 'debug' in production
+
+    # Logs Pipeline - Application logs
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource, attributes/custom]
+      exporters: [otlp/gateway]  # Remove 'debug' in production
+
+# Configuration Notes:
+#
+# 1. REQUIRED CHANGES:
+#    - datacenter.name: Set to your datacenter identifier
+#    - deployment.environment: Set to production/staging/dev
+#    - team.name: Set to your team name
+#    - otlp/gateway endpoint: Set to your datacenter gateway address
+#    - TLS certificate paths: Update with your actual certificate locations
+#
+# 2. TLS CERTIFICATES:
+#    Place certificates in: C:\ProgramData\otel\certs\
+#    - agent-cert.pem: This agent's certificate
+#    - agent-key.pem: This agent's private key
+#    - ca-cert.pem: Certificate Authority certificate
+#
+# 3. FIREWALL RULES:
+#    Allow inbound: 4317 (gRPC), 4318 (HTTP), 13133 (health), 8888 (metrics)
+#    Allow outbound: 4317 to datacenter gateway
+#
+# 4. PERSISTENT QUEUE:
+#    Queue directory: C:\ProgramData\otel\queue
+#    Monitor disk usage if network is down for extended periods
+#    Alert if directory size > 1GB
+#
+# 5. DEBUGGING:
+#    - Health check: http://localhost:13133
+#    - Metrics: http://localhost:8888/metrics
+#    - zpages: http://localhost:55679/debug/tracez
+#    - Logs: C:\ProgramData\OpenTelemetry Collector\logs\
+#
+# 6. PERFORMANCE TUNING:
+#    - Increase batch size for high-throughput environments
+#    - Adjust memory_limiter for servers with more RAM
+#    - Increase queue_size if experiencing frequent network issues
+#
+# 7. SECURITY:
+#    - Never use insecure: true in production
+#    - Rotate certificates regularly
+#    - Restrict access to certificate files (Administrators only)
+#    - Monitor for unauthorized access to health/metrics endpoints
