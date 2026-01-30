@@ -1,6 +1,0 @@
-# Credential files
-collector.env
-*.env.local
-
-# Logs
-*.log
