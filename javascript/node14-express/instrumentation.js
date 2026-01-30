@@ -19,13 +19,7 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
 const { Resource, envDetector, processDetector, hostDetector } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
-const {
-  BatchSpanProcessor,
-  TraceIdRatioBasedSampler,
-  ParentBasedSampler,
-  AlwaysOnSampler,
-  AlwaysOffSampler
-} = require('@opentelemetry/sdk-trace-node');
+const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-node');
 const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { RuntimeNodeInstrumentation } = require('@opentelemetry/instrumentation-runtime-node');
 const { containerDetector } = require('@opentelemetry/resource-detector-container');
@@ -75,33 +69,6 @@ if (resourceAttrs) {
       parsedResourceAttrs[key.trim()] = value.join('=').trim();
     }
   });
-}
-
-/**
- * Create a sampler based on environment variables.
- * Supports standard OpenTelemetry sampler configuration:
- * - OTEL_TRACES_SAMPLER: Sampler type (always_on, always_off, traceidratio, parentbased_*)
- * - OTEL_TRACES_SAMPLER_ARG: Sampling ratio for ratio-based samplers (0.0 to 1.0)
- */
-function createSampler() {
-  const samplerType = process.env.OTEL_TRACES_SAMPLER || 'parentbased_traceidratio';
-  const ratio = parseFloat(process.env.OTEL_TRACES_SAMPLER_ARG || '1.0');
-
-  switch (samplerType) {
-    case 'always_on':
-      return new AlwaysOnSampler();
-    case 'always_off':
-      return new AlwaysOffSampler();
-    case 'traceidratio':
-      return new TraceIdRatioBasedSampler(ratio);
-    case 'parentbased_always_on':
-      return new ParentBasedSampler({ root: new AlwaysOnSampler() });
-    case 'parentbased_always_off':
-      return new ParentBasedSampler({ root: new AlwaysOffSampler() });
-    case 'parentbased_traceidratio':
-    default:
-      return new ParentBasedSampler({ root: new TraceIdRatioBasedSampler(ratio) });
-  }
 }
 
 logger.info(`Initializing for service: ${serviceName}`);
