@@ -145,16 +145,98 @@ This example uses **OpenTelemetry SDK 1.x** versions for Node 14 compatibility:
 
 ```
 node14-express/
-├── app.js                 # Express application with test endpoints
-├── instrumentation.js     # OpenTelemetry SDK initialization
-├── package.json          # Dependencies (OTel SDK 1.x)
-├── .npmrc                # Prevent parent package interference
-├── .env.example          # Environment configuration template
-├── Dockerfile            # Node 14 alpine container
-├── docker-compose.yml    # Container orchestration
-├── test-traces.sh        # Automated testing script
-└── README.md            # This file
+├── app.js                      # Express application with test endpoints
+├── instrumentation.js          # OpenTelemetry SDK initialization (with sampling)
+├── package.json                # Dependencies (OTel SDK 1.x)
+├── .npmrc                      # Prevent parent package interference
+├── .env.example                # Environment configuration template
+├── Dockerfile                  # Node 14 alpine container
+├── docker-compose.yml          # Container orchestration (supports collector profile)
+├── otel-collector-config.yaml  # Tail-based sampling configuration
+├── test-traces.sh              # Automated testing script
+└── README.md                   # This file
 ```
+
+## Sampling Configuration
+
+This example supports two sampling strategies, depending on your needs:
+
+| Aspect | Head-Based (SDK) | Tail-Based (Collector) |
+|--------|------------------|------------------------|
+| **Location** | instrumentation.js | OTel Collector |
+| **Decision timing** | At span creation | After trace completes |
+| **Can filter errors?** | No | Yes (100% of errors kept) |
+| **Can filter slow traces?** | No | Yes (configurable threshold) |
+| **Infrastructure** | None extra | Requires Collector |
+| **Memory overhead** | Minimal | Higher (holds traces) |
+
+### Option 1: Head-Based Sampling (SDK)
+
+Configure via environment variables - no infrastructure changes needed:
+
+```bash
+# Sample 10% of traces
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+**Available samplers:**
+
+| Sampler | Description |
+|---------|-------------|
+| `always_on` | Sample 100% of traces |
+| `always_off` | Sample 0% of traces |
+| `traceidratio` | Sample based on trace ID (configurable ratio) |
+| `parentbased_traceidratio` | Inherit parent decision, or use ratio for root spans |
+| `parentbased_always_on` | Inherit parent decision, always sample root spans |
+| `parentbased_always_off` | Inherit parent decision, never sample root spans |
+
+**Run with head-based sampling:**
+```bash
+export OTEL_TRACES_SAMPLER=parentbased_traceidratio
+export OTEL_TRACES_SAMPLER_ARG=0.1
+npm start
+```
+
+### Option 2: Tail-Based Sampling (Collector)
+
+Uses the OTel Collector to make intelligent sampling decisions after traces complete. This keeps:
+- 100% of traces with errors
+- 100% of slow traces (>2s latency)
+- 10% of remaining normal traces
+
+**Run with tail-based sampling:**
+```bash
+# Set collector credentials
+export LAST9_OTLP_ENDPOINT=https://<your-last9-endpoint>
+export LAST9_AUTH_HEADER="Basic <your-token>"
+
+# Start with collector profile
+docker-compose --profile with-collector up
+```
+
+**Customize sampling policies** in `otel-collector-config.yaml`:
+```yaml
+tail_sampling:
+  policies:
+    - name: always_sample_errors
+      type: status_code
+      status_code:
+        status_codes: [ERROR]
+    - name: always_sample_slow
+      type: latency
+      latency:
+        threshold_ms: 2000  # Adjust threshold as needed
+    - name: probabilistic_fallback
+      type: probabilistic
+      probabilistic:
+        sampling_percentage: 10  # Adjust percentage as needed
+```
+
+**Key settings:**
+- `decision_wait`: Time to wait for all spans (default: 10s)
+- `num_traces`: Max traces held in memory (default: 100)
+- Collector image must be `contrib` variant (has tail_sampling processor)
 
 ## Key Implementation Details
 
