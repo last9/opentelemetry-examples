@@ -171,7 +171,7 @@ java -jar target/your-app.jar
 
 ---
 
-## Alternative: Send via Local OTel Collector
+## Local OTel Collector
 
 Instead of sending traces directly to Last9, you can route them through a local OpenTelemetry Collector.
 
