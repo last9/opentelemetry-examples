@@ -72,6 +72,8 @@ public class UserService {
 }
 ```
 
+> For detailed explanation and more examples, see [DOCS.md](DOCS.md).
+
 ### 4. Add Log Correlation and Export
 
 Add the logback appender dependency to `pom.xml`:
