@@ -1,0 +1,28 @@
+# Build output
+target/
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Maven
+dependency-reduced-pom.xml
+
+# Logs
+*.log
+
+# Environment files (may contain secrets)
+.env
+.env.*
+*.env
+
+# OS
+.DS_Store
+Thumbs.db

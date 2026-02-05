@@ -1,0 +1,15 @@
+# Environment files with secrets
+.env
+
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+sample-app
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
