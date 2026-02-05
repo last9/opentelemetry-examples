@@ -67,6 +67,27 @@
             <version>${vertx.version}</version>
         </dependency>
 
+        <!-- Vert.x PostgreSQL Client (Reactive) -->
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-pg-client</artifactId>
+            <version>${vertx.version}</version>
+        </dependency>
+
+        <!-- Vert.x SQL Client Templates -->
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-sql-client</artifactId>
+            <version>${vertx.version}</version>
+        </dependency>
+
+        <!-- SCRAM authentication for PostgreSQL -->
+        <dependency>
+            <groupId>com.ongres.scram</groupId>
+            <artifactId>client</artifactId>
+            <version>2.1</version>
+        </dependency>
+
         <!-- JSON handling -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -116,6 +137,20 @@
             <groupId>io.opentelemetry.semconv</groupId>
             <artifactId>opentelemetry-semconv</artifactId>
             <version>1.23.1-alpha</version>
+        </dependency>
+
+        <!-- OTel RxJava Vert.x SDK -->
+        <dependency>
+            <groupId>io.otel.rxjava.vertx</groupId>
+            <artifactId>otel-rxjava-vertx-sdk</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <!-- OpenTelemetry Logback Appender (for exporting logs via OTLP) -->
+        <dependency>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-logback-appender-1.0</artifactId>
+            <version>2.4.0-alpha</version>
         </dependency>
     </dependencies>
 

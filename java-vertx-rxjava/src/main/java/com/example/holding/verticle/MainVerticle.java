@@ -6,6 +6,7 @@ import com.example.holding.rest.PlaceOrderHandler;
 import com.example.holding.services.GraphQLService;
 import com.example.holding.services.HoldingService;
 import com.example.holding.services.OrderService;
+import com.example.holding.services.PostgresHoldingRepository;
 import io.reactivex.rxjava3.core.Completable;
 import io.vertx.rxjava3.core.AbstractVerticle;
 import io.vertx.rxjava3.ext.web.Router;
@@ -17,10 +18,15 @@ public class MainVerticle extends AbstractVerticle {
     private static final Logger log = LoggerFactory.getLogger(MainVerticle.class);
     private static final int PORT = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
 
+    private PostgresHoldingRepository postgresRepository;
+
     @Override
     public Completable rxStart() {
+        // Initialize PostgreSQL repository
+        postgresRepository = new PostgresHoldingRepository(vertx);
+
         // Initialize services
-        HoldingService holdingService = new HoldingService();
+        HoldingService holdingService = new HoldingService(postgresRepository);
         GraphQLService graphQLService = new GraphQLService();
         OrderService orderService = new OrderService();
 
@@ -41,15 +47,39 @@ public class MainVerticle extends AbstractVerticle {
         // Holdings API - /v1/holding
         router.get("/v1/holding").handler(fetchHoldingsHandler::fetchAllHoldings);
 
+        // Holdings from PostgreSQL - /v1/holding/db
+        router.get("/v1/holding/db").handler(fetchHoldingsHandler::fetchAllHoldingsFromDb);
+
         // Order API - /v1/order/create
         router.post("/v1/order/create").handler(placeOrderHandler::placeOrder);
 
-        // Start HTTP server
-        return vertx.createHttpServer()
-                .requestHandler(router)
-                .rxListen(PORT)
-                .doOnSuccess(server -> log.info("HTTP server started on port {}", PORT))
-                .doOnError(err -> log.error("Failed to start HTTP server", err))
-                .ignoreElement();
+        // Initialize database and then start HTTP server
+        return postgresRepository.initialize()
+                .flatMapCompletable(initialized -> {
+                    log.info("PostgreSQL initialized: {}", initialized);
+                    return vertx.createHttpServer()
+                            .requestHandler(router)
+                            .rxListen(PORT)
+                            .doOnSuccess(server -> log.info("HTTP server started on port {}", PORT))
+                            .doOnError(err -> log.error("Failed to start HTTP server", err))
+                            .ignoreElement();
+                })
+                .onErrorResumeNext(err -> {
+                    log.warn("PostgreSQL initialization failed, starting without DB: {}", err.getMessage());
+                    // Start server anyway without DB
+                    return vertx.createHttpServer()
+                            .requestHandler(router)
+                            .rxListen(PORT)
+                            .doOnSuccess(server -> log.info("HTTP server started on port {} (without PostgreSQL)", PORT))
+                            .ignoreElement();
+                });
+    }
+
+    @Override
+    public Completable rxStop() {
+        if (postgresRepository != null) {
+            postgresRepository.close();
+        }
+        return Completable.complete();
     }
 }

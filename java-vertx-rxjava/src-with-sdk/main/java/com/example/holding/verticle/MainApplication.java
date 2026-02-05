@@ -9,17 +9,17 @@ import org.slf4j.LoggerFactory;
 /**
  * Main application entry point with OtelSdk integration.
  *
- * The SDK automatically:
- * - Initializes OpenTelemetry with OTLP exporter
- * - Enables RxJava3 context propagation
- * - Configures Vert.x with tracing
+ * Changes from original:
+ * 1. Replace manual OpenTelemetry setup with OtelSdk.builder()
+ * 2. Use sdk.createVertx() instead of manual VertxOptions configuration
+ * 3. RxJava context propagation is enabled automatically
  */
 public class MainApplication {
     private static final Logger log = LoggerFactory.getLogger(MainApplication.class);
 
     public static void main(String[] args) {
-        // Initialize OtelSdk - reads config from environment variables:
-        // OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS
+        // Initialize OtelSdk - this replaces all manual OpenTelemetry configuration
+        // and enables RxJava3 context propagation automatically
         OtelSdk sdk = OtelSdk.builder()
                 .serviceName(System.getenv().getOrDefault("OTEL_SERVICE_NAME", "holding-service"))
                 .environment(System.getenv().getOrDefault("DEPLOYMENT_ENV", "demo"))

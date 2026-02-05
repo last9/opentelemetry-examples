@@ -10,6 +10,13 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Order service with OpenTelemetry tracing.
+ *
+ * Changes from original:
+ * 1. Use Traced.call() to create child spans
+ * 2. Add order-specific attributes to spans
+ */
 public class OrderService {
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
@@ -27,6 +34,7 @@ public class OrderService {
                     log.info("Placing order for userId: {}, symbol: {}, quantity: {}",
                             userId, request.getSymbol(), request.getQuantity());
 
+                    // Simulate order placement
                     String orderId = UUID.randomUUID().toString();
 
                     log.info("Order {} placed successfully for user {}", orderId, userId);
