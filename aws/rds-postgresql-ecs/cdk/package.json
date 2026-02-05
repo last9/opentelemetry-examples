@@ -1,0 +1,23 @@
+{
+  "name": "postgresql-collector-cdk",
+  "version": "1.0.0",
+  "description": "CDK stack for deploying PostgreSQL collector on ECS Fargate",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy",
+    "diff": "cdk diff"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.120.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "aws-cdk": "^2.120.0"
+  }
+}

@@ -1,0 +1,282 @@
+schemaVersion: '2.2'
+description: 'Install and configure Last9 OpenTelemetry Collector on EC2 instances'
+parameters:
+  LogsURL:
+    type: String
+    description: 'Last9 OTLP endpoint URL'
+    default: 'YOUR_LAST9_ENDPOINT'
+  AuthValue:
+    type: String
+    description: 'Last9 authorization header value (Basic <base64>)'
+  LogFilePaths:
+    type: String
+    description: 'Comma-separated log file paths to monitor (e.g., /var/log/*.log,/app/logs/*.log)'
+    default: '/var/log/*.log'
+  ServiceName:
+    type: String
+    description: 'Service name for resource attributes'
+    default: 'ec2-service'
+  Environment:
+    type: String
+    description: 'Deployment environment (e.g., production, staging, development)'
+    default: 'production'
+
+mainSteps:
+  # Step 1: Detect OS and install appropriate package
+  - name: installOTELCollector
+    action: aws:runShellScript
+    inputs:
+      runCommand:
+        - |
+          #!/bin/bash
+          set -e
+
+          echo "=== Installing Last9 OpenTelemetry Collector ==="
+
+          # Detect OS type
+          if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            echo "Detected OS: $ID $VERSION_ID"
+          fi
+
+          # Check if already installed
+          if command -v otelcol-contrib &> /dev/null; then
+            INSTALLED_VERSION=$(otelcol-contrib --version 2>&1 | head -n1 || echo "unknown")
+            echo "OTEL Collector already installed: $INSTALLED_VERSION"
+            echo "Proceeding with configuration update..."
+          else
+            # Install based on package manager
+            if command -v dpkg &> /dev/null; then
+              echo "Installing DEB package for Debian/Ubuntu..."
+              wget -q https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.125.0/otelcol-contrib_0.125.0_linux_amd64.deb
+              sudo dpkg -i otelcol-contrib_0.125.0_linux_amd64.deb
+              rm -f otelcol-contrib_0.125.0_linux_amd64.deb
+              echo "✓ DEB package installed successfully"
+
+            elif command -v rpm &> /dev/null; then
+              echo "Installing RPM package for RHEL/Amazon Linux/CentOS..."
+              wget -q https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.125.0/otelcol-contrib_0.125.0_linux_amd64.rpm
+              sudo rpm -ivh otelcol-contrib_0.125.0_linux_amd64.rpm
+              rm -f otelcol-contrib_0.125.0_linux_amd64.rpm
+              echo "✓ RPM package installed successfully"
+
+            else
+              echo "ERROR: Unsupported OS - neither dpkg nor rpm package manager found"
+              exit 1
+            fi
+          fi
+
+          # Verify installation
+          if command -v otelcol-contrib &> /dev/null; then
+            otelcol-contrib --version
+            echo "✓ OTEL Collector binary verified"
+          else
+            echo "ERROR: OTEL Collector installation failed"
+            exit 1
+          fi
+
+  # Step 2: Configure OTEL Collector
+  - name: configureOTEL
+    action: aws:runShellScript
+    inputs:
+      runCommand:
+        - |
+          #!/bin/bash
+          set -e
+
+          echo "=== Configuring OpenTelemetry Collector ==="
+
+          # Get parameters
+          LOGS_URL="{{ LogsURL }}"
+          AUTH_VALUE="{{ AuthValue }}"
+          LOG_PATHS="{{ LogFilePaths }}"
+          SERVICE_NAME="{{ ServiceName }}"
+          ENVIRONMENT="{{ Environment }}"
+
+          # Backup existing config if it exists
+          if [ -f /etc/otelcol-contrib/config.yaml ]; then
+            sudo cp /etc/otelcol-contrib/config.yaml /etc/otelcol-contrib/config.yaml.backup.$(date +%s)
+            echo "✓ Backed up existing config"
+          fi
+
+          # Convert comma-separated paths to YAML array format
+          LOG_PATHS_YAML=$(echo "$LOG_PATHS" | sed 's/,/, /g' | sed 's/^/[/' | sed 's/$/]/')
+
+          # Write configuration file
+          sudo tee /etc/otelcol-contrib/config.yaml > /dev/null <<EOF
+          receivers:
+            hostmetrics:
+              collection_interval: 60s
+              scrapers:
+                cpu:
+                  metrics:
+                    system.cpu.logical.count:
+                      enabled: true
+                memory:
+                  metrics:
+                    system.memory.utilization:
+                      enabled: true
+                    system.memory.limit:
+                      enabled: true
+                load:
+                disk:
+                filesystem:
+                  metrics:
+                    system.filesystem.utilization:
+                      enabled: true
+                network:
+                paging:
+                processes:
+                process:
+                  mute_process_user_error: true
+                  mute_process_io_error: true
+                  mute_process_exe_error: true
+                  metrics:
+                    process.cpu.utilization:
+                      enabled: true
+                    process.memory.utilization:
+                      enabled: true
+                    process.threads:
+                      enabled: true
+                    process.paging.faults:
+                      enabled: true
+
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+
+            filelog:
+              include: $LOG_PATHS_YAML
+              include_file_path: true
+              retry_on_failure:
+                enabled: true
+
+          processors:
+            batch:
+              timeout: 5s
+              send_batch_size: 10000
+              send_batch_max_size: 10000
+
+            resourcedetection/ec2:
+              detectors: ["ec2"]
+              ec2:
+                tags:
+                  - ^Name$
+                  - ^app$
+
+            transform/ec2:
+              error_mode: ignore
+              log_statements:
+                - context: resource
+                  statements:
+                    - set(attributes["service.name"], attributes["ec2.tag.Name"])
+                    - set(attributes["deployment.environment"], "$ENVIRONMENT")
+
+            resourcedetection/system:
+              detectors: ["system"]
+              system:
+                hostname_sources: ["os"]
+
+            transform/hostmetrics:
+              metric_statements:
+                - context: datapoint
+                  statements:
+                    - set(attributes["host.name"], resource.attributes["host.name"])
+                    - set(attributes["cloud.account.id"], resource.attributes["cloud.account.id"])
+                    - set(attributes["cloud.availability_zone"], resource.attributes["cloud.availability_zone"])
+                    - set(attributes["cloud.platform"], resource.attributes["cloud.platform"])
+                    - set(attributes["cloud.provider"], resource.attributes["cloud.provider"])
+                    - set(attributes["cloud.region"], resource.attributes["cloud.region"])
+                    - set(attributes["host.type"], resource.attributes["host.type"])
+                    - set(attributes["host.image.id"], resource.attributes["host.image.id"])
+                    - set(attributes["process.command"], resource.attributes["process.command"])
+                    - set(attributes["process.command_line"], resource.attributes["process.command_line"])
+                    - set(attributes["process.executable.name"], resource.attributes["process.executable.name"])
+                    - set(attributes["process.executable.path"], resource.attributes["process.executable.path"])
+                    - set(attributes["process.owner"], resource.attributes["process.owner"])
+                    - set(attributes["process.parent_pid"], resource.attributes["process.parent_pid"])
+                    - set(attributes["process.pid"], resource.attributes["process.pid"])
+                    - set(attributes["deployment.environment"], "$ENVIRONMENT")
+
+          exporters:
+            debug:
+              verbosity: detailed
+
+            otlp/last9:
+              endpoint: "$LOGS_URL"
+              headers:
+                "Authorization": "$AUTH_VALUE"
+
+          service:
+            pipelines:
+              logs:
+                receivers: [filelog]
+                processors: [resourcedetection/ec2, transform/ec2, batch]
+                exporters: [otlp/last9]
+              metrics:
+                receivers: [hostmetrics]
+                processors: [resourcedetection/system, transform/hostmetrics, batch]
+                exporters: [otlp/last9]
+          EOF
+
+          echo "✓ Configuration file written to /etc/otelcol-contrib/config.yaml"
+
+          # Validate configuration
+          if sudo otelcol-contrib validate --config /etc/otelcol-contrib/config.yaml; then
+            echo "✓ Configuration validated successfully"
+          else
+            echo "ERROR: Configuration validation failed"
+            if [ -f /etc/otelcol-contrib/config.yaml.backup.* ]; then
+              echo "Restoring previous configuration..."
+              sudo cp /etc/otelcol-contrib/config.yaml.backup.* /etc/otelcol-contrib/config.yaml
+            fi
+            exit 1
+          fi
+
+  # Step 3: Start and verify OTEL Collector service
+  - name: startOTELService
+    action: aws:runShellScript
+    inputs:
+      runCommand:
+        - |
+          #!/bin/bash
+          set -e
+
+          echo "=== Starting OpenTelemetry Collector Service ==="
+
+          # Enable service to start on boot
+          sudo systemctl enable otelcol-contrib
+          echo "✓ Service enabled for auto-start on boot"
+
+          # Restart service to apply new configuration
+          sudo systemctl restart otelcol-contrib
+          echo "✓ Service restart initiated"
+
+          # Wait for service to start
+          sleep 5
+
+          # Verify service is running
+          if sudo systemctl is-active --quiet otelcol-contrib; then
+            echo "✓ SUCCESS: OTEL Collector is running"
+            echo ""
+            echo "Service Status:"
+            sudo systemctl status otelcol-contrib --no-pager -l | head -n 20
+            echo ""
+            echo "=== Installation Complete ==="
+            echo "Logs are being sent to: {{ LogsURL }}"
+            echo "Monitoring log files: {{ LogFilePaths }}"
+            echo "Service name: {{ ServiceName }}"
+            echo "Environment: {{ Environment }}"
+            echo ""
+            echo "To view logs: sudo journalctl -u otelcol-contrib -f"
+            echo "To check status: sudo systemctl status otelcol-contrib"
+          else
+            echo "ERROR: OTEL Collector failed to start"
+            echo ""
+            echo "Recent logs:"
+            sudo journalctl -u otelcol-contrib -n 50 --no-pager
+            exit 1
+          fi

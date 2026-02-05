@@ -1,0 +1,20 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Downloaded packages
+*.deb
+*.tar.gz
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

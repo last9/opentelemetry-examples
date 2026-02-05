@@ -1,0 +1,13 @@
+[Unit]
+Description=Raspberry Pi Temperature Exporter for Prometheus/OpenTelemetry
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/pi-temp-exporter.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

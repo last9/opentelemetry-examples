@@ -1,0 +1,91 @@
+receivers:
+  awsecscontainermetrics:
+    collection_interval: 60s
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 100
+      http:
+        endpoint: 0.0.0.0:4318
+        max_request_body_size: 104857600  # 100MB
+  fluentforward:
+    endpoint: 0.0.0.0:8006
+
+processors:
+  transform/ecsmetrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          # Task Level Resource Attributes
+          - set(attributes["aws.ecs.cluster.name"], resource.attributes["aws.ecs.cluster.name"])
+          - set(attributes["aws.ecs.task.family"], resource.attributes["aws.ecs.task.family"])
+          - set(attributes["aws.ecs.task.arn"], resource.attributes["aws.ecs.task.arn"])
+          - set(attributes["aws.ecs.task.id"], resource.attributes["aws.ecs.task.id"])
+          - set(attributes["aws.ecs.task.version"], resource.attributes["aws.ecs.task.version"])
+          - set(attributes["aws.ecs.service.name"], resource.attributes["aws.ecs.service.name"])
+          - set(attributes["cloud.zone"], resource.attributes["cloud.zone"])
+          - set(attributes["cloud.account.id"], resource.attributes["cloud.account.id"])
+          - set(attributes["cloud.region"], resource.attributes["cloud.region"])
+          - set(attributes["aws.ecs.task.pull_started_at"], resource.attributes["aws.ecs.task.pull_started_at"])
+          - set(attributes["aws.ecs.task.pull_stopped_at"], resource.attributes["aws.ecs.task.pull_stopped_at"])
+          - set(attributes["aws.ecs.task.known_status"], resource.attributes["aws.ecs.task.known_status"])
+          - set(attributes["aws.ecs.task.launch_type"], resource.attributes["aws.ecs.task.launch_type"])
+
+          # Container Level Resource Attributes (additional to task level)
+          - set(attributes["aws.ecs.container.created_at"], resource.attributes["aws.ecs.container.created_at"])
+          - set(attributes["aws.ecs.container.finished_at"], resource.attributes["aws.ecs.container.finished_at"])
+          - set(attributes["aws.ecs.container.know_status"], resource.attributes["aws.ecs.container.know_status"])
+          - set(attributes["container.name"], resource.attributes["container.name"])
+          - set(attributes["container.id"], resource.attributes["container.id"])
+          - set(attributes["aws.ecs.docker.name"], resource.attributes["aws.ecs.docker.name"])
+          - set(attributes["container.image.tag"], resource.attributes["container.image.tag"])
+          - set(attributes["aws.ecs.container.image.id"], resource.attributes["aws.ecs.container.image.id"])
+          - set(attributes["aws.ecs.container.exit_code"], resource.attributes["aws.ecs.container.exit_code"])
+
+          # Standard OpenTelemetry container attributes that may be present
+          - set(attributes["container.image.name"], resource.attributes["container.image.name"])
+          - set(attributes["container.runtime"], resource.attributes["container.runtime"])
+
+  transform/firelens:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Set resource attributes from Fluent Bit metadata
+          - set(resource.attributes["container_name"], attributes["container_name"]) where attributes["container_name"] != nil
+          - set(resource.attributes["container_id"], attributes["container_id"]) where attributes["container_id"] != nil
+          - set(resource.attributes["service.name"], attributes["container_name"]) where attributes["container_name"] != nil
+
+          # Clean up Fluent Bit metadata
+          - delete_key(attributes, "container_id")
+          - delete_key(attributes, "container_name")
+
+  batch:
+    send_batch_max_size: 1000
+    send_batch_size: 1000
+    timeout: 10s
+
+  resourcedetection:
+    detectors: [ecs]
+
+exporters:
+  otlp/last9:
+    endpoint: "<YOUR_LAST9_OTLP_ENDPOINT>"
+    headers:
+      "Authorization": "Basic <YOUR_BASE64_CREDENTIALS>"
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+
+service:
+  pipelines:
+    metrics:
+      receivers: [awsecscontainermetrics]
+      processors: [batch, resourcedetection, transform/ecsmetrics]
+      exporters: [otlp/last9]
+    logs:
+      receivers: [fluentforward]
+      processors: [transform/firelens, batch, resourcedetection]
+      exporters: [otlp/last9]

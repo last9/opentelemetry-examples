@@ -1,0 +1,548 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Last9 OpenTelemetry Collector - Auto-install via EC2 tags'
+
+Parameters:
+  Last9LogsURL:
+    Type: String
+    Description: 'Last9 OTLP endpoint URL'
+    Default: 'YOUR_LAST9_ENDPOINT'
+
+  Last9AuthValue:
+    Type: String
+    Description: 'Last9 authorization header value (Basic <base64>)'
+    NoEcho: true
+
+  LogFilePaths:
+    Type: String
+    Description: 'Comma-separated log file paths to monitor'
+    Default: '/var/log/*.log'
+
+  DefaultServiceName:
+    Type: String
+    Description: 'Default service name if not specified in EC2 tags'
+    Default: 'ec2-service'
+
+  DefaultEnvironment:
+    Type: String
+    Description: 'Default environment if not specified in EC2 tags'
+    Default: 'production'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Last9 Configuration'
+        Parameters:
+          - Last9LogsURL
+          - Last9AuthValue
+      - Label:
+          default: 'OpenTelemetry Configuration'
+        Parameters:
+          - LogFilePaths
+          - DefaultServiceName
+          - DefaultEnvironment
+    ParameterLabels:
+      Last9LogsURL:
+        default: 'Last9 OTLP Endpoint'
+      Last9AuthValue:
+        default: 'Last9 Authorization Header'
+      LogFilePaths:
+        default: 'Log File Paths'
+      DefaultServiceName:
+        default: 'Service Name'
+      DefaultEnvironment:
+        default: 'Environment'
+
+Resources:
+  # Store Last9 credentials in Secrets Manager
+  Last9CredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'last9/otel/credentials-${AWS::StackName}'
+      Description: 'Last9 OpenTelemetry credentials'
+      SecretString: !Sub |
+        {
+          "logs_url": "${Last9LogsURL}",
+          "auth_value": "${Last9AuthValue}",
+          "log_paths": "${LogFilePaths}",
+          "service_name": "${DefaultServiceName}",
+          "environment": "${DefaultEnvironment}"
+        }
+
+  # IAM Role for SSM Automation execution
+  OTELAutomationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'Last9-OTEL-Automation-Role-${AWS::StackName}'
+      Description: 'Role for SSM Automation to install Last9 OTEL Collector'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ssm.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Ref Last9CredentialsSecret
+        - PolicyName: SSMSendCommand
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                  - ssm:GetCommandInvocation
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeTags
+                Resource: '*'
+
+  # SSM Automation Document for OTEL installation
+  OTELInstallAutomation:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: !Sub 'Last9-OTEL-Auto-Install-${AWS::StackName}'
+      DocumentType: Automation
+      DocumentFormat: YAML
+      Content:
+        schemaVersion: '0.3'
+        description: 'Automatically install Last9 OTEL Collector on tagged EC2 instances'
+        assumeRole: !GetAtt OTELAutomationRole.Arn
+        parameters:
+          InstanceId:
+            type: String
+            description: 'EC2 Instance ID to install OTEL on'
+
+        mainSteps:
+          # Step 1: Get credentials from Secrets Manager
+          - name: getCredentials
+            action: aws:executeAwsApi
+            inputs:
+              Service: secretsmanager
+              Api: GetSecretValue
+              SecretId: !Ref Last9CredentialsSecret
+            outputs:
+              - Name: secretString
+                Selector: $.SecretString
+                Type: String
+
+          # Step 2: Get instance tags for service name and environment
+          - name: getInstanceTags
+            action: aws:executeAwsApi
+            inputs:
+              Service: ec2
+              Api: DescribeTags
+              Filters:
+                - Name: resource-id
+                  Values:
+                    - '{{ InstanceId }}'
+            outputs:
+              - Name: tags
+                Selector: $.Tags
+                Type: MapList
+
+          # Step 3: Run installation script
+          - name: installOTEL
+            action: aws:runCommand
+            inputs:
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - '{{ InstanceId }}'
+              Parameters:
+                commands:
+                  - |
+                    #!/bin/bash
+                    set -e
+
+                    echo "=== Last9 OpenTelemetry Collector Auto-Install ==="
+                    echo "Instance ID: {{ InstanceId }}"
+                    echo "Timestamp: $(date)"
+                    echo ""
+
+                    # Parse credentials from Secrets Manager
+                    CREDENTIALS='{{ getCredentials.secretString }}'
+
+                    # Install jq if not present
+                    if ! command -v jq &> /dev/null; then
+                      echo "Installing jq..."
+                      if command -v apt-get &> /dev/null; then
+                        sudo apt-get update -qq && sudo apt-get install -y -qq jq
+                      elif command -v yum &> /dev/null; then
+                        sudo yum install -y -q jq
+                      fi
+                    fi
+
+                    LOGS_URL=$(echo "$CREDENTIALS" | jq -r '.logs_url')
+                    AUTH_VALUE=$(echo "$CREDENTIALS" | jq -r '.auth_value')
+                    LOG_PATHS=$(echo "$CREDENTIALS" | jq -r '.log_paths')
+                    DEFAULT_SERVICE_NAME=$(echo "$CREDENTIALS" | jq -r '.service_name')
+                    DEFAULT_ENVIRONMENT=$(echo "$CREDENTIALS" | jq -r '.environment')
+
+                    # Get service name and environment from tags or use defaults
+                    SERVICE_NAME="${DEFAULT_SERVICE_NAME}"
+                    ENVIRONMENT="${DEFAULT_ENVIRONMENT}"
+
+                    # Try to get from EC2 tags (Name tag or ServiceName tag)
+                    INSTANCE_ID=$(ec2-metadata --instance-id 2>/dev/null | cut -d' ' -f2 || echo "")
+                    if [ -n "$INSTANCE_ID" ]; then
+                      NAME_TAG=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Name" --query 'Tags[0].Value' --output text 2>/dev/null || echo "")
+                      SERVICE_TAG=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=ServiceName" --query 'Tags[0].Value' --output text 2>/dev/null || echo "")
+                      ENV_TAG=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Environment" --query 'Tags[0].Value' --output text 2>/dev/null || echo "")
+
+                      [ -n "$SERVICE_TAG" ] && SERVICE_NAME="$SERVICE_TAG"
+                      [ -z "$SERVICE_TAG" ] && [ -n "$NAME_TAG" ] && SERVICE_NAME="$NAME_TAG"
+                      [ -n "$ENV_TAG" ] && ENVIRONMENT="$ENV_TAG"
+                    fi
+
+                    echo "Configuration:"
+                    echo "  Service Name: $SERVICE_NAME"
+                    echo "  Environment: $ENVIRONMENT"
+                    echo "  Log Paths: $LOG_PATHS"
+                    echo "  OTLP Endpoint: $LOGS_URL"
+                    echo ""
+
+                    # Check if already installed
+                    if command -v otelcol-contrib &> /dev/null; then
+                      INSTALLED_VERSION=$(otelcol-contrib --version 2>&1 | head -n1 || echo "unknown")
+                      echo "OTEL Collector already installed: $INSTALLED_VERSION"
+                      echo "Updating configuration..."
+                    else
+                      # Detect OS and install
+                      echo "Detecting OS type..."
+                      if [ -f /etc/os-release ]; then
+                        . /etc/os-release
+                        echo "Detected: $ID $VERSION_ID"
+                      fi
+
+                      if command -v dpkg &> /dev/null; then
+                        echo "Installing DEB package..."
+                        wget -q https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.125.0/otelcol-contrib_0.125.0_linux_amd64.deb
+                        sudo dpkg -i otelcol-contrib_0.125.0_linux_amd64.deb
+                        rm -f otelcol-contrib_0.125.0_linux_amd64.deb
+                        echo "✓ DEB package installed"
+
+                      elif command -v rpm &> /dev/null; then
+                        echo "Installing RPM package..."
+                        wget -q https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.125.0/otelcol-contrib_0.125.0_linux_amd64.rpm
+                        sudo rpm -ivh otelcol-contrib_0.125.0_linux_amd64.rpm
+                        rm -f otelcol-contrib_0.125.0_linux_amd64.rpm
+                        echo "✓ RPM package installed"
+
+                      else
+                        echo "ERROR: Unsupported OS - no dpkg or rpm found"
+                        exit 1
+                      fi
+                    fi
+
+                    # Backup existing config
+                    if [ -f /etc/otelcol-contrib/config.yaml ]; then
+                      sudo cp /etc/otelcol-contrib/config.yaml /etc/otelcol-contrib/config.yaml.backup.$(date +%s)
+                    fi
+
+                    # Convert log paths to YAML array
+                    LOG_PATHS_YAML=$(echo "$LOG_PATHS" | sed 's/,/, /g' | sed 's/^/[/' | sed 's/$/]/')
+
+                    # Write configuration
+                    echo "Writing configuration..."
+                    sudo tee /etc/otelcol-contrib/config.yaml > /dev/null <<EOF
+                    receivers:
+                      hostmetrics:
+                        collection_interval: 60s
+                        scrapers:
+                          cpu:
+                            metrics:
+                              system.cpu.logical.count:
+                                enabled: true
+                          memory:
+                            metrics:
+                              system.memory.utilization:
+                                enabled: true
+                              system.memory.limit:
+                                enabled: true
+                          load:
+                          disk:
+                          filesystem:
+                            metrics:
+                              system.filesystem.utilization:
+                                enabled: true
+                          network:
+                          paging:
+                          processes:
+                          process:
+                            mute_process_user_error: true
+                            mute_process_io_error: true
+                            mute_process_exe_error: true
+                            metrics:
+                              process.cpu.utilization:
+                                enabled: true
+                              process.memory.utilization:
+                                enabled: true
+                              process.threads:
+                                enabled: true
+                              process.paging.faults:
+                                enabled: true
+
+                      otlp:
+                        protocols:
+                          grpc:
+                            endpoint: 0.0.0.0:4317
+                          http:
+                            endpoint: 0.0.0.0:4318
+
+                      filelog:
+                        include: $LOG_PATHS_YAML
+                        include_file_path: true
+                        retry_on_failure:
+                          enabled: true
+
+                    processors:
+                      batch:
+                        timeout: 5s
+                        send_batch_size: 10000
+                        send_batch_max_size: 10000
+
+                      resourcedetection/ec2:
+                        detectors: ["ec2"]
+                        ec2:
+                          tags:
+                            - ^Name$
+                            - ^app$
+
+                      transform/ec2:
+                        error_mode: ignore
+                        log_statements:
+                          - context: resource
+                            statements:
+                              - set(attributes["service.name"], attributes["ec2.tag.Name"])
+                              - set(attributes["deployment.environment"], "$ENVIRONMENT")
+
+                      resourcedetection/system:
+                        detectors: ["system"]
+                        system:
+                          hostname_sources: ["os"]
+
+                      transform/hostmetrics:
+                        metric_statements:
+                          - context: datapoint
+                            statements:
+                              - set(attributes["host.name"], resource.attributes["host.name"])
+                              - set(attributes["cloud.account.id"], resource.attributes["cloud.account.id"])
+                              - set(attributes["cloud.availability_zone"], resource.attributes["cloud.availability_zone"])
+                              - set(attributes["cloud.platform"], resource.attributes["cloud.platform"])
+                              - set(attributes["cloud.provider"], resource.attributes["cloud.provider"])
+                              - set(attributes["cloud.region"], resource.attributes["cloud.region"])
+                              - set(attributes["host.type"], resource.attributes["host.type"])
+                              - set(attributes["host.image.id"], resource.attributes["host.image.id"])
+                              - set(attributes["process.command"], resource.attributes["process.command"])
+                              - set(attributes["process.command_line"], resource.attributes["process.command_line"])
+                              - set(attributes["process.executable.name"], resource.attributes["process.executable.name"])
+                              - set(attributes["process.executable.path"], resource.attributes["process.executable.path"])
+                              - set(attributes["process.owner"], resource.attributes["process.owner"])
+                              - set(attributes["process.parent_pid"], resource.attributes["process.parent_pid"])
+                              - set(attributes["process.pid"], resource.attributes["process.pid"])
+                              - set(attributes["deployment.environment"], "$ENVIRONMENT")
+
+                    exporters:
+                      debug:
+                        verbosity: detailed
+
+                      otlp/last9:
+                        endpoint: "$LOGS_URL"
+                        headers:
+                          "Authorization": "$AUTH_VALUE"
+
+                    service:
+                      pipelines:
+                        logs:
+                          receivers: [filelog]
+                          processors: [resourcedetection/ec2, transform/ec2, batch]
+                          exporters: [otlp/last9]
+                        metrics:
+                          receivers: [hostmetrics]
+                          processors: [resourcedetection/system, transform/hostmetrics, batch]
+                          exporters: [otlp/last9]
+                    EOF
+
+                    # Validate config
+                    if sudo otelcol-contrib validate --config /etc/otelcol-contrib/config.yaml 2>/dev/null; then
+                      echo "✓ Configuration validated"
+                    else
+                      echo "⚠ Configuration validation skipped (validator not available)"
+                    fi
+
+                    # Start service
+                    echo "Starting OTEL Collector service..."
+                    sudo systemctl enable otelcol-contrib
+                    sudo systemctl restart otelcol-contrib
+                    sleep 5
+
+                    # Verify
+                    if sudo systemctl is-active --quiet otelcol-contrib; then
+                      echo ""
+                      echo "✓ SUCCESS: Last9 OTEL Collector is running"
+                      echo ""
+                      sudo systemctl status otelcol-contrib --no-pager -l | head -n 15
+                      echo ""
+                      echo "Installation completed at: $(date)"
+                    else
+                      echo ""
+                      echo "✗ ERROR: Service failed to start"
+                      sudo journalctl -u otelcol-contrib -n 30 --no-pager
+                      exit 1
+                    fi
+
+  # EventBridge Rule - Trigger on tag creation
+  TagDetectionRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'Last9-OTEL-Tag-Detection-${AWS::StackName}'
+      Description: 'Detect when Last9-OTEL=Install tag is added to EC2 instances'
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.ec2
+        detail-type:
+          - 'AWS API Call via CloudTrail'
+        detail:
+          eventName:
+            - CreateTags
+          requestParameters:
+            tagSet:
+              items:
+                key:
+                  - 'Last9-OTEL'
+      Targets:
+        - Id: "1"
+          Arn: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${OTELInstallAutomation}:$DEFAULT'
+          RoleArn: !GetAtt EventBridgeInvokeRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              instanceId: '$.detail.requestParameters.resourcesSet.items[0].resourceId'
+            InputTemplate: |
+              {
+                "InstanceId": [<instanceId>]
+              }
+
+  # IAM Role for EventBridge to invoke SSM Automation
+  EventBridgeInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'Last9-OTEL-EventBridge-Role-${AWS::StackName}'
+      Description: 'Allows EventBridge to invoke SSM Automation'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeSSMAutomation
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:StartAutomationExecution
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${OTELInstallAutomation}:*'
+
+  # CloudTrail for EventBridge (if not already exists)
+  OTELCloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn:
+      - CloudTrailBucketPolicy
+    Properties:
+      TrailName: !Sub 'last9-otel-trail-${AWS::StackName}'
+      S3BucketName: !Ref CloudTrailBucket
+      IncludeGlobalServiceEvents: true
+      IsLogging: true
+      IsMultiRegionTrail: false
+      EventSelectors:
+        - IncludeManagementEvents: true
+          ReadWriteType: WriteOnly
+          DataResources: []
+
+  # S3 Bucket for CloudTrail
+  CloudTrailBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'last9-otel-cloudtrail-${AWS::AccountId}-${AWS::Region}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 7
+
+  # S3 Bucket Policy for CloudTrail
+  CloudTrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudTrailBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt CloudTrailBucket.Arn
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${CloudTrailBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+
+Outputs:
+  AutomationDocumentName:
+    Description: 'SSM Automation Document for OTEL installation'
+    Value: !Ref OTELInstallAutomation
+    Export:
+      Name: !Sub '${AWS::StackName}-AutomationDocument'
+
+  SecretArn:
+    Description: 'Secrets Manager ARN containing Last9 credentials'
+    Value: !Ref Last9CredentialsSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-SecretArn'
+
+  TagToInstall:
+    Description: 'Add this tag to EC2 instances to auto-install OTEL Collector'
+    Value: 'Last9-OTEL=Install'
+
+  UsageInstructions:
+    Description: 'How to use this auto-install system'
+    Value: 'Tag any EC2 instance with "Last9-OTEL=Install" to automatically install the OTEL collector'
+
+  ManualInstallCommand:
+    Description: 'Command to manually trigger installation on existing instances'
+    Value: !Sub |
+      aws ssm start-automation-execution \
+        --document-name ${OTELInstallAutomation} \
+        --parameters "InstanceId=i-xxxxxxxxxxxxx"

@@ -1,0 +1,104 @@
+# Prometheus configuration for GCP Cloud Run/Jobs metrics collection
+# Optimized for Last9 remote write with proper timeout handling
+
+global:
+  # Scrape interval - how often to collect metrics from stackdriver_exporter
+  # Set to 5 minutes to allow stackdriver_exporter enough time to query GCP API
+  scrape_interval: 5m
+
+  # Timeout for scraping - must be less than scrape_interval
+  # Give plenty of time for GCP API calls to complete
+  scrape_timeout: 4m30s
+
+  # How often to evaluate rules (we don't use rules here)
+  evaluation_interval: 5m
+
+  # Add labels to all metrics
+  external_labels:
+    environment: 'production'
+    source: 'gcp-cloud-run-metrics'
+    collector: 'prometheus-stackdriver'
+
+# Scrape configurations
+scrape_configs:
+  # Scrape stackdriver_exporter for GCP metrics
+  - job_name: 'stackdriver'
+    scrape_interval: 5m
+    scrape_timeout: 4m30s
+
+    # Stackdriver exporter endpoint
+    static_configs:
+      - targets: ['localhost:9255']
+
+    # Relabel to add helpful labels
+    metric_relabel_configs:
+      # Keep all metrics from Cloud Run and Cloud Jobs
+      - source_labels: [__name__]
+        regex: '(run_googleapis_com_.*|cloudtasks_googleapis_com_.*)'
+        action: keep
+
+  # Scrape Prometheus own metrics (optional, for monitoring the collector)
+  - job_name: 'prometheus'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['localhost:8080']
+
+  # Scrape stackdriver_exporter's own metrics (optional)
+  - job_name: 'stackdriver_exporter'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['localhost:9255']
+    metric_relabel_configs:
+      # Only keep stackdriver_exporter's own metrics, not the GCP metrics
+      - source_labels: [__name__]
+        regex: 'stackdriver_.*'
+        action: keep
+
+# Remote write to Last9
+remote_write:
+  - url: ${REMOTE_WRITE_URL}
+
+    # Authentication using Basic Auth
+    basic_auth:
+      username: ${LAST9_USERNAME}
+      password: ${LAST9_PASSWORD}
+
+    # Optimize for reliability and performance
+    queue_config:
+      # Maximum number of samples per send
+      max_samples_per_send: 5000
+
+      # Maximum number of shards (parallel senders)
+      max_shards: 10
+
+      # Minimum number of shards
+      min_shards: 1
+
+      # Capacity of the queue
+      capacity: 10000
+
+      # Batch send deadline
+      batch_send_deadline: 10s
+
+      # Minimum backoff time for retries
+      min_backoff: 30ms
+
+      # Maximum backoff time for retries
+      max_backoff: 5s
+
+    # Timeout for remote write requests
+    remote_timeout: 30s
+
+    # Write relabel configs to filter/modify metrics before sending
+    write_relabel_configs:
+      # Drop metrics with too high cardinality if needed
+      # (Uncomment and customize as needed)
+      # - source_labels: [__name__]
+      #   regex: 'unwanted_metric_.*'
+      #   action: drop
+
+      # Add custom labels to all metrics sent to Last9
+      - target_label: 'forwarded_by'
+        replacement: 'prometheus-stackdriver-collector'

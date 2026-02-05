@@ -1,0 +1,454 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  PostgreSQL Collector for Last9 Integration
+  Deploys an OpenTelemetry Collector on ECS Fargate to monitor RDS PostgreSQL
+  and send metrics/logs to Last9 via OTLP
+
+# ==============================================================================
+# Parameters
+# ==============================================================================
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC to deploy the collector
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnets for Fargate tasks (must have NAT gateway access)
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - prod
+      - staging
+      - dev
+    Default: dev
+    Description: Deployment environment
+
+  Last9OtlpEndpoint:
+    Type: String
+    Description: Last9 OTLP endpoint URL (e.g., YOUR_LAST9_ENDPOINT)
+    AllowedPattern: 'https://.*'
+    ConstraintDescription: Must be a valid HTTPS URL
+
+  RDSInstanceId:
+    Type: String
+    Description: RDS Instance Identifier to monitor
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9-]*'
+
+  DBCredentialsSecretArn:
+    Type: String
+    Description: ARN of existing Secrets Manager secret with DB credentials (leave empty to create new)
+    Default: ''
+
+  CollectorImage:
+    Type: String
+    Default: 'otel/opentelemetry-collector-contrib:0.142.0'
+    Description: Docker image for the OpenTelemetry Collector
+
+  TaskCpu:
+    Type: Number
+    Default: 256
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+    Description: CPU units for the Fargate task
+
+  TaskMemory:
+    Type: Number
+    Default: 512
+    AllowedValues: [512, 1024, 2048, 4096, 8192]
+    Description: Memory (MB) for the Fargate task
+
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365]
+    Description: CloudWatch log retention in days
+
+# ==============================================================================
+# Conditions
+# ==============================================================================
+Conditions:
+  CreateDBCredentialsSecret: !Equals [!Ref DBCredentialsSecretArn, '']
+
+# ==============================================================================
+# Resources
+# ==============================================================================
+Resources:
+  # ============================================================================
+  # ECS Cluster
+  # ============================================================================
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub 'postgresql-collector-${Environment}'
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      CapacityProviders:
+        - FARGATE
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: postgresql-collector
+
+  # ============================================================================
+  # Secrets
+  # ============================================================================
+  Last9AuthSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'postgresql-collector/${Environment}/last9-auth'
+      Description: Last9 OTLP authentication header
+      SecretString: !Sub |
+        {
+          "auth_header": "<UPDATE_WITH_YOUR_LAST9_AUTH_HEADER>"
+        }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  DBCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: CreateDBCredentialsSecret
+    Properties:
+      Name: !Sub 'postgresql-collector/${Environment}/db-credentials'
+      Description: PostgreSQL monitoring user credentials
+      GenerateSecretString:
+        SecretStringTemplate: !Sub |
+          {
+            "username": "otel_monitor",
+            "host": "<UPDATE_WITH_RDS_ENDPOINT>",
+            "port": 5432,
+            "dbname": "<UPDATE_WITH_DATABASE_NAME>"
+          }
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # IAM Roles
+  # ============================================================================
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'postgresql-collector-execution-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref Last9AuthSecret
+                  - !If
+                    - CreateDBCredentialsSecret
+                    - !Ref DBCredentialsSecret
+                    - !Ref DBCredentialsSecretArn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'postgresql-collector-task-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RDSDiscovery
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: RDSDiscovery
+                Effect: Allow
+                Action:
+                  - rds:DescribeDBInstances
+                  - rds:ListTagsForResource
+                Resource: '*'
+        - PolicyName: PerformanceInsights
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: PerformanceInsights
+                Effect: Allow
+                Action:
+                  - pi:GetResourceMetrics
+                  - pi:GetDimensionKeyDetails
+                  - pi:DescribeDimensionKeys
+                  - pi:GetResourceMetadata
+                Resource: !Sub 'arn:aws:pi:${AWS::Region}:${AWS::AccountId}:metrics/rds/*'
+        - PolicyName: CloudWatchMetrics
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CloudWatchMetrics
+                Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:ListMetrics
+                Resource: '*'
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/rds/*'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # CloudWatch Log Group
+  # ============================================================================
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/postgresql-collector/${Environment}'
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # Security Group
+  # ============================================================================
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub 'postgresql-collector-${Environment}'
+      GroupDescription: Security group for PostgreSQL collector
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
+      Tags:
+        - Key: Name
+          Value: !Sub 'postgresql-collector-${Environment}'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # Task Definition
+  # ============================================================================
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub 'postgresql-collector-${Environment}'
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: otel-collector
+          Image: !Ref CollectorImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 13133
+              Protocol: tcp
+              Name: health
+            - ContainerPort: 8888
+              Protocol: tcp
+              Name: metrics
+            - ContainerPort: 55679
+              Protocol: tcp
+              Name: zpages
+          Environment:
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: LAST9_OTLP_ENDPOINT
+              Value: !Ref Last9OtlpEndpoint
+            - Name: RDS_INSTANCE_ID
+              Value: !Ref RDSInstanceId
+            - Name: PG_PORT
+              Value: '5432'
+          Secrets:
+            - Name: LAST9_AUTH_HEADER
+              ValueFrom: !Sub '${Last9AuthSecret}:auth_header::'
+            - Name: PG_USERNAME
+              ValueFrom: !Sub
+                - '${SecretArn}:username::'
+                - SecretArn: !If
+                    - CreateDBCredentialsSecret
+                    - !Ref DBCredentialsSecret
+                    - !Ref DBCredentialsSecretArn
+            - Name: PG_PASSWORD
+              ValueFrom: !Sub
+                - '${SecretArn}:password::'
+                - SecretArn: !If
+                    - CreateDBCredentialsSecret
+                    - !Ref DBCredentialsSecret
+                    - !Ref DBCredentialsSecretArn
+            - Name: PG_ENDPOINT
+              ValueFrom: !Sub
+                - '${SecretArn}:host::'
+                - SecretArn: !If
+                    - CreateDBCredentialsSecret
+                    - !Ref DBCredentialsSecret
+                    - !Ref DBCredentialsSecretArn
+            - Name: PG_DATABASE
+              ValueFrom: !Sub
+                - '${SecretArn}:dbname::'
+                - SecretArn: !If
+                    - CreateDBCredentialsSecret
+                    - !Ref DBCredentialsSecret
+                    - !Ref DBCredentialsSecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: collector
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - 'wget --spider -q http://localhost:13133/health || exit 1'
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 60
+          LinuxParameters:
+            InitProcessEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # ECS Service
+  # ============================================================================
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - LogGroup
+    Properties:
+      ServiceName: !Sub 'postgresql-collector-${Environment}'
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: LATEST
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref SecurityGroup
+          Subnets: !Ref SubnetIds
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 0
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      EnableECSManagedTags: true
+      PropagateTags: SERVICE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+# ==============================================================================
+# Outputs
+# ==============================================================================
+Outputs:
+  ClusterArn:
+    Description: ECS Cluster ARN
+    Value: !GetAtt ECSCluster.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterArn'
+
+  ServiceArn:
+    Description: ECS Service ARN
+    Value: !Ref Service
+    Export:
+      Name: !Sub '${AWS::StackName}-ServiceArn'
+
+  ServiceName:
+    Description: ECS Service Name
+    Value: !Sub 'postgresql-collector-${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ServiceName'
+
+  Last9AuthSecretArn:
+    Description: Last9 Auth Secret ARN - Update with your auth header
+    Value: !Ref Last9AuthSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-Last9AuthSecretArn'
+
+  DBCredentialsSecretArn:
+    Description: Database Credentials Secret ARN
+    Value: !If
+      - CreateDBCredentialsSecret
+      - !Ref DBCredentialsSecret
+      - !Ref DBCredentialsSecretArn
+    Export:
+      Name: !Sub '${AWS::StackName}-DBCredentialsSecretArn'
+
+  SecurityGroupId:
+    Description: Collector Security Group ID - Add to RDS inbound rules
+    Value: !Ref SecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroupId'
+
+  LogGroupName:
+    Description: CloudWatch Log Group for collector logs
+    Value: !Ref LogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroupName'
+
+  ExecutionRoleArn:
+    Description: Task Execution Role ARN
+    Value: !GetAtt ExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ExecutionRoleArn'
+
+  TaskRoleArn:
+    Description: Task Role ARN
+    Value: !GetAtt TaskRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TaskRoleArn'
+
+  NextSteps:
+    Description: Post-deployment steps
+    Value: |
+      1. Update Last9AuthSecret with your actual auth header
+      2. Update DBCredentialsSecret with your RDS endpoint and database name
+      3. Add SecurityGroupId to your RDS security group inbound rules (port 5432)
+      4. Run the setup-db-user.sql script on your RDS instance
+      5. Verify collector logs in CloudWatch

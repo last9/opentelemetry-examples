@@ -1,10 +1,82 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+.env.test
+.env.backup
+
+# Go binaries
 go/fasthttp/fasthttp_example
 go/gin/gin_example
 go/pgx/gin
 go/pgx/m
 go/grpc/example.com/
-.claude
-.env
-.env.local
-.env.test
-node_modules
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# PHP
+/vendor/
+composer.lock
+
+# Java
+target/
+*.jar
+*.war
+*.class
+
+# Ruby
+.bundle/
+vendor/bundle/
+
+# Rust
+/target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Claude
+.claude/
+
+# Build artifacts
+dist/
+build/
+bin/
+out/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
