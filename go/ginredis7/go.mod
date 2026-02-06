@@ -8,7 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-redis/redis/v7 v7.4.1
 	github.com/google/uuid v1.6.0
-	github.com/last9/go-agent v0.0.0-20251219063503-3d7f9dc4209d
+	github.com/last9/go-agent v0.1.0
 	github.com/lib/pq v1.10.9
 	github.com/rabbitmq/amqp091-go v1.10.0
 	go.nhat.io/otelsql v0.14.0

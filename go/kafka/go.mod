@@ -6,7 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/IBM/sarama v1.43.3
-	github.com/last9/go-agent v0.0.0
+	github.com/last9/go-agent v0.1.0
 )
 
 require (
@@ -52,5 +52,3 @@ require (
 	google.golang.org/grpc v1.67.1 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 )
-
-replace github.com/last9/go-agent => /Users/prathamesh2_/Projects/go-agent

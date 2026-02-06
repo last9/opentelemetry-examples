@@ -6,7 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
-	github.com/last9/go-agent v0.0.0-20251219063503-3d7f9dc4209d
+	github.com/last9/go-agent v0.1.0
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.17.2
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.63.0

@@ -6,7 +6,7 @@ toolchain go1.24.11
 
 require (
 	github.com/gin-gonic/gin v1.10.0
-	github.com/last9/go-agent v0.0.0-20251219063503-3d7f9dc4209d
+	github.com/last9/go-agent v0.1.0
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.11.0
 )

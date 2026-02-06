@@ -29,7 +29,7 @@ func main() {
 
 	// Initialize the controller with database connection
 	c := users.NewUsersController(db)
-	h := users.NewUsersHandler(c, nil) // No longer need tracer
+	h := users.NewUsersHandler(c)
 
 	// Create Gin router with go-agent instrumentation
 	r := ginagent.Default()

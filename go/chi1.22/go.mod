@@ -6,15 +6,10 @@ toolchain go1.24.11
 
 require (
 	github.com/go-chi/chi/v5 v5.1.0
-	github.com/last9/go-agent v0.0.0-20251219063503-3d7f9dc4209d
+	github.com/last9/go-agent v0.1.0
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.11.0
-	go.nhat.io/otelsql v0.14.0
 	go.opentelemetry.io/otel v1.39.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.31.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.31.0
-	go.opentelemetry.io/otel/sdk v1.39.0
-	go.opentelemetry.io/otel/sdk/metric v1.39.0
 	go.opentelemetry.io/otel/trace v1.39.0
 )
 
@@ -30,12 +25,17 @@ require (
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.11.0 // indirect
 	github.com/redis/go-redis/extra/redisotel/v9 v9.11.0 // indirect
 	github.com/riandyrn/otelchi v0.8.0 // indirect
+	go.nhat.io/otelsql v0.14.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.57.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.57.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.64.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.31.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.31.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.31.0 // indirect
 	go.opentelemetry.io/otel/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.39.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.39.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect

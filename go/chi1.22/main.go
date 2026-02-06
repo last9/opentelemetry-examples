@@ -55,9 +55,12 @@ func main() {
 
 func initRedis() *redis.Client {
 	// Create Redis client with go-agent (automatic instrumentation)
-	rdb := redisagent.NewClient(&redis.Options{
+	rdb, err := redisagent.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+	if err != nil {
+		log.Printf("Warning: Redis instrumentation failed: %v", err)
+	}
 	return rdb
 }
 

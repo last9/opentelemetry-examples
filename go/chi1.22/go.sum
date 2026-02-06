@@ -31,8 +31,8 @@ github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 h1:asbCHRVmodnJTuQ3qamDwqVOIjw
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0/go.mod h1:ggCgvZ2r7uOoQjOyu2Y1NhHmEPPzzuhWgcza5M1Ji1I=
 github.com/iancoleman/orderedmap v0.3.0 h1:5cbR2grmZR/DiVt+VJopEhtVs9YGInGIxAoMJn+Ichc=
 github.com/iancoleman/orderedmap v0.3.0/go.mod h1:XuLcCUkdL5owUCQeF2Ue9uuw1EptkJDkXXS7VoV7XGE=
-github.com/last9/go-agent v0.0.0-20251219063503-3d7f9dc4209d h1:Q506helCBe6QrOzmhgv9R6TVQpSpvOMngR56q+PC+bQ=
-github.com/last9/go-agent v0.0.0-20251219063503-3d7f9dc4209d/go.mod h1:56UxxW110/0qglWQDHnhjLmquzvgfIsUmHA/dJ3IzXM=
+github.com/last9/go-agent v0.1.0 h1:N0BiuASJk79/DQv49DStFGGRZR1+sXNwa9WO8FzgGGA=
+github.com/last9/go-agent v0.1.0/go.mod h1:Hr1u59987Uz5YfOeaFGA1yu39p/DCjeVAWOsTvEabxo=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
