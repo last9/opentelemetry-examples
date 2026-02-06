@@ -1,0 +1,40 @@
+{
+  "name": "node10-express-otel-example",
+  "version": "1.0.0",
+  "description": "Node.js 10 Express example with OpenTelemetry - Last compatible version (0.29.2)",
+  "main": "app.js",
+  "engines": {
+    "node": "10.x"
+  },
+  "scripts": {
+    "start": "node -r ./instrumentation.js app.js",
+    "start:db-examples": "node -r ./instrumentation.js db-examples.js",
+    "test": "curl http://localhost:3000"
+  },
+  "dependencies": {
+    "express": "4.17.1",
+    "@opentelemetry/api": "1.0.4",
+    "@opentelemetry/sdk-node": "0.29.2",
+    "@opentelemetry/sdk-trace-node": "1.3.1",
+    "@opentelemetry/resources": "1.3.1",
+    "@opentelemetry/semantic-conventions": "1.3.1",
+    "@opentelemetry/auto-instrumentations-node": "0.31.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.29.2"
+  },
+  "optionalDependencies": {
+    "pg": "^8.7.1",
+    "mysql2": "^2.3.3",
+    "mongodb": "^4.1.4",
+    "redis": "^3.1.2",
+    "axios": "^0.24.0"
+  },
+  "keywords": [
+    "opentelemetry",
+    "node10",
+    "express",
+    "observability",
+    "tracing",
+    "last9",
+    "legacy"
+  ]
+}

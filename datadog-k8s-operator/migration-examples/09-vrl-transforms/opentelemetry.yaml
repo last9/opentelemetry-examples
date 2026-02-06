@@ -15,6 +15,11 @@ receivers:
     exclude:
       - /var/log/pods/kube-system_*/*/*.log
     include_file_path: true
+    # Multiline configuration for handling stack traces and multi-line logs
+    multiline:
+      # Generic ISO8601 timestamp pattern for detecting new log entries
+      # Matches: 2024-01-15T10:30:00, [2024-01-15 10:30:00], etc.
+      line_start_pattern: '^\[?\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}'
     operators:
       - type: regex_parser
         regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'

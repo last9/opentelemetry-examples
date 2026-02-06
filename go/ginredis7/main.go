@@ -9,17 +9,15 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/http/httptrace"
 	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
-
 	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"github.com/last9/go-agent"
+	ginagent "github.com/last9/go-agent/instrumentation/gin"
+	httpagent "github.com/last9/go-agent/integrations/http"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -169,41 +167,20 @@ func (p *JobProcessor) StartConsumer(ctx context.Context, queueName string) erro
 }
 
 func main() {
-	r := gin.Default()
-	i := last9.NewInstrumentation()
-	mp, err := last9.InitMetrics()
-	if err != nil {
-		log.Fatalf("failed to initialize metrics: %v", err)
-	}
+	// Initialize go-agent (automatic OpenTelemetry setup)
+	agent.Start()
+	defer agent.Shutdown()
 
-	// Handle shutdown properly so nothing leaks.
-	defer func() {
-		if err := mp.Shutdown(context.Background()); err != nil {
-			log.Println(err)
-		}
-	}()
+	log.Println("✓ go-agent initialized")
 
-	// Register as global meter provider so that it can be used via otel.Meter
-	// and accessed using otel.GetMeterProvider.
-	// Most instrumentation libraries use the global meter provider as default.
-	// If the global meter provider is not set then a no-op implementation
-	// is used, which fails to generate data.
-	otel.SetMeterProvider(mp)
-
-	defer func() {
-		if err := i.TracerProvider.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
-		}
-	}()
-
-	// Initialize Redis client
+	// Initialize Redis client with custom OTel hook for Redis v7
 	redisClient := initRedis()
 
 	// Initialize the controller with Redis client
 	c := users.NewUsersController(redisClient)
-	h := users.NewUsersHandler(c, i.Tracer)
+	h := users.NewUsersHandler(c)
 
-	// Initialize RabbitMQ broker
+	// Initialize RabbitMQ broker (uses go-agent's global tracer)
 	rmqConfig := &last9.RabbitMQConfig{
 		Host:     getEnv("RABBITMQ_HOST", "localhost"),
 		Port:     getEnv("RABBITMQ_PORT", "5672"),
@@ -212,11 +189,13 @@ func main() {
 		VHost:    getEnv("RABBITMQ_VHOST", "/"),
 	}
 
-	rmqBroker, err := last9.NewRabbitMQBroker(rmqConfig, i.Tracer)
+	rmqBroker, err := last9.NewRabbitMQBroker(rmqConfig)
 	if err != nil {
 		log.Fatalf("Failed to initialize RabbitMQ broker: %v", err)
 	}
 	defer rmqBroker.Close()
+
+	log.Println("✓ RabbitMQ broker initialized")
 
 	// Initialize job processor with the broker
 	jobProcessor := NewJobProcessor(rmqBroker)
@@ -242,7 +221,8 @@ func main() {
 		log.Fatalf("Failed to start job consumer: %v", err)
 	}
 
-	r.Use(otelgin.Middleware("gin-server"))
+	// Create Gin router with go-agent instrumentation
+	r := ginagent.Default()
 
 	// Routes
 	r.GET("/users", h.GetUsers)
@@ -251,9 +231,7 @@ func main() {
 	r.PUT("/users/:id", h.UpdateUser)
 	r.DELETE("/users/:id", h.DeleteUser)
 	// New route for fetching a random joke
-	r.GET("/joke", func(c *gin.Context) {
-		getRandomJoke(c, i)
-	})
+	r.GET("/joke", getRandomJoke)
 
 	// Add a route for submitting email jobs
 	r.POST("/send-email", func(c *gin.Context) {
@@ -287,27 +265,16 @@ func initRedis() *redis.Client {
 	return rdb
 }
 
-func getRandomJoke(c *gin.Context, i *last9.Instrumentation) {
-	// Start a new span for the external API call
+func getRandomJoke(c *gin.Context) {
 	ctx := c.Request.Context()
-	ctx, span := i.Tracer.Start(ctx, "get-random-joke")
-	defer span.End()
 
-	// Create an HTTP client with OpenTelemetry instrumentation
-	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport,
-		// By setting the otelhttptrace client in this transport, it can be
-		// injected into the context after the span is started, which makes the
-		// httptrace spans children of the transport one.
-		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
-			return otelhttptrace.NewClientTrace(ctx)
-		}))}
+	// Create HTTP client with go-agent (automatic instrumentation)
+	client := httpagent.NewClient(&http.Client{})
 
-	// Make a request to the external API
+	// Make a request to the external API (automatically traced)
 	req, _ := http.NewRequestWithContext(ctx, "GET", "https://official-joke-api.appspot.com/random_joke", nil)
 	resp, err := client.Do(req)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch joke"})
 		return
 	}
@@ -320,12 +287,6 @@ func getRandomJoke(c *gin.Context, i *last9.Instrumentation) {
 		Punchline string `json:"punchline"`
 	}
 	json.Unmarshal(body, &joke)
-
-	// Add attributes to the external API call span
-	span.SetAttributes(
-		attribute.String("joke.setup", joke.Setup),
-		attribute.String("joke.punchline", joke.Punchline),
-	)
 
 	c.JSON(http.StatusOK, joke)
 }

@@ -8,8 +8,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"go.nhat.io/otelsql"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	dbagent "github.com/last9/go-agent/integrations/database"
 )
 
 type DB struct {
@@ -24,20 +23,14 @@ type User struct {
 	GreetCount int
 }
 
-// NewDB creates a new database connection with OpenTelemetry instrumentation
+// NewDB creates a new database connection with go-agent instrumentation
 func NewDB(dsn string) (*DB, error) {
-	// Register the instrumented driver
-	driverName, err := otelsql.Register("postgres",
-		otelsql.AllowRoot(),
-		otelsql.TraceQueryWithoutArgs(),
-		otelsql.WithSystem(semconv.DBSystemPostgreSQL),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to register instrumented driver: %w", err)
-	}
-
-	// Open the database connection
-	db, err := sql.Open(driverName, dsn)
+	// Open the database connection with go-agent instrumentation
+	db, err := dbagent.Open(dbagent.Config{
+		DriverName:   "postgres",
+		DSN:          dsn,
+		DatabaseName: "grpc_gateway",
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -52,15 +45,11 @@ func NewDB(dsn string) (*DB, error) {
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Record stats
-	if err := otelsql.RecordStats(db); err != nil {
-		log.Printf("Warning: failed to record database stats: %v", err)
-	}
-
-	log.Println("✓ Database connection established with OTel instrumentation")
+	log.Println("✓ Database connection established with go-agent instrumentation")
 
 	return &DB{conn: db}, nil
 }

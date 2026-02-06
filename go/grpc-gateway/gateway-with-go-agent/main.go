@@ -284,11 +284,14 @@ func main() {
 		redisAddr = "localhost:6379" // Default
 	}
 
-	redisClient := redisagent.NewClient(&redis.Options{
+	redisClient, redisInstrErr := redisagent.NewClient(&redis.Options{
 		Addr:     redisAddr,
 		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       0,
 	})
+	if redisInstrErr != nil {
+		log.Printf("Warning: Redis instrumentation failed: %v", redisInstrErr)
+	}
 
 	// Test Redis connection
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

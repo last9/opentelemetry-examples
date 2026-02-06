@@ -8,18 +8,19 @@ import (
 	"os/signal"
 	"time"
 
-	"kafka-hello-world/last9"
-
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/last9/go-agent"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {
-	// Initialize instrumentation
-	instrumentation := last9.NewInstrumentation()
-	defer instrumentation.TracerProvider.Shutdown(context.Background())
+	// Initialize go-agent (automatic OpenTelemetry setup)
+	agent.Start()
+	defer agent.Shutdown()
+
+	log.Println("✓ go-agent initialized")
 
 	// Create Kafka consumer
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{

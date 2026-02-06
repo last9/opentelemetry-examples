@@ -5,20 +5,21 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/codes"
 )
 
 type UsersHandler struct {
-	controller *UsersController // Changed from UsersControllers to UsersController
+	controller *UsersController
 	tracer     oteltrace.Tracer
 }
 
-func NewUsersHandler(c *UsersController, t oteltrace.Tracer) *UsersHandler {
+func NewUsersHandler(c *UsersController) *UsersHandler {
 	return &UsersHandler{
 		controller: c,
-		tracer:     t,
+		tracer:     otel.Tracer("sqlx-users"),
 	}
 }
 

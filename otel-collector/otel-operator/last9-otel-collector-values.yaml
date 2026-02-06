@@ -167,6 +167,25 @@ config:
       # By default spike_limit_mib is set to 15% of ".Values.resources.limits.memory"
       spike_limit_percentage: 15
   receivers:
+    # Customize filelog receiver from preset with multiline configuration
+    # This overrides the preset's filelog receiver to add multiline support
+    # for handling stack traces and multi-line logs
+    filelog:
+      include:
+        - /var/log/pods/*/*/*.log
+      exclude:
+        - /var/log/pods/*/otel-collector/*.log
+      start_at: end
+      include_file_path: true
+      include_file_name: false
+      # Multiline configuration for handling stack traces and multi-line logs
+      multiline:
+        # Generic ISO8601 timestamp pattern for detecting new log entries
+        # Matches: 2024-01-15T10:30:00, [2024-01-15 10:30:00], etc.
+        line_start_pattern: '^\[?\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}'
+      operators:
+        # Parser operators from the preset will handle CRI format parsing
+        # This configuration extends the preset with multiline support
     otlp:
       protocols:
         grpc:

@@ -4,6 +4,11 @@ receivers:
     # File path pattern to read logs from. Update this to the destination from where you want to read logs.
     include: [/var/log/mysql/*.log]
     include_file_path: true
+    # Multiline configuration for handling MySQL/MariaDB stack traces and multi-line error logs
+    multiline:
+      # MySQL/MariaDB logs typically start with timestamp in format: 2024-01-15T10:30:00.123456Z
+      # This pattern detects new log entries to prevent splitting of multi-line error messages
+      line_start_pattern: '^\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}'
     retry_on_failure:
       enabled:
         true

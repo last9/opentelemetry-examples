@@ -6,26 +6,32 @@ import (
 	"os"
 	"time"
 
-	instrumentation "grpc-example/instrumentation"
+	"github.com/last9/go-agent"
+	"github.com/last9/go-agent/instrumentation/grpcgateway"
 	pb "grpc-example/proto"
 
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
-	// Initialize the tracer
-	shutdown := instrumentation.InitTracer("grpc-client")
-	defer shutdown(context.Background())
+	// Initialize go-agent (automatic OpenTelemetry setup)
+	agent.Start()
+	defer agent.Shutdown()
 
-	conn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	log.Println("✓ go-agent initialized")
 
+	// Connect to gRPC server with go-agent (automatic client instrumentation)
+	conn, err := grpc.NewClient(
+		"localhost:50051",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpcgateway.NewDialOption(), // Automatic OTel client tracing
+	)
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
+
 	c := pb.NewGreeterClient(conn)
 
 	name := "World"
@@ -38,5 +44,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not greet: %v", err)
 	}
-	log.Printf("Greeting: %s", r.GetMessage())
+	log.Printf("✓ Greeting: %s", r.GetMessage())
 }

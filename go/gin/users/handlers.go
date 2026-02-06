@@ -6,30 +6,23 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.opentelemetry.io/otel/attribute"
-	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type UsersHandler struct {
-	controller *UsersController // Changed from UsersControllers to UsersController
-	tracer     oteltrace.Tracer
+	controller *UsersController
 }
 
-func NewUsersHandler(c *UsersController, t oteltrace.Tracer) *UsersHandler {
+func NewUsersHandler(c *UsersController) *UsersHandler {
 	return &UsersHandler{
 		controller: c,
-		tracer:     t,
 	}
 }
 
 func (u *UsersHandler) GetUsers(c *gin.Context) {
-	ctx, span := u.tracer.Start(c.Request.Context(), "GetUsers")
-	defer span.End()
-
-	users, err := u.controller.GetUsers(ctx)
+	users, err := u.controller.GetUsers(c.Request.Context())
 	if err != nil {
 		// Record detailed exception information
-		common.RecordExceptionInSpan(c, "Failed to fetch users", 
+		common.RecordExceptionInSpan(c, "Failed to fetch users",
 			"error_type", "database_error",
 			"operation", "get_users",
 			"details", err.Error())
@@ -40,16 +33,11 @@ func (u *UsersHandler) GetUsers(c *gin.Context) {
 }
 
 func (u *UsersHandler) GetUser(c *gin.Context) {
-	_, span := u.tracer.Start(c.Request.Context(), "GetUser", oteltrace.WithAttributes(
-		attribute.String("user.id", c.Param("id")),
-	))
-	defer span.End()
-
 	id := c.Param("id")
 	user, err := u.controller.GetUser(c.Request.Context(), id)
 	if err != nil {
 		// Record detailed exception information
-		common.RecordExceptionInSpan(c, "User not found", 
+		common.RecordExceptionInSpan(c, "User not found",
 			"error_type", "not_found",
 			"operation", "get_user",
 			"user_id", id,
@@ -62,12 +50,10 @@ func (u *UsersHandler) GetUser(c *gin.Context) {
 
 func (u *UsersHandler) CreateUser(c *gin.Context) {
 	log.Println("here")
-	_, span := u.tracer.Start(c.Request.Context(), "CreateUser")
-	defer span.End()
 	var newUser User
 	if err := c.ShouldBindJSON(&newUser); err != nil {
 		// Record validation error
-		common.RecordExceptionInSpan(c, "Invalid input data", 
+		common.RecordExceptionInSpan(c, "Invalid input data",
 			"error_type", "validation_error",
 			"operation", "create_user",
 			"details", err.Error())
@@ -88,18 +74,12 @@ func (u *UsersHandler) CreateUser(c *gin.Context) {
 }
 
 func (u *UsersHandler) UpdateUser(c *gin.Context) {
-	_, span := u.tracer.Start(c.Request.Context(), "UpdateUser", oteltrace.WithAttributes(
-		attribute.String("user.id", c.Param("id")),
-	))
-
-	defer span.End()
-
 	id := c.Param("id")
-	idInt, err := strconv.ParseInt(id, 10, 32) // Fixed base from 2 to 10
+	idInt, err := strconv.ParseInt(id, 10, 32)
 
 	if err != nil {
 		// Record validation error
-		common.RecordExceptionInSpan(c, "Invalid user ID format", 
+		common.RecordExceptionInSpan(c, "Invalid user ID format",
 			"error_type", "validation_error",
 			"operation", "update_user",
 			"user_id", id,
@@ -112,7 +92,7 @@ func (u *UsersHandler) UpdateUser(c *gin.Context) {
 	user := u.controller.UpdateUser(int(idInt), name)
 	if user == nil {
 		// Record not found error
-		common.RecordExceptionInSpan(c, "User not found for update", 
+		common.RecordExceptionInSpan(c, "User not found for update",
 			"error_type", "not_found",
 			"operation", "update_user",
 			"user_id", idInt)
@@ -123,17 +103,12 @@ func (u *UsersHandler) UpdateUser(c *gin.Context) {
 }
 
 func (u *UsersHandler) DeleteUser(c *gin.Context) {
-	_, span := u.tracer.Start(c.Request.Context(), "DeleteUser", oteltrace.WithAttributes( // Fixed span name
-		attribute.String("user.id", c.Param("id")),
-	))
-	defer span.End()
-
 	id := c.Param("id")
-	idInt, err := strconv.ParseInt(id, 10, 32) // Fixed base from 2 to 10
+	idInt, err := strconv.ParseInt(id, 10, 32)
 
 	if err != nil {
 		// Record validation error
-		common.RecordExceptionInSpan(c, "Invalid user ID format", 
+		common.RecordExceptionInSpan(c, "Invalid user ID format",
 			"error_type", "validation_error",
 			"operation", "delete_user",
 			"user_id", id,

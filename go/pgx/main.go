@@ -11,51 +11,58 @@ import (
 	"github.com/exaring/otelpgx"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"github.com/last9/go-agent"
+	ginagent "github.com/last9/go-agent/instrumentation/gin"
 )
 
 var conn *pgxpool.Pool
 
 func main() {
+	// Initialize go-agent (automatic OpenTelemetry setup)
+	agent.Start()
+	defer agent.Shutdown()
+
+	log.Println("✓ go-agent initialized")
+
 	var err error
 	var connString = os.Getenv("DATABASE_URL")
+	if connString == "" {
+		connString = "postgres://postgres:postgres@localhost:5432/todos?sslmode=disable"
+	}
+
 	cfg, err := pgxpool.ParseConfig(connString)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "create connection pool: %w", err)
+		fmt.Fprintf(os.Stderr, "create connection pool: %v\n", err)
 		os.Exit(1)
 	}
 
+	// pgxpool uses otelpgx tracer (go-agent provides the tracer provider)
 	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	conn, err = pgxpool.NewWithConfig(context.Background(), cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connection to database: %v\n", err)
 		os.Exit(1)
 	}
+	defer conn.Close()
 
-	i := NewInstrumentation()
-	defer func() {
-		if err := i.TracerProvider.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
-		}
-	}()
+	log.Println("✓ pgxpool connected with OTel tracing")
 
-	r := gin.Default()
-
-	// Add the otelgin middleware to the router
-	r.Use(otelgin.Middleware("todo-service"))
+	// Create Gin router with go-agent instrumentation
+	r := ginagent.Default()
 
 	r.GET("/tasks", listTasksHandler)
 	r.POST("/tasks", addTaskHandler)
 	r.PUT("/tasks/:id", updateTaskHandler)
 	r.DELETE("/tasks/:id", removeTaskHandler)
 
+	log.Println("✓ Gin server running on :8080 (instrumented by go-agent)")
 	r.Run(":8080")
 }
 
 func listTasksHandler(c *gin.Context) {
 	tasks, err := listTasks(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, tasks)

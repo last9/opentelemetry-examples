@@ -7,13 +7,10 @@ import (
 	"net"
 	"net/http"
 
-	instrumentation "grpc-gateway-example/instrumentation"
+	"github.com/last9/go-agent"
+	"github.com/last9/go-agent/instrumentation/grpcgateway"
 	pb "grpc-gateway-example/proto"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -24,27 +21,20 @@ type server struct {
 }
 
 func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-	// Create a span for this method
-	_, span := otel.Tracer("grpc-gateway-server").Start(ctx, "SayHello")
-	defer span.End()
-
 	log.Printf("Gateway received request: name=%s", in.Name)
 	return &pb.HelloReply{Message: "Hello " + in.Name + " from gRPC-Gateway!"}, nil
 }
 
 func main() {
-	// Initialize OpenTelemetry tracer
-	shutdown := instrumentation.InitTracer("grpc-gateway-example")
-	defer shutdown(context.Background())
+	// Initialize go-agent (automatic OpenTelemetry setup)
+	agent.Start()
+	defer agent.Shutdown()
 
+	log.Println("✓ go-agent initialized")
 	log.Println("Starting gRPC-Gateway example...")
 
 	// Start gRPC server in background
 	go startGrpcServer()
-
-	// Give gRPC server a moment to start
-	log.Println("Waiting for gRPC server to start...")
-	// Note: In production, use proper health checking instead of sleep
 
 	// Start HTTP gateway
 	if err := startHTTPGateway(); err != nil {
@@ -52,43 +42,39 @@ func main() {
 	}
 }
 
-// startGrpcServer starts the gRPC server with OpenTelemetry instrumentation
+// startGrpcServer starts the gRPC server with go-agent instrumentation
 func startGrpcServer() {
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("Failed to listen on gRPC port: %v", err)
 	}
 
-	// Create gRPC server with OTel interceptors
-	grpcServer := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-	)
+	// Create gRPC server with go-agent (automatic instrumentation)
+	grpcServer := grpcgateway.NewGrpcServer()
 
 	// Register the Greeter service
 	pb.RegisterGreeterServer(grpcServer, &server{})
 
-	log.Printf("✓ gRPC server listening at %v", lis.Addr())
+	log.Printf("✓ gRPC server listening at %v (instrumented by go-agent)", lis.Addr())
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve gRPC: %v", err)
 	}
 }
 
-// startHTTPGateway starts the grpc-gateway HTTP server with full instrumentation
+// startHTTPGateway starts the grpc-gateway HTTP server with go-agent instrumentation
 // This demonstrates the complete stack: HTTP -> grpc-gateway -> gRPC
 func startHTTPGateway() error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Step 1: Create grpc-gateway runtime.ServeMux
-	// This handles the gRPC-to-JSON transcoding
-	gwMux := runtime.NewServeMux()
+	// Create grpc-gateway ServeMux with go-agent
+	gwMux := grpcgateway.NewGatewayMux()
 
-	// Step 2: Connect to gRPC server with OTel client instrumentation
-	// This ensures client-side gRPC calls are traced
+	// Connect to gRPC server with go-agent (automatic client instrumentation)
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpcgateway.NewDialOption(), // Automatic OTel instrumentation
 	}
 
 	conn, err := grpc.NewClient("localhost:50051", opts...)
@@ -97,13 +83,13 @@ func startHTTPGateway() error {
 	}
 	defer conn.Close()
 
-	// Step 3: Register gRPC-gateway handlers
+	// Register gRPC-gateway handlers
 	// This maps HTTP routes to gRPC methods based on proto annotations
 	if err := pb.RegisterGreeterHandler(ctx, gwMux, conn); err != nil {
 		return fmt.Errorf("failed to register gateway: %w", err)
 	}
 
-	// Step 4: Create standard library http.ServeMux (outer HTTP layer)
+	// Create standard library http.ServeMux (outer HTTP layer)
 	httpMux := http.NewServeMux()
 
 	// Mount grpc-gateway routes under /
@@ -115,12 +101,11 @@ func startHTTPGateway() error {
 		w.Write([]byte("OK"))
 	})
 
-	// Step 5: Wrap entire HTTP server with OTel instrumentation (outermost layer)
-	// This captures HTTP-level metrics and traces
-	handler := otelhttp.NewHandler(httpMux, "grpc-gateway-http")
+	// Wrap entire HTTP server with go-agent (automatic instrumentation)
+	handler := grpcgateway.WrapHTTPMux(httpMux, "grpc-gateway-http")
 
 	// Start HTTP server
-	log.Println("✓ HTTP gateway listening on :8080")
+	log.Println("✓ HTTP gateway listening on :8080 (instrumented by go-agent)")
 	log.Println("")
 	log.Println("Try these commands:")
 	log.Println("  curl -X POST http://localhost:8080/v1/greeter/hello -d '{\"name\":\"World\"}'")
