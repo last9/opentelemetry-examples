@@ -1,0 +1,14 @@
+# Sanic framework
+sanic==23.12.2
+
+# OpenTelemetry Core
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+
+# OpenTelemetry Instrumentation (base)
+opentelemetry-instrumentation>=0.41b0
+
+# OpenTelemetry Exporters
+# For demo: Console exporter (included in SDK)
+# For production: OTLP exporter for OTLP
+opentelemetry-exporter-otlp-proto-grpc>=1.20.0
