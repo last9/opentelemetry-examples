@@ -76,10 +76,12 @@ This example includes a drop-in fix: `config/initializers/otel_exception_trackin
 
 ### How It Works
 
-The fix uses two mechanisms:
+The fix uses two mechanisms for Rails controllers:
 
 1. **Rack Middleware** - Catches unhandled exceptions that bubble up
 2. **ActiveSupport::Notifications** - Catches exceptions handled by `rescue_from`
+
+And a Sidekiq server middleware for background jobs (see below).
 
 ### Manual Recording (Optional)
 
@@ -93,6 +95,48 @@ rescue => e
   raise
 end
 ```
+
+## Sidekiq Exception Tracking Fix
+
+### Problem
+
+`opentelemetry-instrumentation-sidekiq` wraps `process_one` in `untraced` to suppress spans from Sidekiq's internal polling. However, when a job lacks propagated trace context (no `traceparent` header in the job message), the OTel tracer middleware inherits the suppressed context and creates a `NonRecordingSpan`. This means:
+
+- `span.recording?` returns `false`
+- `record_exception` and `set_attribute` are no-ops
+- The span is never exported to your backend
+
+This commonly happens when jobs are enqueued from cron schedulers, Rails console, or any context without an active OTel span.
+
+### Solution
+
+The fix adds a `SidekiqClearUntraced` server middleware that resets the context to `Context::ROOT` before the OTel tracer middleware runs. This uses only public APIs (`untraced?` and `Context::ROOT`).
+
+The fix is included in `config/initializers/otel_exception_tracking.rb` and activates automatically when Sidekiq is present.
+
+**If your file loads before Rails initializers** (e.g., from `config/application.rb`), add the Sidekiq middleware separately in your existing `Sidekiq.configure_server` block:
+
+```ruby
+class SidekiqClearUntraced
+  def call(worker, msg, queue)
+    if ::OpenTelemetry::Common::Utilities.untraced?
+      ::OpenTelemetry::Context.with_current(::OpenTelemetry::Context::ROOT) do
+        yield
+      end
+    else
+      yield
+    end
+  end
+end
+
+Sidekiq.configure_server do |config|
+  config.server_middleware do |chain|
+    chain.prepend(SidekiqClearUntraced)
+  end
+end
+```
+
+**Important:** Remove any `OtelExceptionTracking.record(ex)` calls from `config.error_handlers` -- Sidekiq error handlers fire after the middleware chain has unwound, so the span is already finished at that point. The tracer middleware's `in_span { yield }` already records exceptions automatically.
 
 ## Gem Versions
 
@@ -112,15 +156,21 @@ Key OpenTelemetry gems used:
 2. Check that OpenTelemetry is properly configured
 3. Verify your OTLP endpoint and credentials
 
+### Sidekiq job exceptions not appearing?
+
+1. Ensure `SidekiqClearUntraced` middleware is in the server chain **before** the OTel `TracerMiddleware`
+2. Remove `OtelExceptionTracking.record(ex)` from `config.error_handlers` (runs too late)
+3. The file must be in `config/initializers/`, not `config/` (Rails.application must exist)
+
 ### Middleware load order
 
-You can verify the middleware is installed:
+You can verify the Rack middleware is installed:
 
 ```bash
 bundle exec rails middleware
 ```
 
-Look for `OpenTelemetry::Instrumentation::ExceptionTracking::Middleware` before `ActionDispatch::ShowExceptions`.
+Look for `OtelExceptionTracking::Middleware` before `ActionDispatch::ShowExceptions`.
 
 ## References
 
