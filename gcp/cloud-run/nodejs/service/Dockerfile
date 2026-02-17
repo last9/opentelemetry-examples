@@ -8,7 +8,7 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci --only=production
 
-# Copy source code (includes shared/ directory)
+# Copy source code
 COPY . .
 
 # Cloud Run uses PORT env var

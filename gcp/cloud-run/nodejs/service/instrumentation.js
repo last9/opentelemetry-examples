@@ -5,7 +5,75 @@ const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumenta
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { Resource } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
-const { CloudRunTracePropagator } = require('./shared/custom-propagator');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
+
+/**
+ * Custom Trace Context Propagator for GCP Cloud Run
+ *
+ * Preserves parent-child span relationships by using a backup header
+ * that GCP infrastructure doesn't modify.
+ */
+class CloudRunTracePropagator {
+  constructor() {
+    this._w3cPropagator = new W3CTraceContextPropagator();
+    this._backupHeader = 'x-original-traceparent';
+    this._backupStateHeader = 'x-original-tracestate';
+  }
+
+  inject(context, carrier, setter) {
+    // Inject standard W3C headers
+    this._w3cPropagator.inject(context, carrier, setter);
+
+    // Copy to backup headers (GCP won't modify these)
+    const traceparent = carrier['traceparent'];
+    const tracestate = carrier['tracestate'];
+
+    if (traceparent) {
+      setter.set(carrier, this._backupHeader, traceparent);
+    }
+    if (tracestate) {
+      setter.set(carrier, this._backupStateHeader, tracestate);
+    }
+  }
+
+  extract(context, carrier, getter) {
+    // Try backup headers first (original parent context)
+    const originalTraceparent = getter.get(carrier, this._backupHeader);
+
+    if (originalTraceparent) {
+      // Found backup header - use original (pre-GCP-modification) context
+      const originalCarrier = {
+        'traceparent': Array.isArray(originalTraceparent)
+          ? originalTraceparent[0]
+          : originalTraceparent,
+      };
+
+      const originalTracestate = getter.get(carrier, this._backupStateHeader);
+      if (originalTracestate) {
+        originalCarrier['tracestate'] = Array.isArray(originalTracestate)
+          ? originalTracestate[0]
+          : originalTracestate;
+      }
+
+      return this._w3cPropagator.extract(context, originalCarrier, {
+        get: (c, key) => c[key],
+        keys: (c) => Object.keys(c),
+      });
+    }
+
+    // Fallback to standard extraction
+    return this._w3cPropagator.extract(context, carrier, getter);
+  }
+
+  fields() {
+    return [
+      'traceparent',
+      'tracestate',
+      this._backupHeader,
+      this._backupStateHeader,
+    ];
+  }
+}
 
 /**
  * Parse OTLP headers from "key1=value1,key2=value2" format
