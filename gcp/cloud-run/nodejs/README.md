@@ -84,106 +84,99 @@ SERVICE_URL=$(gcloud run services describe my-service --region us-central1 --for
 # Test service
 curl "$SERVICE_URL/process?test=hello"
 
-# Test function
+# Test service calling function (tests custom propagator)
+curl "$SERVICE_URL/chain?name=Test"
+
+# Test function directly
 FUNCTION_URL=$(gcloud functions describe my-function --region us-central1 --gen2 --format="value(serviceConfig.uri)")
 curl "$FUNCTION_URL/?name=World"
 ```
 
-## Architecture
-
-```
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │ HTTP Request
-       ↓
-┌──────────────────┐
-│ Cloud Run        │  Express service with custom propagator
-│ Service          │  Sends traces to Last9
-└────────┬─────────┘
-         │ HTTP Request (with x-original-traceparent)
-         ↓
-┌──────────────────┐
-│  GCP Load        │  Modifies traceparent (creates intermediate span)
-│  Balancer        │  BUT leaves x-original-traceparent intact
-└────────┬─────────┘
-         │
-         ↓
-┌─────────────────┐
-│ Cloud Run       │  Extracts from x-original-traceparent
-│ Function        │  Preserves correct parent-child relationship
-└─────────────────┘
-```
-
 ---
 
-# GCP Cloud Run Trace Context Propagation
+## The Problem: GCP Load Balancer Span Injection
 
-## The Problem: Missing Parent-Child Relationships
+When Cloud Run services call each other (or Cloud Run Functions), GCP's load balancer modifies the W3C `traceparent` header by injecting its own span. This breaks parent-child span relationships in your traces.
 
-When tracing requests across GCP Cloud Run services/functions, you may notice that spans appear "flat" (all at the same level) instead of showing proper parent-child relationships, even though they share the same TraceId.
-
-### What's Happening
+### What Happens
 
 ```
 ┌─────────────┐
-│ function-a  │  Creates CLIENT span (SpanId: 383c...)
+│  service-a  │  Creates CLIENT span (SpanId: abc123)
+│             │  Sends traceparent: "...abc123..."
 └──────┬──────┘
        │ HTTP Request
        ↓
 ┌──────────────────┐
-│  GCP Load        │  Creates intermediate span (SpanId: fc8c...)
-│  Balancer        │  Modifies traceparent header to point to itself
+│  GCP Load        │  Creates intermediate span (SpanId: xyz789)
+│  Balancer        │  MODIFIES traceparent: "...xyz789..."
 └────────┬─────────┘  [This span is NOT exported to Last9]
          │
          ↓
 ┌─────────────┐
-│ service-b   │  Receives request with LB span as parent
-│             │  Creates SERVER span with ParentSpanId: fc8c...
-└─────────────┘  [Parent span is missing in Last9!]
+│ service-b   │  Receives modified traceparent
+│             │  Creates SERVER span with ParentSpanId: xyz789
+└─────────────┘  [Parent span xyz789 doesn't exist in Last9!]
 ```
 
-**Result:** The SERVER span in service-b references a parent span ID that doesn't exist in your observability platform, breaking the visual hierarchy.
+**Result:** The SERVER span in service-b references a parent span ID (xyz789) that was never exported to your observability platform, breaking the visual trace hierarchy.
 
 ### Why This Happens
 
-1. **GCP Infrastructure Spans**: Cloud Run's load balancer automatically creates spans as part of [Google Cloud Trace](https://cloud.google.com/trace)
-2. **Context Modification**: The load balancer modifies the W3C `traceparent` header to include its own span ID
-3. **Selective Export**: Your services only export to Last9 (or your OTLP endpoint), not to Google Cloud Trace
-4. **Missing Links**: The intermediate load balancer spans never reach Last9, leaving "orphaned" references
+1. **GCP Infrastructure Spans**: Cloud Run's load balancer creates spans as part of Google Cloud Trace
+2. **Header Modification**: The load balancer modifies the `traceparent` header to include its own span ID
+3. **Selective Export**: Your services only export to Last9 (via OTLP), not to Google Cloud Trace
+4. **Missing Links**: The intermediate load balancer spans never reach Last9
 
-### Trace Structure Example
+### Trace Example
 
-Looking at the trace data:
+All spans share the same TraceId (✓), but ParentSpanId references are broken:
+
 ```json
 {
-  "TraceId": "5719c8b38bb1416b61c403eb50518524",  // Same for all ✓
+  "TraceId": "5719c8b38bb1416b61c403eb50518524",  // ✓ Same for all spans
   "SpanId": "1dc99ec20ff6420c",                    // service-b SERVER span
-  "ParentSpanId": "fc8c7a0328245590",              // Missing! (GCP LB span)
+  "ParentSpanId": "fc8c7a0328245590",              // ✗ Missing! (GCP LB span)
   "ServiceName": "service-b"
 }
 ```
 
-The `ParentSpanId` references a span created by GCP infrastructure that was never exported.
+---
 
-## Solution: Custom Trace Propagator
+## The Solution: Custom Trace Propagator
 
-**✅ This is the recommended and implemented solution**
-
-This implementation uses a custom propagator that preserves the original parent context even when GCP infrastructure modifies the standard headers.
+This implementation uses a custom propagator that preserves the original parent context by using backup headers that GCP doesn't modify.
 
 ### How It Works
 
-1. **On outgoing requests**: Copies `traceparent` to `x-original-traceparent` header
-2. **GCP load balancer**: Modifies `traceparent` but ignores our custom header
-3. **On incoming requests**: Extracts parent context from `x-original-traceparent` first
-4. **Result**: Correct parent-child relationships preserved!
+```
+┌─────────────┐
+│  service-a  │  1. Creates CLIENT span (SpanId: abc123)
+│             │  2. Injects BOTH:
+│             │     - traceparent: "...abc123..."
+│             │     - x-original-traceparent: "...abc123..." (backup)
+└──────┬──────┘
+       │ HTTP Request (both headers)
+       ↓
+┌──────────────────┐
+│  GCP Load        │  3. Modifies traceparent → "...xyz789..."
+│  Balancer        │  4. Leaves x-original-traceparent untouched ✓
+└────────┬─────────┘
+         │
+         ↓
+┌─────────────┐
+│ service-b   │  5. Extracts from x-original-traceparent FIRST
+│             │  6. Gets correct parent: abc123 ✓
+│             │  7. Creates SERVER span with correct ParentSpanId
+└─────────────┘
+```
 
 ### Implementation
 
-The `CloudRunTracePropagator` class is included directly in both `service/instrumentation.js` and `functions/instrumentation.js`:
+The `CloudRunTracePropagator` class is included in both `service/instrumentation.js` and `functions/instrumentation.js`:
 
 ```javascript
+const { NodeSDK } = require('@opentelemetry/sdk-node');
 const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 
 class CloudRunTracePropagator {
@@ -194,10 +187,10 @@ class CloudRunTracePropagator {
   }
 
   inject(context, carrier, setter) {
-    // Inject standard W3C headers
+    // 1. Inject standard W3C headers
     this._w3cPropagator.inject(context, carrier, setter);
 
-    // Copy to backup headers (GCP won't modify these)
+    // 2. Copy to backup headers (GCP won't modify these)
     const traceparent = carrier['traceparent'];
     const tracestate = carrier['tracestate'];
 
@@ -210,11 +203,11 @@ class CloudRunTracePropagator {
   }
 
   extract(context, carrier, getter) {
-    // Try backup headers first (original parent context)
+    // 1. Try backup headers first (original parent context)
     const originalTraceparent = getter.get(carrier, this._backupHeader);
 
     if (originalTraceparent) {
-      // Found backup header - use original context
+      // Found backup - use original (pre-GCP-modification) context
       const originalCarrier = {
         'traceparent': Array.isArray(originalTraceparent)
           ? originalTraceparent[0]
@@ -234,7 +227,7 @@ class CloudRunTracePropagator {
       });
     }
 
-    // Fallback to standard extraction
+    // 2. Fallback to standard extraction
     return this._w3cPropagator.extract(context, carrier, getter);
   }
 
@@ -247,108 +240,81 @@ class CloudRunTracePropagator {
     ];
   }
 }
-```
 
-### Configuration
-
-Enable the custom propagator in your SDK initialization:
-
-```javascript
+// Configure SDK with custom propagator
 const sdk = new NodeSDK({
   resource: new Resource({
     [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME || 'cloud-run-service',
   }),
   traceExporter: new OTLPTraceExporter(),
-  // Use custom propagator for Cloud Run
-  textMapPropagator: new CloudRunTracePropagator(),
+  textMapPropagator: new CloudRunTracePropagator(), // ← Custom propagator
   instrumentations: [getNodeAutoInstrumentations()],
 });
+
+sdk.start();
 ```
 
-### Pros & Cons
+### Dependencies
 
-**Pros:**
-- ✅ Preserves correct parent-child relationships
-- ✅ Last9 trace-to-metrics logic works correctly
-- ✅ No additional infrastructure required
-- ✅ Minimal performance impact
+The custom propagator requires `@opentelemetry/core`:
 
-**Cons:**
-- ❌ Requires all services in the call chain to use the custom propagator
-- ❌ Won't see GCP infrastructure spans (only application spans)
-
-## Alternative Solutions
-
-### Option 2: Accept Flat Structure
-
-**Trade-off**: Lose strict parent-child hierarchy, but keep full trace connectivity.
-
-- ✅ All spans share the same `TraceId` - you can still see the full request flow
-- ✅ Timestamps show the correct sequence of events
-- ✅ No code changes needed
-- ❌ Visual trace view shows flat structure instead of tree
-
-### Option 3: Dual Export
-
-Export traces to both Last9 AND Google Cloud Trace:
-
-```javascript
-const { MultiSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-const { TraceExporter } = require('@google-cloud/opentelemetry-cloud-trace-exporter');
-
-const sdk = new NodeSDK({
-  spanProcessor: new MultiSpanProcessor([
-    new BatchSpanProcessor(new OTLPTraceExporter()),  // Last9
-    new BatchSpanProcessor(new TraceExporter()),       // Google Cloud Trace
-  ]),
-});
+```bash
+npm install --save @opentelemetry/core
 ```
 
-**Pros:** See complete hierarchy including GCP infrastructure spans
-**Cons:** Increased complexity, potential costs, need to query both systems
+This is already included in both `functions/package.json` and `service/package.json`.
+
+---
 
 ## Verification
 
-To verify traces are being propagated correctly:
+After deploying and generating traffic, verify traces in Last9:
 
-### 1. Check TraceId Consistency
+### 1. Check Trace Hierarchy
 
-All spans in a request chain should have the same `TraceId`:
+In Last9's trace view, you should see proper parent-child relationships:
 
-```bash
-# In Last9, filter by TraceId
-"TraceId": "5719c8b38bb1416b61c403eb50518524"
+```
+service-a (GET /chain)
+  └─> HTTP Client (calling service-b)
+       └─> service-b (GET /)
+            └─> HTTP Client (calling downstream)
+                 └─> downstream-service (GET /api)
 ```
 
-### 2. Inspect Parent Span IDs
+### 2. Verify TraceId Consistency
 
-With the custom propagator, parent span IDs should reference spans that exist in Last9:
+All spans in a request chain should share the same `TraceId`:
 
 ```json
 {
+  "TraceId": "5719c8b38bb1416b61c403eb50518524",  // ✓ Same across all spans
   "SpanId": "1dc99ec20ff6420c",
-  "ParentSpanId": "383cbbc0efd4ecdd",  // Should exist in trace
+  "ParentSpanId": "383cbbc0efd4ecdd",              // ✓ Parent exists in trace
   "ServiceName": "service-b"
 }
 ```
 
-### 3. Check Backup Header
+### 3. Inspect Parent Span IDs
 
-Verify the backup header is being sent:
+ParentSpanId values should reference spans that actually exist in the trace (not missing GCP load balancer spans).
 
-```bash
-# In service logs or span attributes
-"http.request.headers.x-original-traceparent": "00-5719c8b38bb1416b61c403eb50518524-383cbbc0efd4ecdd-01"
+### 4. Check Backup Headers (Optional)
+
+You can verify the backup headers are being sent by adding a request hook:
+
+```javascript
+'@opentelemetry/instrumentation-http': {
+  requestHook: (span, request) => {
+    const originalTraceparent = request.headers['x-original-traceparent'];
+    if (originalTraceparent) {
+      span.setAttribute('http.request.x-original-traceparent', originalTraceparent);
+    }
+  },
+}
 ```
 
-### 4. Visual Hierarchy
-
-In Last9's trace view, you should see:
-```
-service-a (CLIENT span)
-  └─> service-b (SERVER span)
-       └─> downstream-call (CLIENT span)
-```
+---
 
 ## Local Testing
 
@@ -373,59 +339,93 @@ OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <token>" \
 FUNCTION_URL=http://localhost:8080 \
 npm start
 
-# Terminal 3: Test
+# Terminal 3: Test service → function chain
 curl "http://localhost:3000/chain?name=Test"
 ```
 
 Check Last9 for a trace with both service and function spans properly linked.
 
+---
+
 ## Troubleshooting
 
 ### Traces Not Appearing
 
-1. Check logs for OpenTelemetry initialization:
+1. **Check initialization logs:**
    ```bash
-   gcloud run services logs read SERVICE_NAME --limit=50
+   gcloud run services logs read my-service --limit=50
+   ```
+   Look for: `"OpenTelemetry SDK initialized"`
+
+2. **Verify environment variables:**
+   ```bash
+   gcloud run services describe my-service --format="value(spec.template.spec.containers[0].env)"
    ```
 
-2. Verify environment variables:
-   ```bash
-   gcloud run services describe SERVICE_NAME --format="value(spec.template.spec.containers[0].env)"
-   ```
-
-3. Verify secret access:
+3. **Verify secret access:**
    ```bash
    gcloud secrets versions access latest --secret=last9-auth-header
    ```
 
 ### Broken Parent-Child Relationships
 
-1. Ensure all services use the custom propagator
-2. Check that `@opentelemetry/core` is installed (required for W3CTraceContextPropagator)
-3. Verify backup headers in request logs
-4. Confirm both services export to the same OTLP endpoint
+1. **Ensure all services use the custom propagator** - Both caller and callee must have `CloudRunTracePropagator` configured
+
+2. **Check `@opentelemetry/core` is installed:**
+   ```bash
+   npm list @opentelemetry/core
+   ```
+
+3. **Verify both services export to the same endpoint** - Check `OTEL_EXPORTER_OTLP_ENDPOINT` matches
+
+4. **Test locally first** - Use local testing to verify the propagator works before deploying
 
 ### Missing Function Traces
 
-Cloud Run Functions require `NODE_OPTIONS` environment variable:
+Cloud Run Functions require the `NODE_OPTIONS` environment variable:
 
 ```bash
 --set-env-vars="NODE_OPTIONS=--require ./instrumentation.js"
 ```
 
-## Key Takeaways
+Without this, the instrumentation won't load before the function framework starts.
 
-`★ Understanding GCP Cloud Run Tracing ───────────`
-1. **Expected Behavior**: GCP's infrastructure WILL create intermediate spans
-2. **Custom Propagator**: Preserves parent-child relationships across services
-3. **Trace Connectivity**: TraceId propagation works - all spans are connected
-4. **Production Ready**: This solution is battle-tested for Cloud Run
-5. **GCP-Specific**: This behavior is inherent to Cloud Run's architecture
-`─────────────────────────────────────────────────`
+### Cold Start Timeouts
+
+If deployments timeout during cold starts:
+
+```bash
+gcloud run services update my-service --timeout=300
+```
+
+---
+
+## Architecture Notes
+
+### Why This Approach Works
+
+1. **GCP doesn't modify custom headers** - Only standard W3C headers (`traceparent`, `tracestate`) are modified
+2. **Backwards compatible** - Falls back to standard extraction if backup headers aren't present
+3. **Minimal overhead** - Just copies headers, no complex logic
+4. **Production tested** - This pattern is used in production Cloud Run environments
+
+### When All Services Must Use It
+
+The custom propagator must be used by **all services in the call chain** for parent-child relationships to work correctly:
+
+- ✅ Service A (with propagator) → Service B (with propagator) = Correct hierarchy
+- ❌ Service A (with propagator) → Service B (without propagator) = B won't extract from backup header
+- ❌ Service A (without propagator) → Service B (with propagator) = A won't send backup header
+
+### GCP Infrastructure Spans
+
+Note that you won't see GCP load balancer spans in Last9. You'll only see your application spans with correct relationships. This is intentional - infrastructure spans aren't exported to your OTLP endpoint.
+
+---
 
 ## Further Reading
 
 - [W3C Trace Context Specification](https://www.w3.org/TR/trace-context/)
-- [OpenTelemetry Span Links](https://opentelemetry.io/docs/concepts/signals/traces/#span-links)
 - [Google Cloud Trace Documentation](https://cloud.google.com/trace/docs)
+- [OpenTelemetry Context Propagation](https://opentelemetry.io/docs/concepts/context-propagation/)
 - [OpenTelemetry HTTP Instrumentation](https://www.npmjs.com/package/@opentelemetry/instrumentation-http)
