@@ -1,260 +1,233 @@
-# GCP Cloud Run OpenTelemetry with Custom Trace Propagator
+# OpenTelemetry Examples
 
-This example demonstrates production-ready OpenTelemetry instrumentation for Google Cloud Run (2nd gen functions and services) with a **custom trace propagator** that solves the parent-child relationship problem caused by GCP's load balancer.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blue?logo=opentelemetry)](https://opentelemetry.io/)
+[![Last9](https://img.shields.io/badge/Last9-compatible-purple)](https://last9.io)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/last9/opentelemetry-examples/pulls)
 
-## The Problem
+Production-ready examples for instrumenting applications with [OpenTelemetry](https://opentelemetry.io/) and sending telemetry data (traces, metrics, and logs) to [Last9](https://last9.io) or any OTLP-compatible observability platform.
 
-When traces cross GCP Cloud Run services/functions, the load balancer creates intermediate spans and modifies the `traceparent` header. These load balancer spans aren't exported to your observability platform (like Last9), breaking parent-child relationships and trace-to-metrics logic.
+## Why This Repository?
 
-## The Solution
+Getting OpenTelemetry instrumentation right can be tricky. This repository provides:
 
-A custom `CloudRunTracePropagator` that:
-1. Preserves the original parent context in `x-original-traceparent` header
-2. Extracts from the backup header on incoming requests
-3. Maintains correct span hierarchies across all services
+- **Copy-paste ready examples** - Each example is a complete, working application
+- **Real-world patterns** - Covers HTTP servers, databases, message queues, external APIs, and more
+- **Multiple languages** - Go, Python, JavaScript/Node.js, Ruby, Java, PHP, .NET, and Elixir
+- **Cloud-native deployments** - AWS (ECS, Lambda, EC2), GCP (Cloud Run), Kubernetes
+- **Collector configurations** - Ready-to-use OTel Collector configs for various use cases
 
-**Status**: ✅ Implemented and ready to test
+## Quick Start
 
-## Quick Start - End-to-End Testing
+1. **Get your OTLP credentials** from [Last9](https://app.last9.io) (or use any OTLP-compatible backend)
 
-### Prerequisites
+2. **Set environment variables:**
+   ```bash
+   export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io"
+   export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <YOUR_AUTH_TOKEN>"
+   ```
 
-- Google Cloud SDK (`gcloud`) installed and authenticated
-- Last9 account with OTLP credentials
-- `jq` for JSON parsing (optional)
+3. **Browse the language directories** below and follow the README in each example
 
-### 1. Get Last9 Credentials
+## Examples by Language
 
-From [Last9 Dashboard](https://app.last9.io) → Settings → OTLP Ingestion:
-- OTLP Endpoint
-- Authorization Header (Base64 encoded)
+### Go (`go/`)
 
-### 2. Deploy and Test
+| Framework | Description | Signals |
+|-----------|-------------|---------|
+| Gin | Web framework with middleware instrumentation | Traces, Metrics |
+| Gin + Redis | Gin with Redis client tracing | Traces, Metrics |
+| Chi | Lightweight router instrumentation | Traces, Metrics |
+| Gorilla Mux | Classic router with OTel middleware | Traces |
+| net/http | Standard library HTTP server | Traces |
+| FastHTTP | High-performance HTTP framework | Traces |
+| Beego | Full-featured web framework | Traces |
+| Iris | Fast web framework | Traces |
+| gRPC | gRPC server and client instrumentation | Traces |
+| gRPC-Gateway | REST to gRPC gateway with tracing | Traces |
+| Kafka (Sarama) | Kafka producer/consumer with Sarama | Traces |
+| Kafka (Confluent) | Kafka with Confluent client | Traces |
+| SQLX | SQL database instrumentation | Traces |
+| PGX | PostgreSQL driver tracing | Traces |
+| eBPF | eBPF-based instrumentation | Traces |
 
-```bash
-# Set credentials
-export OTLP_ENDPOINT='https://otlp.last9.io'
-export OTLP_AUTH='Authorization=Basic YOUR_BASE64_CREDENTIALS'
+### Python (`python/`)
 
-# Run full deployment and testing
-./deploy-and-test.sh all
-```
+| Framework | Description | Signals |
+|-----------|-------------|---------|
+| FastAPI | Modern async API framework | Traces, Metrics |
+| FastAPI + Uvicorn | Production ASGI deployment | Traces, Metrics |
+| Flask | Lightweight WSGI framework | Traces |
+| Django | Full-featured web framework | Traces |
+| Sanic | Async web framework | Traces |
+| GCP Cloud Functions | Serverless function instrumentation | Traces |
 
-This automated script will:
-1. Check prerequisites
-2. Setup Last9 credentials in Secret Manager
-3. Deploy function with custom propagator
-4. Deploy service with custom propagator
-5. Run trace propagation tests
-6. Show verification steps for Last9
+### JavaScript / Node.js (`javascript/`)
 
-### 3. Verify in Last9
+| Framework | Description | Signals |
+|-----------|-------------|---------|
+| Express | Classic Node.js framework (JS & TS) | Traces, Metrics |
+| Fastify | Fast and low overhead framework | Traces |
+| NestJS | Enterprise Node.js framework | Traces |
+| Next.js | React framework with SSR | Traces |
+| Koa | Expressive middleware framework | Traces |
+| Hono | Ultrafast web framework | Traces |
+| Polka | Micro web server | Traces |
+| GraphQL | GraphQL server instrumentation | Traces |
+| Sails | MVC framework | Traces |
+| Winston | Logging library integration | Logs |
+| Cloudflare Workers | Edge runtime with itty-router | Traces |
 
-**Expected Result**: Traces show proper parent-child hierarchy
+### Ruby (`ruby/`)
 
-```
-Service span (GET /chain)
-  └─ HTTP client span (calling function)
-     └─ Function span (helloHttp)
-```
+| Framework | Description | Signals |
+|-----------|-------------|---------|
+| Rails API | Modern Rails API-only app | Traces |
+| Rails 5.2 | Legacy Rails support | Traces |
+| Sinatra | Lightweight DSL framework | Traces |
+| Roda | Routing tree framework | Traces |
+| Karafka | Kafka for Ruby | Traces |
+| File Logs | Log file collection | Logs |
 
-✅ All spans share the same TraceId  
-✅ ParentSpanId references point to existing spans  
-✅ Trace-to-metrics logic works correctly
+### Java (`java/`)
 
-**See**: [TESTING.md](./TESTING.md) for detailed verification steps
+| Framework | Description | Signals |
+|-----------|-------------|---------|
+| Spring Boot | Popular Java framework | Traces, Metrics |
+| Tomcat | Servlet container | Traces |
 
-## What's Included
+### PHP (`php/`)
 
-### Functions (`functions/`)
-- `helloHttp` - Simple greeting function
-- `processData` - Multi-step data processing pipeline
-- `apiFunction` - Multi-route REST API
-- `handlePubSub` - Pub/Sub event handler
-- `handleStorage` - Cloud Storage event handler
+| Framework | Description | Signals |
+|-----------|-------------|---------|
+| Laravel | Popular PHP framework | Traces |
+| WordPress Plugin | WordPress instrumentation | Traces |
+| Core PHP 7.3 | Vanilla PHP instrumentation | Traces |
+| Core PHP 8 | Modern PHP instrumentation | Traces |
 
-### Service (`service/`)
-- `GET /health` - Health check
-- `GET /process` - Processing endpoint
-- `GET /chain` - Calls function (tests propagator)
-- `POST /multi-hop` - Multi-service chain
+### Other Languages
 
-### Custom Propagator (`shared/`)
-- `custom-propagator.js` - CloudRunTracePropagator implementation
-- Preserves parent context via backup header
-- Bypasses GCP load balancer modifications
+| Directory | Language | Framework | Description |
+|-----------|----------|-----------|-------------|
+| `dotnet/` | .NET | ASP.NET Core | Web API example |
+| `elixir/` | Elixir | Phoenix | Functional web framework |
 
-## Manual Deployment
+### Frontend
 
-### Deploy Function
+| Directory | Framework | Description |
+|-----------|-----------|-------------|
+| `react/` | React | SPA instrumentation |
+| `angular/` | Angular | SPA instrumentation |
 
-```bash
-cd functions
+## Cloud & Infrastructure
 
-gcloud functions deploy my-function \
-  --gen2 \
-  --runtime=nodejs20 \
-  --region=us-central1 \
-  --source=. \
-  --entry-point=helloHttp \
-  --trigger-http \
-  --allow-unauthenticated \
-  --set-env-vars="OTEL_SERVICE_NAME=my-function" \
-  --set-env-vars="OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io" \
-  --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
-```
+### AWS (`aws/`)
 
-### Deploy Service
+| Example | Description |
+|---------|-------------|
+| ECS Fargate | Container deployment with OTel sidecar |
+| Lambda (Go) | Serverless Go function |
+| EC2 | Virtual machine deployment |
+| RDS PostgreSQL + ECS | Database monitoring with CDK/CloudFormation |
 
-```bash
-cd service
+### GCP (`gcp/`)
 
-# Set function URL
-export FUNCTION_URL="https://your-function-url.run.app"
+| Example | Description |
+|---------|-------------|
+| Cloud Run | Serverless containers (Go, Python, Node.js, Java) |
 
-gcloud run deploy my-service \
-  --source=. \
-  --platform=managed \
-  --region=us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars="OTEL_SERVICE_NAME=my-service" \
-  --set-env-vars="OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io" \
-  --set-env-vars="FUNCTION_URL=${FUNCTION_URL}" \
-  --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
-```
+### OpenTelemetry Collector (`otel-collector/`)
 
-## Directory Structure
+Pre-configured collector setups for common use cases:
 
-```
-gcp/cloud-run/nodejs/
-├── README.md                      # This file
-├── TESTING.md                     # Detailed testing guide
-├── GCP_TRACE_CONTEXT.md           # Deep dive on the problem
-├── deploy-and-test.sh             # Automated deployment & testing
-├── functions/                     # Cloud Run Functions
-│   ├── index.js                   # Function handlers
-│   ├── instrumentation.js         # OTel setup (uses custom propagator)
-│   ├── package.json
-│   └── .env.example
-├── service/                       # Cloud Run Service
-│   ├── index.js                   # Express app
-│   ├── instrumentation.js         # OTel setup (uses custom propagator)
-│   ├── Dockerfile
-│   ├── package.json
-│   └── .env.example
-└── shared/                        # Shared code
-    └── custom-propagator.js       # CloudRunTracePropagator
-```
+| Configuration | Description |
+|---------------|-------------|
+| Kubernetes Operator | K8s native deployment |
+| OTel Operator | Auto-instrumentation for K8s |
+| Fluent Bit | Log collection pipeline |
+| Logstash | ELK stack integration |
+| FireLens | AWS FireLens for ECS |
+| Apache Server | Apache httpd metrics |
+| Nginx Metrics | Nginx server metrics |
+| MariaDB | Database metrics |
+| Oracle | Oracle DB monitoring |
+| YACE Metrics | AWS CloudWatch exporter |
 
-## How It Works
+### Migration Guides
 
-### Normal W3C Trace Context (Broken)
-
-```
-┌─────────────┐
-│ Service     │  Creates span, injects traceparent
-└──────┬──────┘
-       │ traceparent: 00-trace-ABC123-01
-       ↓
-┌──────────────┐
-│ GCP LB      │  Modifies traceparent to point to itself
-└──────┬───────┘  traceparent: 00-trace-XYZ789-01 ❌
-       │
-       ↓
-┌─────────────┐
-│ Function    │  Sees wrong parent (LB span not exported)
-└─────────────┘
-```
-
-### Custom Propagator (Fixed)
-
-```
-┌─────────────┐
-│ Service     │  Injects BOTH headers:
-└──────┬──────┘  - traceparent (standard)
-       │          - x-original-traceparent (backup) ✓
-       ↓
-┌──────────────┐
-│ GCP LB      │  Modifies traceparent only
-└──────┬───────┘  Ignores x-original-traceparent ✓
-       │
-       ↓
-┌─────────────┐
-│ Function    │  Extracts from x-original-traceparent
-└─────────────┘  Correct parent! ✓
-```
-
-## Key Features
-
-- ✅ **Custom Trace Propagator** - Preserves parent-child relationships
-- ✅ **Automatic Instrumentation** - HTTP, Express, Node.js modules
-- ✅ **Custom Spans** - Manual instrumentation examples
-- ✅ **Structured Logging** - Trace-correlated logs
-- ✅ **Custom Metrics** - Request counters and histograms
-- ✅ **Cloud Run Optimized** - Serverless-friendly batch settings
-- ✅ **Production Ready** - Complete error handling and shutdown
-
-## Testing Checklist
-
-After deploying, verify:
-
-- [ ] Both function and service are deployed successfully
-- [ ] Test requests generate traces in Last9
-- [ ] Spans show proper parent-child hierarchy (not flat)
-- [ ] All spans in a chain share the same TraceId
-- [ ] ParentSpanId references point to existing spans
-- [ ] Logs show custom propagator activity:
-  - `[CloudRunPropagator] Injected backup header`
-  - `[CloudRunPropagator] Found backup header`
-- [ ] Last9 trace-to-metrics logic works correctly
-
-**Detailed steps**: See [TESTING.md](./TESTING.md)
+| Directory | Description |
+|-----------|-------------|
+| `datadog-k8s-operator/` | Migrate from Datadog Agent to OpenTelemetry |
 
 ## Documentation
 
-- **[TESTING.md](./TESTING.md)** - Complete testing guide with verification steps
-- **[GCP_TRACE_CONTEXT.md](./GCP_TRACE_CONTEXT.md)** - Problem explanation and solutions
-- **[functions/README.md](./functions/README.md)** - Function deployment details
-- **[service/README.md](./service/README.md)** - Service deployment details
+### Last9 Integration Guides
 
-## Why This Matters
+**Getting Started**
+- [OpenTelemetry Overview](https://last9.io/docs/integrations/observability/opentelemetry/) - OTLP endpoints, credentials, and setup
+- [OpenTelemetry Collector](https://last9.io/docs/integrations/observability/opentelemetry-collector/) - Collector configuration
 
-Last9's **trace-to-metrics** logic requires proper span hierarchies to:
-- Calculate accurate service latencies
-- Generate RED metrics (Rate, Errors, Duration) per service
-- Build service dependency graphs
-- Attribute latency to the correct service in the call chain
+**Go Frameworks**
+- [Gin](https://last9.io/docs/integrations/frameworks/go/gin/) ・ [gRPC](https://last9.io/docs/integrations/frameworks/go/grpc/) ・ [FastHTTP](https://last9.io/docs/integrations/frameworks/go/fasthttp/) ・ [Iris](https://last9.io/docs/integrations/frameworks/go/iris/) ・ [Gorilla Mux](https://last9.io/docs/integrations/frameworks/go/gorilla-mux/)
 
-Without the custom propagator, all spans appear at the same level, breaking these features.
+**Python Frameworks**
+- [FastAPI](https://last9.io/docs/integrations/frameworks/python/fastapi/) ・ [Flask](https://last9.io/docs/integrations/frameworks/python/flask/) ・ [Django](https://last9.io/docs/integrations/frameworks/python/django/)
 
-## Industry Context
+**JavaScript/Node.js Frameworks**
+- [Express](https://last9.io/docs/integrations/frameworks/javascript/express/) ・ [NestJS](https://last9.io/docs/integrations/frameworks/javascript/nestjs/) ・ [Next.js](https://last9.io/docs/integrations/frameworks/javascript/nextjs/) ・ [Koa](https://last9.io/docs/integrations/frameworks/javascript/koa/)
 
-This custom propagator approach is an **industry-standard workaround** for Cloud Run's load balancer behavior. It's used in production by teams that:
-- Export traces to external observability platforms (not Google Cloud Trace)
-- Need accurate cross-service trace analysis
-- Depend on trace-derived metrics
+**Ruby Frameworks**
+- [Rails](https://last9.io/docs/integrations/frameworks/ruby/rails/) ・ [Sinatra](https://last9.io/docs/integrations/frameworks/ruby/sinatra/) ・ [Roda](https://last9.io/docs/integrations/frameworks/ruby/roda/)
 
-## Cleanup
+**Java Frameworks**
+- [Spring Boot](https://last9.io/docs/integrations/frameworks/java/spring-boot/)
 
-```bash
-./deploy-and-test.sh cleanup
-```
+**Other Languages**
+- [Elixir Phoenix](https://last9.io/docs/integrations/frameworks/elixir/phoenix/)
 
-Or manually:
+**Cloud & Infrastructure**
+- [AWS Lambda](https://last9.io/docs/integrations/cloud-providers/aws-lambda/) ・ [AWS ECS](https://last9.io/docs/integrations/containers-and-k8s/aws-ecs/) ・ [Kubernetes](https://last9.io/docs/integrations/containers-and-k8s/kubernetes-cluster-monitoring/)
 
-```bash
-gcloud functions delete my-function --gen2 --region=us-central1
-gcloud run services delete my-service --region=us-central1
-gcloud secrets delete last9-auth-header
-```
+**Messaging & Databases**
+- [Kafka](https://last9.io/docs/integrations/messaging/kafka/) ・ [Fluent Bit](https://last9.io/docs/integrations/observability/fluent-bit/)
 
-## Further Reading
+### External Resources
 
-- [W3C Trace Context Specification](https://www.w3.org/TR/trace-context/)
-- [OpenTelemetry Context Propagation](https://opentelemetry.io/docs/concepts/context-propagation/)
-- [Last9 Documentation](https://last9.io/docs)
-- [Google Cloud Run](https://cloud.google.com/run/docs)
+- [Last9 Documentation](https://last9.io/docs/) - Full platform documentation
+- [OpenTelemetry Official Docs](https://opentelemetry.io/docs/) - Specification and SDKs
+
+## Works With Any OTLP Backend
+
+While these examples are configured for [Last9](https://last9.io), they work with **any OTLP-compatible backend**:
+
+- Grafana Cloud / Tempo / Mimir
+- Honeycomb
+- Jaeger
+- Zipkin
+- Datadog
+- New Relic
+- Dynatrace
+- Splunk
+- And many more...
+
+Just update the `OTEL_EXPORTER_OTLP_ENDPOINT` and authentication headers for your backend.
+
+## Contributing
+
+We welcome contributions! Whether it's adding new framework examples, improving documentation, or fixing bugs - PRs are appreciated.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-**Questions?** See [TESTING.md](./TESTING.md) troubleshooting section or open an issue.
+<p align="center">
+  <a href="https://last9.io">
+    <img src="https://last9.io/favicon.ico" width="32" alt="Last9">
+  </a>
+  <br>
+  <strong>Built with love by <a href="https://last9.io">Last9</a></strong>
+  <br>
+  <sub>High cardinality observability, simplified.</sub>
+</p>
