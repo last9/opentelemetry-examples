@@ -158,6 +158,19 @@ In Last9:
 2. **Metrics**: View `function_invocations_total` and `function_duration_seconds`
 3. **Logs**: Logs > Filter by function name
 
+### Important: GCP Load Balancer and Trace Context
+
+⚠️ **You may notice that parent-child span relationships appear "broken" or "flat" in cross-service traces, even though all spans share the same TraceId.**
+
+This is **expected behavior** with GCP Cloud Run because:
+1. GCP's load balancer creates intermediate spans (part of Google Cloud Trace)
+2. These spans are NOT exported to your OTLP endpoint (Last9)
+3. Your function/service spans reference those missing parent span IDs
+
+**This does NOT affect trace completeness** - all spans remain connected via TraceId.
+
+For full details and workarounds, see: [`../GCP_TRACE_CONTEXT.md`](../GCP_TRACE_CONTEXT.md)
+
 ## Adding OpenTelemetry to Your Existing Function
 
 1. **Add dependencies** to `package.json`:

@@ -10,6 +10,7 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
 const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
 const { Resource } = require('@opentelemetry/resources');
+const { CloudRunTracePropagator } = require('./shared/custom-propagator');
 const {
   SEMRESATTRS_SERVICE_NAME,
   SEMRESATTRS_SERVICE_VERSION,
@@ -108,6 +109,9 @@ const sdk = new NodeSDK({
     maxExportBatchSize: 100,
     scheduledDelayMillis: 1000,
   }),
+  // Use custom propagator for Cloud Run that preserves parent context
+  // even when GCP load balancer modifies standard headers
+  textMapPropagator: new CloudRunTracePropagator(),
   instrumentations: [
     getNodeAutoInstrumentations({
       // Disable fs instrumentation (too noisy)
@@ -117,6 +121,16 @@ const sdk = new NodeSDK({
       // Configure HTTP instrumentation
       '@opentelemetry/instrumentation-http': {
         ignoreIncomingPaths: ['/health', '/ready', '/_ah/health'],
+        // Ensure we capture and propagate trace context
+        requireParentforOutgoingSpans: false,
+        requireParentforIncomingSpans: false,
+        // Add custom request hook to log trace context
+        requestHook: (span, request) => {
+          const traceparent = request.headers?.traceparent || request.headers?.['traceparent'];
+          if (traceparent) {
+            span.setAttribute('http.request.traceparent', traceparent);
+          }
+        },
       },
     }),
   ],
