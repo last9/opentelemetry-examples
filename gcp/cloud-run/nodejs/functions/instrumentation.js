@@ -10,6 +10,7 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
 const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
 const { Resource } = require('@opentelemetry/resources');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const {
   SEMRESATTRS_SERVICE_NAME,
   SEMRESATTRS_SERVICE_VERSION,
@@ -18,6 +19,74 @@ const {
 const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
+
+/**
+ * Custom Trace Context Propagator for GCP Cloud Run
+ *
+ * Preserves parent-child span relationships by using a backup header
+ * that GCP infrastructure doesn't modify.
+ */
+class CloudRunTracePropagator {
+  constructor() {
+    this._w3cPropagator = new W3CTraceContextPropagator();
+    this._backupHeader = 'x-original-traceparent';
+    this._backupStateHeader = 'x-original-tracestate';
+  }
+
+  inject(context, carrier, setter) {
+    // Inject standard W3C headers
+    this._w3cPropagator.inject(context, carrier, setter);
+
+    // Copy to backup headers (GCP won't modify these)
+    const traceparent = carrier['traceparent'];
+    const tracestate = carrier['tracestate'];
+
+    if (traceparent) {
+      setter.set(carrier, this._backupHeader, traceparent);
+    }
+    if (tracestate) {
+      setter.set(carrier, this._backupStateHeader, tracestate);
+    }
+  }
+
+  extract(context, carrier, getter) {
+    // Try backup headers first (original parent context)
+    const originalTraceparent = getter.get(carrier, this._backupHeader);
+
+    if (originalTraceparent) {
+      // Found backup header - use original (pre-GCP-modification) context
+      const originalCarrier = {
+        'traceparent': Array.isArray(originalTraceparent)
+          ? originalTraceparent[0]
+          : originalTraceparent,
+      };
+
+      const originalTracestate = getter.get(carrier, this._backupStateHeader);
+      if (originalTracestate) {
+        originalCarrier['tracestate'] = Array.isArray(originalTracestate)
+          ? originalTracestate[0]
+          : originalTracestate;
+      }
+
+      return this._w3cPropagator.extract(context, originalCarrier, {
+        get: (c, key) => c[key],
+        keys: (c) => Object.keys(c),
+      });
+    }
+
+    // Fallback to standard extraction
+    return this._w3cPropagator.extract(context, carrier, getter);
+  }
+
+  fields() {
+    return [
+      'traceparent',
+      'tracestate',
+      this._backupHeader,
+      this._backupStateHeader,
+    ];
+  }
+}
 
 /**
  * Parse OTLP headers from environment variable
@@ -108,6 +177,9 @@ const sdk = new NodeSDK({
     maxExportBatchSize: 100,
     scheduledDelayMillis: 1000,
   }),
+  // Use custom propagator for Cloud Run that preserves parent context
+  // even when GCP load balancer modifies standard headers
+  textMapPropagator: new CloudRunTracePropagator(),
   instrumentations: [
     getNodeAutoInstrumentations({
       // Disable fs instrumentation (too noisy)
@@ -117,6 +189,16 @@ const sdk = new NodeSDK({
       // Configure HTTP instrumentation
       '@opentelemetry/instrumentation-http': {
         ignoreIncomingPaths: ['/health', '/ready', '/_ah/health'],
+        // Ensure we capture and propagate trace context
+        requireParentforOutgoingSpans: false,
+        requireParentforIncomingSpans: false,
+        // Add custom request hook to log trace context
+        requestHook: (span, request) => {
+          const traceparent = request.headers?.traceparent || request.headers?.['traceparent'];
+          if (traceparent) {
+            span.setAttribute('http.request.traceparent', traceparent);
+          }
+        },
       },
     }),
   ],

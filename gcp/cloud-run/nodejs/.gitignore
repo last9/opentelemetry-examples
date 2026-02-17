@@ -1,0 +1,52 @@
+# Environment/secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Credentials and keys
+*.pem
+*.key
+*.cert
+*credentials*
+*secrets*
+
+# Test files with hardcoded credentials (should never exist but just in case)
+test-local.sh
+quick-*.sh
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime
+.cache/
+tmp/
+temp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# GCP/deployment artifacts
+.function_url
+.service_url
