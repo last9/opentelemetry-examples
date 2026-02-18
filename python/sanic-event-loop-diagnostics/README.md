@@ -291,6 +291,201 @@ event_loop_monitor = EventLoopMonitor(
 )
 ```
 
+## Validating in Last9 — Step by Step
+
+This section walks through everything you can do in Last9 once the app is running and sending data.
+
+---
+
+### Step 1: Confirm Data is Arriving
+
+1. Open Last9 → **Traces** tab
+2. Set the filter: `service = sanic-event-loop-demo`
+3. Set time range to **Last 15 Minutes**
+4. Click **Run Query**
+
+You should see spans for all the endpoints you called. If nothing appears, check that:
+- The app started without errors (`curl localhost:8000/health`)
+- `.env` has the correct `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`
+- At least one request was made after the app started
+
+---
+
+### Step 2: Find Blocking Requests (the key insight)
+
+Filter on `asyncio.eventloop.request_blocked = true`:
+
+1. In the **Filter** bar, add: `asyncio.eventloop.request_blocked = true`
+2. Click **Run Query**
+
+**Expected result:** Only blocking endpoints appear:
+- `GET /blocking-io` — uses `time.sleep()`, blocks the loop
+- `GET /cpu-bound` — runs CPU work on the main thread
+- `GET /blocking-hash` — computes large hashes synchronously
+
+**What you will NOT see here:** `/async-io`, `/concurrent-tasks`, `/proper-cpu` — these yield to the event loop correctly.
+
+> **Why this matters:** This filter directly answers "which HTTP routes are degrading my async application's performance?" — without having to read logs or guess.
+
+---
+
+### Step 3: Confirm Non-Blocking Requests are Clean
+
+Change the filter to `asyncio.eventloop.request_blocked = false`:
+
+**Expected result:** Only non-blocking endpoints appear:
+- `GET /async-io` — uses `asyncio.sleep()`, yields to event loop
+- `GET /concurrent-tasks` — runs tasks concurrently via `asyncio.gather()`
+- `GET /proper-cpu` — offloads CPU work to a thread pool via `run_in_executor()`
+
+This confirms there are no false positives — healthy requests are correctly classified.
+
+---
+
+### Step 4: Drill Into a Blocked Span's Attributes
+
+1. Click any `GET /blocking-io` trace from the `request_blocked = true` results
+2. Open the span detail panel
+
+Look for these span attributes:
+
+| Attribute | What it tells you |
+|-----------|------------------|
+| `asyncio.eventloop.request_blocked` | `true` — this request caused a block |
+| `asyncio.eventloop.blocking_lag_ms` | How many milliseconds the loop was blocked (e.g., `304.5`) |
+| `asyncio.eventloop.blocking_severity` | `warning` (50–500ms) or `critical` (>500ms) |
+| `asyncio.eventloop.lag_at_request_start_ms` | Lag reading when the request arrived |
+| `asyncio.eventloop.lag_at_request_end_ms` | Lag reading when the response was sent |
+| `asyncio.eventloop.active_tasks` | How many other tasks were queued during this request |
+| `http.target` | The route (e.g., `/blocking-io`) |
+| `http.status_code` | Response status |
+
+Compare a `/blocking-io` span (lag_ms ~300+) against an `/async-io` span (lag_ms ~0-2). The difference makes the event loop impact immediately visible.
+
+---
+
+### Step 5: Compare Bad vs Good CPU Patterns
+
+This is the most educational comparison in the demo:
+
+**Bad pattern** — CPU work on the main thread:
+```
+Filter: http.target = /cpu-bound AND asyncio.eventloop.request_blocked = true
+```
+You'll see `blocking_lag_ms` in the hundreds of milliseconds.
+
+**Good pattern** — same work offloaded to thread pool:
+```
+Filter: http.target = /proper-cpu AND asyncio.eventloop.request_blocked = false
+```
+`request_blocked = false`, lag stays near zero.
+
+Same computation, completely different impact on the event loop.
+
+---
+
+### Step 6: View Event Loop Metrics
+
+Switch from **Traces** to **Metrics** in Last9 and search for these metric names:
+
+#### `asyncio_eventloop_lag`
+- **Type:** Gauge (seconds)
+- **What to look for:** Spikes aligned with when you called blocking endpoints. Should be near 0 during non-blocking traffic.
+- **Query example:** `asyncio_eventloop_lag{service_name="sanic-event-loop-demo"}`
+
+#### `asyncio_eventloop_lag_distribution`
+- **Type:** Histogram (seconds)
+- **What to look for:** P99 lag — the worst 1% of measurements
+- **Query example (PromQL):**
+  ```promql
+  histogram_quantile(0.99, rate(asyncio_eventloop_lag_distribution_bucket[5m]))
+  ```
+
+#### `asyncio_eventloop_blocking_events_total`
+- **Type:** Counter
+- **What to look for:** Rate of blocking detections. Should be 0 in a healthy service.
+- **Attributes:** `blocking.severity` (`warning` / `critical`)
+- **Query example:**
+  ```promql
+  rate(asyncio_eventloop_blocking_events_total[5m])
+  ```
+
+#### `asyncio_eventloop_utilization`
+- **Type:** Gauge (0–100%)
+- **What to look for:** Baseline utilization. High utilization (>50%) with low throughput means the loop is inefficient.
+
+#### `asyncio_eventloop_active_tasks`
+- **Type:** Gauge
+- **What to look for:** How many tasks were queued. High count + high lag = tasks starving.
+
+#### `asyncio_eventloop_task_lag_contribution`
+- **Type:** Histogram (milliseconds), attribute: `task.coroutine`
+- **What to look for:** Which coroutine type is responsible for the most lag
+- **Query example (top contributors):**
+  ```promql
+  topk(5,
+    rate(asyncio_eventloop_task_lag_contribution_sum[5m])
+    / rate(asyncio_eventloop_task_lag_contribution_count[5m])
+  )
+  ```
+
+#### `asyncio_eventloop_task_active_count`
+- **Type:** Gauge, attribute: `task.coroutine`
+- **What to look for:** Which coroutines are consistently running. High count of a specific coroutine over time indicates it is dominating the loop.
+
+---
+
+### Step 7: Generate a Spike and Watch it in Real Time
+
+To produce a clear lag spike visible in metrics:
+
+```bash
+# Non-blocking baseline
+curl http://localhost:8000/async-io
+curl http://localhost:8000/concurrent-tasks
+
+# Blocking spike (watch the metrics chart)
+curl "http://localhost:8000/blocking-io?seconds=1"
+curl "http://localhost:8000/cpu-bound?iterations=20000000"
+
+# Recovery — non-blocking again
+curl http://localhost:8000/async-io
+```
+
+In Last9 metrics, plot `asyncio_eventloop_lag` and you will see:
+- Flat near-zero line during async requests
+- A clear spike during the blocking calls
+- Return to baseline immediately after
+
+---
+
+### Step 8: Recommended Trace Filters for Daily Use
+
+Bookmark these filters in Last9 for ongoing monitoring:
+
+| Use Case | Filter |
+|----------|--------|
+| Find all routes that blocked the loop | `asyncio.eventloop.request_blocked = true` |
+| Find severe blocks only | `asyncio.eventloop.blocking_severity = critical` |
+| Find requests where lag was high on arrival | `asyncio.eventloop.lag_at_request_start_ms > 50` |
+| Find requests that made lag worse | `asyncio.eventloop.lag_at_request_end_ms > asyncio.eventloop.lag_at_request_start_ms` |
+| Scope to a specific route | `http.target = /blocking-io` |
+
+---
+
+### Step 9: Alerting Setup in Last9
+
+Create these alerts based on the metrics:
+
+| Alert | Metric | Condition | Severity |
+|-------|--------|-----------|----------|
+| Event loop degraded | `asyncio_eventloop_lag` | `> 0.05` (50ms) for 2 min | Warning |
+| Event loop critical | `asyncio_eventloop_lag` | `> 0.5` (500ms) for 1 min | Critical |
+| Blocking detected | `asyncio_eventloop_blocking_events_total` | rate `> 0` | Warning |
+| High P99 lag | `asyncio_eventloop_lag_distribution` | `histogram_quantile(0.99, ...) > 0.1` | Warning |
+
+---
+
 ## Alerting Recommendations
 
 ### PromQL Queries (for Last9)
