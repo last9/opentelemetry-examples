@@ -1,0 +1,30 @@
+{
+  "name": "service-a",
+  "version": "1.0.0",
+  "description": "Service A - Cloud Function with OpenTelemetry instrumentation",
+  "main": "index.js",
+  "scripts": {
+    "start": "functions-framework --target=startFlow --port=8080",
+    "deploy": "gcloud functions deploy startFlow --gen2 --runtime=nodejs20 --region=asia-south1 --source=. --entry-point=startFlow --trigger-http --allow-unauthenticated"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "@google-cloud/functions-framework": "^3.4.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.53.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.50.0",
+    "@opentelemetry/core": "^1.26.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.53.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.53.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.53.0",
+    "@opentelemetry/resources": "^1.26.0",
+    "@opentelemetry/sdk-logs": "^0.53.0",
+    "@opentelemetry/sdk-metrics": "^1.26.0",
+    "@opentelemetry/sdk-node": "^0.53.0",
+    "@opentelemetry/sdk-trace-base": "^1.26.0",
+    "@opentelemetry/semantic-conventions": "^1.27.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
