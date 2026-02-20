@@ -1,5 +1,5 @@
-// IMPORTANT: Tracing must be loaded FIRST before any other modules
-require('./tracing');
+// IMPORTANT: Instrumentation must be loaded FIRST before any other modules
+require('./instrumentation');
 
 const express = require('express');
 

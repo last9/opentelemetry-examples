@@ -1,6 +1,6 @@
 /**
- * OpenTelemetry Instrumentation for Cloud Run Functions (Service A)
- * Must be loaded before any other modules via require('./tracing')
+ * OpenTelemetry Instrumentation for Cloud Run (Service C)
+ * Must be loaded before any other modules via require('./instrumentation')
  */
 'use strict';
 
@@ -8,17 +8,15 @@ const { NodeSDK } = require('@opentelemetry/sdk-node');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
-const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
 const { Resource } = require('@opentelemetry/resources');
-const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
   ATTR_DEPLOYMENT_ENVIRONMENT,
 } = require('@opentelemetry/semantic-conventions');
-const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
+const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 
 /**
  * Custom Trace Context Propagator for GCP Cloud Run
@@ -87,92 +85,55 @@ class CloudRunTracePropagator {
 }
 
 /**
- * Parse OTLP headers from environment variable
- * Format: "key1=value1,key2=value2"
+ * Parse OTLP headers from "key1=value1,key2=value2" format
  */
-function parseHeaders(headersStr) {
+function parseHeaders(str) {
+  if (!str) return {};
   const headers = {};
-  if (!headersStr) return headers;
-
-  headersStr.split(',').forEach((pair) => {
+  str.split(',').forEach(pair => {
     const [key, ...valueParts] = pair.split('=');
     if (key && valueParts.length) {
       headers[key.trim()] = valueParts.join('=').trim();
     }
   });
-
   return headers;
-}
-
-/**
- * Create resource with Cloud Run Functions-specific attributes
- */
-function createCloudRunFunctionsResource() {
-  const functionName = process.env.FUNCTION_TARGET || process.env.K_SERVICE || 'service-a';
-  const serviceName = process.env.OTEL_SERVICE_NAME || functionName;
-
-  return Resource.default().merge(
-    new Resource({
-      [ATTR_SERVICE_NAME]: serviceName,
-      [ATTR_SERVICE_VERSION]: process.env.SERVICE_VERSION || '1.0.0',
-      [ATTR_DEPLOYMENT_ENVIRONMENT]: process.env.DEPLOYMENT_ENVIRONMENT || 'production',
-      // Cloud provider attributes
-      'cloud.provider': 'gcp',
-      'cloud.platform': 'gcp_cloud_run_revision',
-      'cloud.region': process.env.FUNCTION_REGION || process.env.GOOGLE_CLOUD_REGION || 'unknown',
-      'cloud.account.id': process.env.GOOGLE_CLOUD_PROJECT || 'unknown',
-      // FaaS attributes
-      'faas.name': functionName,
-      'faas.version': process.env.K_REVISION || 'unknown',
-      'faas.instance': process.env.K_REVISION || 'local',
-      'faas.max_memory': process.env.FUNCTION_MEMORY_MB ? `${process.env.FUNCTION_MEMORY_MB}Mi` : 'unknown',
-      // Cloud Run specific
-      'service.instance.id': process.env.K_REVISION || 'local',
-    })
-  );
 }
 
 // Configuration
 const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318';
 const headers = parseHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS);
-const serviceName = process.env.OTEL_SERVICE_NAME || process.env.FUNCTION_TARGET || process.env.K_SERVICE || 'service-a';
-const resource = createCloudRunFunctionsResource();
+const serviceName = process.env.OTEL_SERVICE_NAME || 'service-c';
 
-console.log(`[OTEL] Initializing Service A with endpoint: ${endpoint}`);
+console.log(`[OTEL] Initializing Service C with endpoint: ${endpoint}`);
 
-// Configure trace exporter
-const traceExporter = new OTLPTraceExporter({
-  url: `${endpoint}/v1/traces`,
-  headers,
-});
-
-// Configure metric exporter
-const metricExporter = new OTLPMetricExporter({
-  url: `${endpoint}/v1/metrics`,
-  headers,
-});
-
-// Configure log exporter
-const logExporter = new OTLPLogExporter({
-  url: `${endpoint}/v1/logs`,
-  headers,
-});
-
-// Initialize SDK with settings optimized for serverless
 const sdk = new NodeSDK({
-  resource,
-  spanProcessor: new BatchSpanProcessor(traceExporter, {
-    maxExportBatchSize: 100,
-    scheduledDelayMillis: 1000,
-    exportTimeoutMillis: 10000,
+  resource: new Resource({
+    [ATTR_SERVICE_NAME]: serviceName,
+    [ATTR_SERVICE_VERSION]: process.env.K_REVISION || '1.0.0',
+    [ATTR_DEPLOYMENT_ENVIRONMENT]: process.env.DEPLOYMENT_ENVIRONMENT || 'production',
+    'cloud.provider': 'gcp',
+    'cloud.platform': 'gcp_cloud_run',
+    'cloud.region': process.env.GOOGLE_CLOUD_REGION || 'unknown',
+    'cloud.account.id': process.env.GOOGLE_CLOUD_PROJECT || 'unknown',
+    'service.instance.id': process.env.K_REVISION || 'local',
   }),
+  spanProcessor: new BatchSpanProcessor(
+    new OTLPTraceExporter({
+      url: `${endpoint}/v1/traces`,
+      headers,
+    }),
+    {
+      maxExportBatchSize: 100,
+      scheduledDelayMillis: 1000,
+      exportTimeoutMillis: 10000,
+    }
+  ),
   metricReader: new PeriodicExportingMetricReader({
-    exporter: metricExporter,
+    exporter: new OTLPMetricExporter({
+      url: `${endpoint}/v1/metrics`,
+      headers,
+    }),
     exportIntervalMillis: 30000,
-  }),
-  logRecordProcessor: new BatchLogRecordProcessor(logExporter, {
-    maxExportBatchSize: 100,
-    scheduledDelayMillis: 1000,
   }),
   textMapPropagator: new CloudRunTracePropagator(),
   instrumentations: [
@@ -180,7 +141,7 @@ const sdk = new NodeSDK({
       '@opentelemetry/instrumentation-fs': { enabled: false },
       '@opentelemetry/instrumentation-dns': { enabled: false },
       '@opentelemetry/instrumentation-http': {
-        ignoreIncomingPaths: ['/health', '/ready', '/_ah/health'],
+        ignoreIncomingPaths: ['/health', '/ready'],
         requireParentforOutgoingSpans: false,
         requireParentforIncomingSpans: false,
         requestHook: (span, request) => {
@@ -188,53 +149,44 @@ const sdk = new NodeSDK({
           if (traceparent) {
             span.setAttribute('http.request.traceparent', traceparent);
           }
+          const backupTraceparent = request.headers?.['x-original-traceparent'];
+          if (backupTraceparent) {
+            span.setAttribute('http.request.backup_traceparent', backupTraceparent);
+          }
         },
         responseHook: (span, response) => {
-          // Add response details
           span.setAttribute('http.response.status_code', response.statusCode);
         },
+      },
+      '@opentelemetry/instrumentation-express': {
+        enabled: true,
       },
     }),
   ],
 });
 
-// Start the SDK
 sdk.start();
 console.log(JSON.stringify({
   severity: 'INFO',
-  message: 'OpenTelemetry SDK initialized for Service A',
+  message: 'OpenTelemetry SDK initialized for Service C',
   timestamp: new Date().toISOString(),
-  function: process.env.FUNCTION_TARGET || 'unknown',
   service: serviceName,
   endpoint: endpoint,
 }));
 
-// Graceful shutdown handlers
-const shutdown = async (signal) => {
-  console.log(JSON.stringify({
-    severity: 'INFO',
-    message: `Received ${signal}, initiating graceful shutdown`,
-    timestamp: new Date().toISOString(),
-  }));
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('[OTEL] Shutting down Service C SDK');
+  await sdk.shutdown();
+  console.log('[OTEL] Service C SDK shutdown complete');
+  process.exit(0);
+});
 
-  try {
-    await sdk.shutdown();
-    console.log(JSON.stringify({
-      severity: 'INFO',
-      message: 'OpenTelemetry SDK shutdown complete',
-      timestamp: new Date().toISOString(),
-    }));
-  } catch (error) {
-    console.error(JSON.stringify({
-      severity: 'ERROR',
-      message: 'Error during SDK shutdown',
-      timestamp: new Date().toISOString(),
-      error: error.message,
-    }));
-  }
-};
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGINT', async () => {
+  console.log('[OTEL] Shutting down Service C SDK');
+  await sdk.shutdown();
+  console.log('[OTEL] Service C SDK shutdown complete');
+  process.exit(0);
+});
 
 module.exports = { sdk };

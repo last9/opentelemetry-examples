@@ -1,6 +1,6 @@
 /**
- * OpenTelemetry Instrumentation for Cloud Run (Service C)
- * Must be loaded before any other modules via require('./tracing')
+ * OpenTelemetry Instrumentation for Cloud Run (Service B)
+ * Must be loaded before any other modules via require('./instrumentation')
  */
 'use strict';
 
@@ -102,9 +102,9 @@ function parseHeaders(str) {
 // Configuration
 const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318';
 const headers = parseHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS);
-const serviceName = process.env.OTEL_SERVICE_NAME || 'service-c';
+const serviceName = process.env.OTEL_SERVICE_NAME || 'service-b';
 
-console.log(`[OTEL] Initializing Service C with endpoint: ${endpoint}`);
+console.log(`[OTEL] Initializing Service B with endpoint: ${endpoint}`);
 
 const sdk = new NodeSDK({
   resource: new Resource({
@@ -159,7 +159,6 @@ const sdk = new NodeSDK({
         },
       },
       '@opentelemetry/instrumentation-express': {
-        // Ensure express routes are properly instrumented
         enabled: true,
       },
     }),
@@ -169,7 +168,7 @@ const sdk = new NodeSDK({
 sdk.start();
 console.log(JSON.stringify({
   severity: 'INFO',
-  message: 'OpenTelemetry SDK initialized for Service C',
+  message: 'OpenTelemetry SDK initialized for Service B',
   timestamp: new Date().toISOString(),
   service: serviceName,
   endpoint: endpoint,
@@ -177,16 +176,16 @@ console.log(JSON.stringify({
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('[OTEL] Shutting down Service C SDK');
+  console.log('[OTEL] Shutting down Service B SDK');
   await sdk.shutdown();
-  console.log('[OTEL] Service C SDK shutdown complete');
+  console.log('[OTEL] Service B SDK shutdown complete');
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('[OTEL] Shutting down Service C SDK');
+  console.log('[OTEL] Shutting down Service B SDK');
   await sdk.shutdown();
-  console.log('[OTEL] Service C SDK shutdown complete');
+  console.log('[OTEL] Service B SDK shutdown complete');
   process.exit(0);
 });
 

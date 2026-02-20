@@ -1,7 +1,7 @@
 {
-  "name": "service-a",
+  "name": "function-a",
   "version": "1.0.0",
-  "description": "Service A - Cloud Function with OpenTelemetry instrumentation",
+  "description": "Function A - Cloud Function with OpenTelemetry instrumentation",
   "main": "index.js",
   "scripts": {
     "start": "functions-framework --target=startFlow --port=8080",

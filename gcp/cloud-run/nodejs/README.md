@@ -6,6 +6,9 @@ Production-ready examples for instrumenting Google Cloud Run services and functi
 
 - **`service/`** - Cloud Run service (Express HTTP server)
 - **`functions/`** - Cloud Run Functions (2nd generation)
+- **`function-a/`** - Chain entry point: Cloud Function (2nd gen) → calls service-b
+- **`service-b/`** - Chain middle: Cloud Run service → calls service-c
+- **`service-c/`** - Chain final: Cloud Run service (leaf)
 - Custom trace propagator for proper parent-child span relationships
 
 ## Prerequisites
@@ -53,7 +56,7 @@ gcloud run deploy my-service \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars="OTEL_SERVICE_NAME=my-service,OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io" \
+  --set-env-vars="OTEL_SERVICE_NAME=my-service,OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>" \
   --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
 ```
 
@@ -71,7 +74,7 @@ gcloud functions deploy my-function \
   --entry-point=helloHttp \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars="OTEL_SERVICE_NAME=my-function,OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io,NODE_OPTIONS=--require ./instrumentation.js" \
+  --set-env-vars="OTEL_SERVICE_NAME=my-function,OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>,NODE_OPTIONS=--require ./instrumentation.js" \
   --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
 ```
 
@@ -92,6 +95,40 @@ FUNCTION_URL=$(gcloud functions describe my-function --region us-central1 --gen2
 curl "$FUNCTION_URL/?name=World"
 ```
 
+### 6. Deploy the A→B→C Chain
+
+Deploy in reverse order (leaf first):
+
+```bash
+# Deploy Service C
+cd service-c && npm install
+gcloud run deploy service-c \
+  --source . --region=asia-south1 --allow-unauthenticated \
+  --set-env-vars "OTEL_SERVICE_NAME=service-c,OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>" \
+  --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
+
+# Deploy Service B (set SERVICE_C_URL to the URL from step above)
+cd ../service-b && npm install
+gcloud run deploy service-b \
+  --source . --region=asia-south1 --allow-unauthenticated \
+  --set-env-vars "OTEL_SERVICE_NAME=service-b,OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>,SERVICE_C_URL=<service-c-url>" \
+  --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
+
+# Deploy Function A as a Cloud Function (set SERVICE_B_URL to the URL from step above)
+cd ../function-a && npm install
+gcloud functions deploy startFlow \
+  --gen2 --runtime=nodejs20 --region=asia-south1 \
+  --source=. --entry-point=startFlow --trigger-http --allow-unauthenticated \
+  --set-env-vars "OTEL_SERVICE_NAME=function-a,OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>,SERVICE_B_URL=<service-b-url>" \
+  --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"
+```
+
+Test the full chain:
+
+```bash
+curl -X POST "$(gcloud functions describe startFlow --region=asia-south1 --gen2 --format='value(serviceConfig.uri)')"
+```
+
 ---
 
 ## The Problem: GCP Load Balancer Span Injection
@@ -102,7 +139,7 @@ When Cloud Run services call each other (or Cloud Run Functions), GCP's load bal
 
 ```
 ┌─────────────┐
-│  service-a  │  Creates CLIENT span (SpanId: abc123)
+│  function-a  │  Creates CLIENT span (SpanId: abc123)
 │             │  Sends traceparent: "...abc123..."
 └──────┬──────┘
        │ HTTP Request
@@ -151,7 +188,7 @@ This implementation uses a custom propagator that preserves the original parent 
 
 ```
 ┌─────────────┐
-│  service-a  │  1. Creates CLIENT span (SpanId: abc123)
+│  function-a  │  1. Creates CLIENT span (SpanId: abc123)
 │             │  2. Injects BOTH:
 │             │     - traceparent: "...abc123..."
 │             │     - x-original-traceparent: "...abc123..." (backup)
@@ -275,7 +312,7 @@ After deploying and generating traffic, verify traces in Last9:
 In Last9's trace view, you should see proper parent-child relationships:
 
 ```
-service-a (GET /chain)
+function-a (GET /chain)
   └─> HTTP Client (calling service-b)
        └─> service-b (GET /)
             └─> HTTP Client (calling downstream)
@@ -326,7 +363,7 @@ cd functions
 npm install
 FUNCTION_TARGET=helloHttp \
 OTEL_SERVICE_NAME=test-function \
-OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io \
+OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint> \
 OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <token>" \
 npm start
 
@@ -334,7 +371,7 @@ npm start
 cd service
 npm install
 OTEL_SERVICE_NAME=test-service \
-OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io \
+OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint> \
 OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <token>" \
 FUNCTION_URL=http://localhost:8080 \
 npm start
@@ -344,6 +381,36 @@ curl "http://localhost:3000/chain?name=Test"
 ```
 
 Check Last9 for a trace with both service and function spans properly linked.
+
+### Local Testing: A→B→C Chain
+
+Start services in reverse order (C first):
+
+```bash
+# Terminal 1: Service C (leaf)
+cd service-c && npm install
+PORT=8083 OTEL_SERVICE_NAME=service-c \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+node index.js
+
+# Terminal 2: Service B (middle)
+cd service-b && npm install
+PORT=8082 OTEL_SERVICE_NAME=service-b \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+SERVICE_C_URL=http://localhost:8083 \
+node index.js
+
+# Terminal 3: Function A (entry, Cloud Function)
+cd function-a && npm install
+PORT=8081 OTEL_SERVICE_NAME=function-a \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+SERVICE_B_URL=http://localhost:8082 \
+FUNCTION_TARGET=startFlow \
+npx @google-cloud/functions-framework --target=startFlow --port=8081
+
+# Terminal 4: Trigger the chain
+curl -X POST http://localhost:8081/
+```
 
 ---
 
@@ -413,9 +480,9 @@ gcloud run services update my-service --timeout=300
 
 The custom propagator must be used by **all services in the call chain** for parent-child relationships to work correctly:
 
-- ✅ Service A (with propagator) → Service B (with propagator) = Correct hierarchy
-- ❌ Service A (with propagator) → Service B (without propagator) = B won't extract from backup header
-- ❌ Service A (without propagator) → Service B (with propagator) = A won't send backup header
+- ✅ Function A (with propagator) → Service B (with propagator) = Correct hierarchy
+- ❌ Function A (with propagator) → Service B (without propagator) = B won't extract from backup header
+- ❌ Function A (without propagator) → Service B (with propagator) = A won't send backup header
 
 ### GCP Infrastructure Spans
 
