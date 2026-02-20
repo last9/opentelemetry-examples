@@ -22,7 +22,7 @@ gcloud run deploy cloud-run-service-otel \
   --source . \
   --region $REGION \
   --allow-unauthenticated \
-  --set-env-vars="OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io" \
+  --set-env-vars="OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>" \
   --set-env-vars="OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <your-credentials>" \
   --set-env-vars="OTEL_SERVICE_NAME=cloud-run-service" \
   --set-env-vars="FUNCTION_URL=https://your-function.run.app"
@@ -45,7 +45,7 @@ curl https://your-service-url.run.app/chain?name=Test
 
 | Variable | Description |
 |----------|-------------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `https://otlp.last9.io`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `<your-otlp-endpoint>`) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Auth headers (e.g., `Authorization=Basic xxx`) |
 | `OTEL_SERVICE_NAME` | Service name in traces |
 | `FUNCTION_URL` | URL of Cloud Run Function for chain calls |
