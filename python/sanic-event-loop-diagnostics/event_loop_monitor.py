@@ -28,6 +28,8 @@ class EventLoopStats:
     blocking_events: int = 0
     max_lag_seconds: float = 0.0
     total_measurements: int = 0
+    # Per-coroutine active task counts (updated every monitoring interval)
+    task_breakdown: Dict[str, int] = field(default_factory=dict)
 
 
 class EventLoopMonitor:
@@ -79,6 +81,25 @@ class EventLoopMonitor:
         # For utilization calculation
         self._busy_time = 0.0
         self._total_time = 0.0
+
+        # Timestamps of the most recent detected blocking event.
+        # _last_blocking_start: loop.time() at the START of the monitoring
+        #   interval during which the block was detected. The block happened
+        #   somewhere between this time and _last_blocking_end.
+        # _last_blocking_end: loop.time() when the monitor woke up after the block.
+        # Used by request middleware to check if a block occurred DURING a
+        # specific request's execution window — avoids false positives on
+        # requests that run immediately after a block finishes.
+        self._last_blocking_start: float = 0.0
+        self._last_blocking_end: float = 0.0
+        self._last_blocking_lag_ms: float = 0.0
+
+        # The start time of the CURRENT monitoring interval (updated at the
+        # beginning of each loop iteration). Used by the response middleware
+        # to detect if a block is happening right now (i.e., the current
+        # interval started before the request but hasn't stamped _last_blocking_*
+        # yet because the event loop was frozen during the request).
+        self._current_interval_start: float = 0.0
 
         # Create OTEL metrics
         self._setup_metrics()
@@ -133,6 +154,24 @@ class EventLoopMonitor:
             unit="s"
         )
 
+        # Per-coroutine active task count - shows trends of which coroutines
+        # are active over time (attribute: task.coroutine)
+        self._meter.create_observable_gauge(
+            name="asyncio.eventloop.task.active_count",
+            callbacks=[self._observe_task_breakdown],
+            description="Number of active tasks broken down by coroutine name",
+            unit="{tasks}"
+        )
+
+        # Per-coroutine lag contribution - records lag attributed to each
+        # coroutine type when lag exceeds threshold (attribute: task.coroutine)
+        # Use this to answer: "which tasks are contributing to event loop lag?"
+        self._task_lag_histogram = self._meter.create_histogram(
+            name="asyncio.eventloop.task.lag_contribution",
+            description="Event loop lag attributed by coroutine type (recorded when lag > threshold)",
+            unit="ms"
+        )
+
     def _observe_lag(self, options: CallbackOptions):
         """Callback for lag gauge."""
         yield Observation(
@@ -160,6 +199,24 @@ class EventLoopMonitor:
             self._stats.max_lag_seconds,
             {"service.name": self._service_name}
         )
+
+    def _observe_task_breakdown(self, options: CallbackOptions):
+        """
+        Callback for per-coroutine active task count gauge.
+
+        Yields one Observation per unique coroutine name currently active,
+        with the coroutine name as the 'task.coroutine' attribute.
+        This creates separate time-series per coroutine type, enabling
+        trend analysis of which tasks are active over time.
+        """
+        for coro_name, count in self._stats.task_breakdown.items():
+            yield Observation(
+                count,
+                {
+                    "service.name": self._service_name,
+                    "task.coroutine": coro_name,
+                }
+            )
 
     async def start(self):
         """Start the monitoring task."""
@@ -199,6 +256,11 @@ class EventLoopMonitor:
                 # Record start time using high-precision loop time
                 start = loop.time()
 
+                # Expose current interval start so the response middleware can
+                # detect a block that is "in-flight" (not yet stamped in
+                # _last_blocking_start because the monitor hasn't woken up yet).
+                self._current_interval_start = start
+
                 # Sleep for the monitoring interval
                 await asyncio.sleep(self._interval)
 
@@ -216,9 +278,23 @@ class EventLoopMonitor:
                 if lag > self._stats.max_lag_seconds:
                     self._stats.max_lag_seconds = lag
 
-                # Count active tasks
+                # Count active tasks and build per-coroutine breakdown
                 all_tasks = asyncio.all_tasks()
-                self._stats.active_tasks = len([t for t in all_tasks if not t.done()])
+                current_task = asyncio.current_task()
+                active_tasks = [t for t in all_tasks if not t.done() and t is not current_task]
+                self._stats.active_tasks = len(active_tasks)
+
+                # Build per-coroutine task count for trend tracking
+                task_breakdown: Dict[str, int] = {}
+                for task in active_tasks:
+                    coro = task.get_coro()
+                    coro_name = (
+                        getattr(coro, "__qualname__", None)
+                        or getattr(coro, "__name__", None)
+                        or "unknown"
+                    )
+                    task_breakdown[coro_name] = task_breakdown.get(coro_name, 0) + 1
+                self._stats.task_breakdown = task_breakdown
 
                 # Calculate utilization (simplified: lag/interval ratio)
                 # High lag = high utilization (loop was busy)
@@ -233,7 +309,7 @@ class EventLoopMonitor:
                     {"service.name": self._service_name}
                 )
 
-                # Detect blocking events
+                # Detect blocking events and attribute lag to contributing tasks
                 if lag > self._blocking_threshold:
                     self._stats.blocking_events += 1
 
@@ -251,6 +327,31 @@ class EventLoopMonitor:
                             "blocking.lag_seconds": str(round(lag, 3))
                         }
                     )
+
+                    # Record the interval [start, now] during which the block
+                    # occurred. The block happened somewhere between 'start'
+                    # (when we went to sleep) and 'loop.time()' (when we woke).
+                    # The middleware checks if a request's execution window
+                    # overlaps with [_last_blocking_start, _last_blocking_end].
+                    self._last_blocking_start = start
+                    self._last_blocking_end = loop.time()
+                    self._last_blocking_lag_ms = lag * 1000
+
+                    # Record lag contribution per coroutine that was active
+                    # during this blocking event. If no tasks are identified,
+                    # attribute the lag to an "unknown" contributor so the
+                    # metric is still emitted.
+                    lag_ms = lag * 1000
+                    contributing_tasks = task_breakdown if task_breakdown else {"unknown": 1}
+                    for coro_name in contributing_tasks:
+                        self._task_lag_histogram.record(
+                            lag_ms,
+                            {
+                                "service.name": self._service_name,
+                                "task.coroutine": coro_name,
+                                "blocking.severity": severity,
+                            }
+                        )
 
             except asyncio.CancelledError:
                 break
@@ -275,7 +376,10 @@ class EventLoopMonitor:
             "total_measurements": self._stats.total_measurements,
             "monitoring_interval_ms": self._interval * 1000,
             "blocking_threshold_ms": self._blocking_threshold * 1000,
-            "status": self._get_health_status()
+            "status": self._get_health_status(),
+            # Per-coroutine breakdown: shows which tasks are active right now
+            # and (via OTEL) which ones have been contributing to lag over time.
+            "task_breakdown": dict(self._stats.task_breakdown),
         }
 
     def _get_health_status(self) -> str:

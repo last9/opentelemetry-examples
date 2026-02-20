@@ -108,10 +108,29 @@ async def otel_request_middleware(request: Request):
     request.ctx.otel_token = token
     request.ctx.otel_token_span = token_span
 
+    # Record the loop.time() at request start.
+    # The response middleware checks if a blocking event timestamp falls
+    # BETWEEN this start time and the response time — correctly pinpointing
+    # which handler caused the block, not which handler ran after it.
+    if event_loop_monitor:
+        loop = asyncio.get_running_loop()
+        request.ctx.request_start_loop_time = loop.time()
+        request.ctx.lag_at_start_ms = event_loop_monitor.get_stats()["lag_ms"]
+
 
 @app.middleware("response")
 async def otel_response_middleware(request: Request, response_obj):
-    """End span on response."""
+    """
+    End span on response, enriching it with event loop lag attributes.
+
+    These span attributes let you answer in Last9 / any trace backend:
+      "Which HTTP routes were being served during high event loop lag?"
+
+    Filter traces by:
+      asyncio.eventloop.request_blocked = true
+      asyncio.eventloop.lag_at_request_end_ms > 50
+    Then group by http.target to find the worst offenders.
+    """
     if not hasattr(request.ctx, 'otel_span'):
         return
 
@@ -121,6 +140,73 @@ async def otel_response_middleware(request: Request, response_obj):
         span.set_attribute("http.status_code", response_obj.status)
         if response_obj.status >= 400:
             span.set_status(Status(StatusCode.ERROR))
+
+    # Enrich span with event loop blocking attribution for this request.
+    #
+    # KEY INSIGHT: We use loop.time() timestamps rather than lag values to
+    # determine if a block happened DURING this request. This avoids the
+    # false-positive problem where a request running immediately AFTER a
+    # blocking call inherits the stale high-lag reading.
+    #
+    # How it works:
+    #   1. Request middleware stamps request_start_loop_time = loop.time()
+    #   2. When lag > threshold, monitor stamps _last_blocking_loop_time
+    #   3. Here we check: did that blocking event fall between start and now?
+    #   4. If yes → THIS handler caused the block (true positive)
+    #   5. If no  → block happened before/after this request (not its fault)
+    if event_loop_monitor and hasattr(request.ctx, 'request_start_loop_time'):
+        loop = asyncio.get_running_loop()
+        request_end_loop_time = loop.time()
+        request_start_loop_time = request.ctx.request_start_loop_time
+        stats = event_loop_monitor.get_stats()
+
+        last_blocking_start = event_loop_monitor._last_blocking_start
+        last_blocking_end = event_loop_monitor._last_blocking_end
+        last_blocking_lag_ms = event_loop_monitor._last_blocking_lag_ms
+        current_interval_start = event_loop_monitor._current_interval_start
+        blocking_threshold = event_loop_monitor._blocking_threshold
+
+        # Strategy: detect blocking via two complementary checks.
+        #
+        # CHECK 1 — Stamped block (previous requests):
+        #   After a block, the monitor wakes and stamps _last_blocking_start/end.
+        #   A request owns the block if its window overlaps [block_start, block_end].
+        #   Two intervals overlap when: A_start <= B_end AND B_start <= A_end.
+        stamped_block = (
+            last_blocking_start > 0
+            and request_start_loop_time <= last_blocking_end
+            and last_blocking_start <= request_end_loop_time
+        )
+
+        # CHECK 2 — In-flight block (the current request IS the culprit):
+        #   When time.sleep() runs inside THIS request, the event loop freezes.
+        #   The monitor can't run during the freeze, so _last_blocking_start is
+        #   still from a previous cycle. But _current_interval_start was set
+        #   BEFORE the freeze. If the current monitoring interval started before
+        #   this request AND the request took longer than (interval + threshold),
+        #   then the loop was blocked during this request.
+        request_duration = request_end_loop_time - request_start_loop_time
+        interval_elapsed = request_end_loop_time - current_interval_start
+        inflight_block = (
+            current_interval_start > 0
+            and current_interval_start <= request_end_loop_time
+            and interval_elapsed > (event_loop_monitor._interval + blocking_threshold)
+        )
+
+        was_blocked = stamped_block or inflight_block
+        # Use actual measured lag for in-flight blocks
+        if inflight_block and not stamped_block:
+            last_blocking_lag_ms = max(0, interval_elapsed - event_loop_monitor._interval) * 1000
+
+        span.set_attribute("asyncio.eventloop.lag_at_request_start_ms", round(request.ctx.lag_at_start_ms, 2))
+        span.set_attribute("asyncio.eventloop.lag_at_request_end_ms", round(stats["lag_ms"], 2))
+        span.set_attribute("asyncio.eventloop.request_blocked", was_blocked)
+        span.set_attribute("asyncio.eventloop.active_tasks", stats["active_tasks"])
+
+        if was_blocked:
+            span.set_attribute("asyncio.eventloop.blocking_lag_ms", round(last_blocking_lag_ms, 2))
+            severity = "critical" if last_blocking_lag_ms > stats["blocking_threshold_ms"] * 10 else "warning"
+            span.set_attribute("asyncio.eventloop.blocking_severity", severity)
 
     span.end()
 
@@ -144,7 +230,8 @@ async def index(request: Request):
             "monitoring": {
                 "/health": "Health check",
                 "/metrics": "Current event loop metrics (JSON)",
-                "/metrics/reset": "Reset metrics counters"
+                "/metrics/reset": "Reset metrics counters",
+                "/task-trends": "Active tasks by coroutine + OTEL lag attribution metrics"
             },
             "non_blocking_patterns": {
                 "/async-io": "Async I/O operation (non-blocking)",
@@ -194,6 +281,47 @@ async def reset_metrics(request: Request):
     if event_loop_monitor:
         event_loop_monitor.reset_stats()
     return response.json({"message": "Metrics reset"})
+
+
+@app.route("/task-trends")
+async def task_trends(request: Request):
+    """
+    Show which coroutines are currently active and their contribution to lag.
+
+    Returns the live task breakdown by coroutine name.
+
+    For historical trends of which tasks contributed to event loop lag,
+    query the OTEL metric:
+      asyncio.eventloop.task.lag_contribution (histogram, attribute: task.coroutine)
+      asyncio.eventloop.task.active_count     (gauge,     attribute: task.coroutine)
+
+    Example PromQL to find top lag contributors:
+      topk(5, rate(asyncio_eventloop_task_lag_contribution_sum[5m])
+               / rate(asyncio_eventloop_task_lag_contribution_count[5m]))
+    """
+    if not event_loop_monitor:
+        return response.json({"error": "Monitor not initialized"}, status=500)
+
+    stats = event_loop_monitor.get_stats()
+    task_breakdown = stats.get("task_breakdown", {})
+
+    # Sort by count descending so highest-activity coroutines appear first
+    sorted_tasks = sorted(task_breakdown.items(), key=lambda x: x[1], reverse=True)
+
+    return response.json({
+        "active_tasks_total": stats["active_tasks"],
+        "current_lag_ms": stats["lag_ms"],
+        "status": stats["status"],
+        "task_breakdown": [
+            {"coroutine": name, "active_count": count}
+            for name, count in sorted_tasks
+        ],
+        "otel_metrics": {
+            "active_count_by_coroutine": "asyncio.eventloop.task.active_count (attr: task.coroutine)",
+            "lag_contribution_by_coroutine": "asyncio.eventloop.task.lag_contribution (attr: task.coroutine)",
+            "note": "Query these metrics in your observability backend to see trends over time"
+        }
+    })
 
 
 # ============================================
