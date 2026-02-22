@@ -1,0 +1,13 @@
+# Producer service (Flask app)
+flask>=3.0
+boto3>=1.34
+opentelemetry-api>=1.25
+opentelemetry-sdk>=1.25
+opentelemetry-exporter-otlp-proto-http>=1.25
+opentelemetry-propagator-aws-xray>=1.0
+opentelemetry-semantic-conventions>=0.46b0
+opentelemetry-instrumentation-flask>=0.46b0
+
+# Lambda consumer only needs these (included in ADOT layer):
+# opentelemetry-api
+# opentelemetry-sdk

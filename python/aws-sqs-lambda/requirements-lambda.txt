@@ -1,0 +1,5 @@
+# Minimal deps for Lambda function (most are provided by ADOT layer).
+# Only needed if NOT using the ADOT layer.
+opentelemetry-api>=1.25
+opentelemetry-sdk>=1.25
+opentelemetry-propagator-aws-xray>=1.0
