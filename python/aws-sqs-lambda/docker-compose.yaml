@@ -1,0 +1,45 @@
+# Local development stack: LocalStack (SQS) + Producer service.
+# Usage: docker compose up
+
+services:
+  localstack:
+    image: localstack/localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs
+      - DEFAULT_REGION=us-east-1
+
+  setup-sqs:
+    image: amazon/aws-cli
+    depends_on:
+      - localstack
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        sleep 5
+        aws --endpoint-url http://localstack:4566 sqs create-queue \
+          --queue-name test-trace-queue --region us-east-1
+        echo "SQS queue created."
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+
+  producer:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - setup-sqs
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_REGION=us-east-1
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/test-trace-queue
+      - OTEL_SERVICE_NAME=publisher-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}
+      - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS:-}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
