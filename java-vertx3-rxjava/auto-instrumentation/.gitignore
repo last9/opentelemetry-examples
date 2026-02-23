@@ -7,7 +7,7 @@
 target/
 META-INF/
 *.jar
-!vertx3-rxjava2-otel-autoconfigure-*.jar
+lib/
 
 # IDE
 .idea/

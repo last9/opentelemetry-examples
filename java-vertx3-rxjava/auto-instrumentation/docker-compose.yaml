@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: holdingdb
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -48,7 +48,8 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
-      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo,service.version=1.0.0
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local,service.version=1.0.0
     ports:
       - "8081:8081"
     depends_on:
@@ -73,7 +74,8 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
-      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo,service.version=1.0.0
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local,service.version=1.0.0
     ports:
       - "8080:8080"
     depends_on:

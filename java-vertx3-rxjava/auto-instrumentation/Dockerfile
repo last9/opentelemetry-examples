@@ -3,14 +3,24 @@ FROM maven:3.9-eclipse-temurin-11 AS build
 
 WORKDIR /app
 
-# Copy auto-configure JAR and install to local Maven repo
-COPY vertx3-rxjava2-otel-autoconfigure-1.0.0.jar /tmp/
+# Install Last9 auto-configure JARs into local Maven repo.
+# These JARs must be present in the build context — see docker-compose.yaml
+# and .env for how they are referenced. They are .gitignored.
+COPY lib/ /tmp/lib/
 RUN mvn install:install-file \
-    -Dfile=/tmp/vertx3-rxjava2-otel-autoconfigure-1.0.0.jar \
+    -Dfile=/tmp/lib/vertx-otel-core.jar \
+    -DgroupId=io.last9 \
+    -DartifactId=vertx-otel-core \
+    -Dversion=1.2.0 \
+    -Dpackaging=jar \
+    -DgeneratePom=true && \
+    mvn install:install-file \
+    -Dfile=/tmp/lib/vertx3-rxjava2-otel-autoconfigure.jar \
     -DgroupId=io.last9 \
     -DartifactId=vertx3-rxjava2-otel-autoconfigure \
-    -Dversion=1.0.0 \
-    -Dpackaging=jar
+    -Dversion=1.2.0 \
+    -Dpackaging=jar \
+    -DgeneratePom=true
 
 # Copy POM and download dependencies
 COPY pom.xml .

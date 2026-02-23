@@ -14,13 +14,13 @@ processors:
   resource:
     attributes:
       - key: deployment.environment
-        value: ${DEPLOYMENT_ENV:-demo}
+        value: ${env:DEPLOYMENT_ENV}
         action: upsert
 
 exporters:
-  # Debug exporter (uncomment for local debugging)
-  # debug:
-  #   verbosity: detailed
+  # Debug exporter for local verification
+  debug:
+    verbosity: detailed
 
   # Last9 OTLP exporter
   otlphttp/last9:
@@ -33,9 +33,9 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [otlphttp/last9]
+      exporters: [debug, otlphttp/last9]
 
     logs:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [otlphttp/last9]
+      exporters: [debug, otlphttp/last9]

@@ -30,7 +30,7 @@
         <slf4j.version>1.7.36</slf4j.version>
 
         <!-- Auto-instrumentation JAR -->
-        <vertx3.otel.autoconfigure.version>1.0.0</vertx3.otel.autoconfigure.version>
+        <vertx3.otel.autoconfigure.version>1.2.0</vertx3.otel.autoconfigure.version>
 
         <!-- Main verticle -->
         <main.verticle>com.example.holding.MainVerticle</main.verticle>
@@ -93,6 +93,13 @@
             <version>4.0.3</version>
         </dependency>
 
+        <!-- Last9 Vert.x OpenTelemetry Core (SDK setup, MDC filter) -->
+        <dependency>
+            <groupId>io.last9</groupId>
+            <artifactId>vertx-otel-core</artifactId>
+            <version>${vertx3.otel.autoconfigure.version}</version>
+        </dependency>
+
         <!-- Last9 Vert.x 3 RxJava2 OpenTelemetry Auto-Configure -->
         <dependency>
             <groupId>io.last9</groupId>
@@ -138,6 +145,27 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
+        </dependency>
+
+        <!-- OpenTelemetry Logback Appender (required by vertx-otel-core) -->
+        <dependency>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-logback-appender-1.0</artifactId>
+            <version>${otel.instrumentation.version}-alpha</version>
+        </dependency>
+
+        <!-- OpenTelemetry Logback MDC (trace_id/span_id in logs) -->
+        <dependency>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-logback-mdc-1.0</artifactId>
+            <version>${otel.instrumentation.version}-alpha</version>
+        </dependency>
+
+        <!-- OpenTelemetry Semantic Conventions (required by v3 autoconfig) -->
+        <dependency>
+            <groupId>io.opentelemetry.semconv</groupId>
+            <artifactId>opentelemetry-semconv</artifactId>
+            <version>1.23.1-alpha</version>
         </dependency>
 
         <!-- JSON Processing -->
