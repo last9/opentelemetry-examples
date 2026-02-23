@@ -15,6 +15,14 @@ import io.last9.tracing.otel.v3.TracedAerospikeClient;
 import io.last9.tracing.otel.v3.TracedRouter;
 import io.last9.tracing.otel.v3.TracedSQLClient;
 import io.last9.tracing.otel.v3.TracedWebClient;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.semconv.SemanticAttributes;
 import io.reactivex.Completable;
 import io.reactivex.Single;
 import io.vertx.core.json.JsonArray;
@@ -386,7 +394,8 @@ public class MainVerticle extends AbstractVerticle {
     // ---- Kafka Handlers ----
 
     /**
-     * Produce a single message to Kafka. Demonstrates Kafka producer tracing.
+     * Produce a single message to Kafka. Wraps with a PRODUCER span manually since
+     * Vert.x 3 Kafka client has no built-in OTel instrumentation.
      */
     private void handleKafkaProduce(RoutingContext ctx) {
         JsonObject body = ctx.getBodyAsJson();
@@ -398,7 +407,7 @@ public class MainVerticle extends AbstractVerticle {
         KafkaProducerRecord<String, String> record =
                 KafkaProducerRecord.create(kafkaTopic, key, value);
 
-        kafkaProducer.rxSend(record)
+        tracedKafkaSend(record)
                 .subscribe(
                         metadata -> ctx.response()
                                 .putHeader("content-type", "application/json")
@@ -413,7 +422,7 @@ public class MainVerticle extends AbstractVerticle {
     }
 
     /**
-     * Produce multiple messages to Kafka. Creates multiple producer spans.
+     * Produce multiple messages to Kafka. Each send is wrapped with a PRODUCER span.
      */
     private void handleKafkaProduceBatch(RoutingContext ctx) {
         JsonObject body = ctx.getBodyAsJson();
@@ -430,7 +439,7 @@ public class MainVerticle extends AbstractVerticle {
                             .put("timestamp", System.currentTimeMillis());
                     KafkaProducerRecord<String, String> record =
                             KafkaProducerRecord.create(kafkaTopic, prefix + "-" + i, event.encode());
-                    return kafkaProducer.rxSend(record);
+                    return tracedKafkaSend(record);
                 })
                 .toList()
                 .subscribe(
@@ -443,6 +452,39 @@ public class MainVerticle extends AbstractVerticle {
                                         .encode()),
                         error -> handleError(ctx, error)
                 );
+    }
+
+    /**
+     * Wraps a Kafka send with a PRODUCER span. Vert.x 3 has no Kafka tracing SPI,
+     * so we create the span manually using OTel messaging semantic conventions.
+     */
+    private Single<io.vertx.kafka.client.producer.RecordMetadata> tracedKafkaSend(
+            KafkaProducerRecord<String, String> record) {
+        Tracer tracer = GlobalOpenTelemetry.get().getTracer("io.last9.tracing.otel.v3");
+        Span span = tracer.spanBuilder(record.topic() + " publish")
+                .setSpanKind(SpanKind.PRODUCER)
+                .setAttribute(SemanticAttributes.MESSAGING_SYSTEM, "kafka")
+                .setAttribute(SemanticAttributes.MESSAGING_DESTINATION_NAME, record.topic())
+                .setAttribute(SemanticAttributes.MESSAGING_OPERATION, "publish")
+                .startSpan();
+
+        if (record.key() != null) {
+            span.setAttribute(SemanticAttributes.MESSAGING_KAFKA_MESSAGE_KEY, record.key());
+        }
+
+        return kafkaProducer.rxSend(record)
+                .doOnSuccess(metadata -> {
+                    span.setAttribute(SemanticAttributes.MESSAGING_KAFKA_DESTINATION_PARTITION,
+                            (long) metadata.getPartition());
+                    span.setAttribute(SemanticAttributes.MESSAGING_KAFKA_MESSAGE_OFFSET,
+                            metadata.getOffset());
+                    span.end();
+                })
+                .doOnError(err -> {
+                    span.recordException(err);
+                    span.setStatus(StatusCode.ERROR, err.getMessage());
+                    span.end();
+                });
     }
 
     // ---- Aerospike Cache Handlers ----
@@ -465,8 +507,10 @@ public class MainVerticle extends AbstractVerticle {
             return;
         }
 
+        // Capture OTel context from event loop — worker thread has no context
+        Context otelCtx = Context.current();
         vertx.<String>rxExecuteBlocking(promise -> {
-            try {
+            try (Scope ignored = otelCtx.makeCurrent()) {
                 Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
                 Bin valueBin = new Bin("data", body.encode());
                 Bin timestampBin = new Bin("updated", System.currentTimeMillis());
@@ -499,8 +543,9 @@ public class MainVerticle extends AbstractVerticle {
             return;
         }
 
+        Context otelCtx = Context.current();
         vertx.<JsonObject>rxExecuteBlocking(promise -> {
-            try {
+            try (Scope ignored = otelCtx.makeCurrent()) {
                 Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
                 Record record = aerospikeClient.get(null, asKey);
                 if (record != null) {
@@ -544,8 +589,9 @@ public class MainVerticle extends AbstractVerticle {
             return;
         }
 
+        Context otelCtx = Context.current();
         vertx.<Boolean>rxExecuteBlocking(promise -> {
-            try {
+            try (Scope ignored = otelCtx.makeCurrent()) {
                 Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
                 boolean deleted = aerospikeClient.delete(null, asKey);
                 promise.complete(deleted);
@@ -579,8 +625,10 @@ public class MainVerticle extends AbstractVerticle {
                 .flatMapSingle(holding -> {
                     // Check Aerospike cache first, fall back to pricing service
                     String cacheKey = "price:" + holding.getSymbol();
+                    // Capture OTel context for the worker thread
+                    Context otelCtx = Context.current();
                     return vertx.<JsonObject>rxExecuteBlocking(promise -> {
-                        try {
+                        try (Scope ignored = otelCtx.makeCurrent()) {
                             if (aerospikeClient != null) {
                                 Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
                                 Record cached = aerospikeClient.get(null, asKey);
@@ -649,7 +697,7 @@ public class MainVerticle extends AbstractVerticle {
                             KafkaProducerRecord.create(kafkaTopic, userId, event.encode());
 
                     double finalTotal = total;
-                    return kafkaProducer.rxSend(record)
+                    return tracedKafkaSend(record)
                             .map(metadata -> new JsonObject()
                                     .put("userId", userId)
                                     .put("holdings", holdingsArray)
