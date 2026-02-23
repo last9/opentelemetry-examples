@@ -1,0 +1,10 @@
+# Go binaries
+consumer/consumer
+producer/producer
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out

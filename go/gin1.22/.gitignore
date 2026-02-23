@@ -1,0 +1,9 @@
+# Go binaries
+gin1.22
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out

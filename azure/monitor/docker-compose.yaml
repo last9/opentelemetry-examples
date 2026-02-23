@@ -1,0 +1,16 @@
+services:
+  otel-collector:
+    build: .
+    env_file: .env
+    ports:
+      - "13133:13133"   # health check
+    restart: unless-stopped
+    # Minimal footprint — matches AKS pod resource limits below
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 300M
+        reservations:
+          cpus: "0.05"
+          memory: 128M

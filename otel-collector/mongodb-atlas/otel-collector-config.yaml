@@ -1,0 +1,85 @@
+receivers:
+  mongodbatlas:
+    public_key: "${env:MONGODB_ATLAS_PUBLIC_KEY}"
+    private_key: "${env:MONGODB_ATLAS_PRIVATE_KEY}"
+    granularity: "PT1M"
+    collection_interval: 3m
+    projects:
+      - name: "${env:MONGODB_ATLAS_PROJECT_NAME}"
+        include_clusters: ["${env:MONGODB_ATLAS_CLUSTER_NAME}"]
+    metrics:
+      mongodbatlas.process.cache.ratio:
+        enabled: true
+    logs:
+      enabled: true
+      projects:
+        - name: "${env:MONGODB_ATLAS_PROJECT_NAME}"
+          collect_host_logs: true
+          collect_audit_logs: false
+          include_clusters: ["${env:MONGODB_ATLAS_CLUSTER_NAME}"]
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+  resourcedetection/cloud:
+    detectors: ["gcp", "ec2", "azure"]
+  transform/add_timestamp:
+    flatten_data: true
+    log_statements:
+      - context: log
+        statements:
+          - set(observed_time, Now())
+          - set(time_unix_nano, observed_time_unix_nano) where time_unix_nano == 0
+  transform/add_service:
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["service.name"], "mongodb-atlas")
+  transform/slow_queries:
+    log_statements:
+      - context: log
+        conditions:
+          - IsMatch(body, "Slow query")
+        statements:
+          - merge_maps(attributes, ParseJSON(body), "upsert") where IsMatch(body, "\"msg\":\"Slow query\"")
+          - set(attributes["db.namespace"], attributes["attr"]["ns"]) where attributes["attr"]["ns"] != nil
+          - set(attributes["db.operation.duration_ms"], attributes["attr"]["durationMillis"]) where attributes["attr"]["durationMillis"] != nil
+          - set(attributes["db.plan_summary"], attributes["attr"]["planSummary"]) where attributes["attr"]["planSummary"] != nil
+          - set(attributes["db.keys_examined"], attributes["attr"]["keysExamined"]) where attributes["attr"]["keysExamined"] != nil
+          - set(attributes["db.docs_examined"], attributes["attr"]["docsExamined"]) where attributes["attr"]["docsExamined"] != nil
+          - set(attributes["db.rows_affected"], attributes["attr"]["nreturned"]) where attributes["attr"]["nreturned"] != nil
+          - set(attributes["db.query_hash"], attributes["attr"]["queryHash"]) where attributes["attr"]["queryHash"] != nil
+          - set(attributes["db.system"], "mongodb")
+          - set(attributes["slow_query"], true)
+          - set(severity_text, "WARN") where attributes["attr"]["durationMillis"] != nil and attributes["attr"]["durationMillis"] > 100
+
+exporters:
+  # Uncomment and configure to send to Last9:
+  # otlp/last9:
+  #   endpoint: "${env:LAST9_OTLP_ENDPOINT}"
+  #   headers:
+  #     "Authorization": "Basic ${env:LAST9_AUTH_HEADER}"
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [mongodbatlas]
+      processors: [batch, resourcedetection/system, resourcedetection/cloud, transform/add_timestamp, transform/add_service, transform/slow_queries]
+      exporters: [debug]
+    metrics:
+      receivers: [mongodbatlas]
+      processors: [batch, resourcedetection/system, resourcedetection/cloud]
+      exporters: [debug]

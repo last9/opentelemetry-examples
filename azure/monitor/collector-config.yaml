@@ -1,0 +1,84 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  azureauth:
+    service_principal:
+      tenant_id: ${env:AZURE_TENANT_ID}
+      client_id: ${env:AZURE_CLIENT_ID}
+      client_secret: ${env:AZURE_CLIENT_SECRET}
+
+receivers:
+  azuremonitor:
+    subscription_ids:
+      - ${env:AZURE_SUBSCRIPTION_ID}
+    # Scope to specific resource groups (recommended — avoids API storms)
+    resource_groups:
+      - ${env:AZURE_RESOURCE_GROUP}
+    # Optional: filter to specific Azure services only
+    # services:
+    #   - Microsoft.Compute/virtualMachines
+    #   - Microsoft.ContainerService/managedClusters
+    #   - Microsoft.Storage/storageAccounts
+    #   - Microsoft.Network/loadBalancers
+    #   - Microsoft.Sql/servers/databases
+    #   - Microsoft.Cache/Redis
+    #   - Microsoft.Web/sites
+    collection_interval: 300s   # 5 min — matches Azure Monitor's own refresh cadence
+    initial_delay: 1s
+    cloud: AzureCloud
+    auth:
+      authenticator: azureauth
+
+processors:
+  # Safety valve — prevents collector from OOMing under high cardinality
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+  # Tag all metrics with cloud context for filtering in Last9
+  resource:
+    attributes:
+      - key: cloud.provider
+        value: azure
+        action: upsert
+      - key: cloud.platform
+        value: azure_monitor
+        action: upsert
+      - key: cloud.account.id
+        value: ${env:AZURE_SUBSCRIPTION_ID}
+        action: upsert
+
+  batch:
+    timeout: 10s
+    send_batch_size: 100
+    send_batch_max_size: 200
+
+exporters:
+  otlp_grpc/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_OTLP_HEADER}
+    compression: gzip
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  # Uncomment for debugging — logs every metric collected
+  # debug:
+  #   verbosity: detailed
+
+service:
+  extensions: [health_check, azureauth]
+  pipelines:
+    metrics:
+      receivers: [azuremonitor]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_grpc/last9]
+  telemetry:
+    logs:
+      level: info

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Sanic application with event loop diagnostics
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - OTEL_SERVICE_NAME=sanic-event-loop-demo
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=false
+    depends_on:
+      - otel-collector
+    networks:
+      - monitoring
+
+  # OpenTelemetry Collector for local testing
+  # Receives telemetry and can forward to Last9 or other backends
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge

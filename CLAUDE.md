@@ -21,6 +21,10 @@ Examples are organized by language/platform:
 - `ruby/` - Ruby examples
 - etc.
 
+## OpenTelemetry Collector Version
+
+Always use the latest stable OpenTelemetry Collector version in examples (currently 0.144.0). Check https://github.com/open-telemetry/opentelemetry-collector-releases/releases for the latest version before writing new examples.
+
 ## Important Rules
 
 ### Do NOT Commit

@@ -1,0 +1,53 @@
+services:
+  mongodb:
+    image: mongo:5.0
+    container_name: mongodb
+    command: ["--config", "/etc/mongod.conf", "--auth"]
+    volumes:
+      - ./mongod.conf:/etc/mongod.conf:ro
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+      - mongo-data:/data/db
+      - mongo-logs:/var/log/mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin_password
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: otel-collector
+    user: "0:0" # Run as root to read MongoDB log files (owned by mongodb user)
+    command: ["--config=/etc/otel/config.yaml", "--feature-gates=transform.flatten.logs"]
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+      - mongo-logs:/var/log/mongodb:ro
+    ports:
+      - "13134:13133"
+
+  slow-query-generator:
+    image: mongo:5.0
+    container_name: slow-query-generator
+    profiles: ["generate"]
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./generate-slow-queries.js:/scripts/generate-slow-queries.js:ro
+    entrypoint:
+      - mongosh
+      - "mongodb://admin:admin_password@mongodb:27017/admin"
+      - /scripts/generate-slow-queries.js
+
+volumes:
+  mongo-data:
+  mongo-logs:

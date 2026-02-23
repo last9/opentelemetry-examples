@@ -11,11 +11,8 @@ import (
 	"net/http"
 	"time"
 
-	instrumentation "grpc-gateway-example/instrumentation"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
+	"github.com/last9/go-agent"
+	httpagent "github.com/last9/go-agent/integrations/http"
 )
 
 type HelloRequest struct {
@@ -35,15 +32,16 @@ var names = []string{
 }
 
 func main() {
-	// Initialize the tracer with a different service name
-	shutdown := instrumentation.InitTracer("grpc-gateway-traffic-generator")
-	defer shutdown(context.Background())
+	// Initialize go-agent (automatic OpenTelemetry setup)
+	agent.Start()
+	defer agent.Shutdown()
 
-	// Create HTTP client with OpenTelemetry instrumentation
-	client := &http.Client{
-		Transport: otelhttp.NewTransport(http.DefaultTransport),
-		Timeout:   5 * time.Second,
-	}
+	log.Println("✓ go-agent initialized")
+
+	// Create HTTP client with go-agent instrumentation
+	client := httpagent.NewClient(&http.Client{
+		Timeout: 5 * time.Second,
+	})
 
 	const totalRequests = 100
 	successCount := 0
@@ -60,26 +58,16 @@ func main() {
 		// Pick a random name
 		name := names[rand.Intn(len(names))]
 
-		// Create a new context with trace for each request
+		// Create a new context for each request
 		ctx := context.Background()
-		tracer := otel.Tracer("traffic-generator")
-		ctx, span := tracer.Start(ctx, "generate-traffic")
-		span.SetAttributes(
-			attribute.String("request.name", name),
-			attribute.Int("request.number", i+1),
-		)
 
-		// Send request
+		// Send request (automatically instrumented by go-agent)
 		if err := sendRequest(ctx, client, name, i+1, totalRequests); err != nil {
 			log.Printf("  ✗ [%d/%d] Request failed: %v", i+1, totalRequests, err)
 			failureCount++
-			span.SetAttributes(attribute.Bool("request.success", false))
 		} else {
 			successCount++
-			span.SetAttributes(attribute.Bool("request.success", true))
 		}
-
-		span.End()
 
 		// Random delay between requests (100ms to 1s)
 		delay := time.Duration(100+rand.Intn(900)) * time.Millisecond
