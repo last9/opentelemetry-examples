@@ -168,6 +168,13 @@
             <version>1.23.1-alpha</version>
         </dependency>
 
+        <!-- Aerospike Client -->
+        <dependency>
+            <groupId>com.aerospike</groupId>
+            <artifactId>aerospike-client</artifactId>
+            <version>7.2.1</version>
+        </dependency>
+
         <!-- JSON Processing -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

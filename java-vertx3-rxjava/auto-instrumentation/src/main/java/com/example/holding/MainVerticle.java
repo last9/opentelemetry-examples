@@ -1,13 +1,22 @@
 package com.example.holding;
 
+import com.aerospike.client.AerospikeClient;
+import com.aerospike.client.Bin;
+import com.aerospike.client.IAerospikeClient;
+import com.aerospike.client.Key;
+import com.aerospike.client.Record;
+import com.aerospike.client.policy.ClientPolicy;
 import com.example.holding.model.Holding;
 import com.example.holding.repository.HoldingRepository;
 import com.example.holding.service.HoldingService;
 import io.last9.tracing.otel.v3.ClientTracing;
+import io.last9.tracing.otel.v3.KafkaTracing;
+import io.last9.tracing.otel.v3.TracedAerospikeClient;
 import io.last9.tracing.otel.v3.TracedRouter;
 import io.last9.tracing.otel.v3.TracedSQLClient;
 import io.last9.tracing.otel.v3.TracedWebClient;
 import io.reactivex.Completable;
+import io.reactivex.Single;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.reactivex.core.AbstractVerticle;
@@ -16,8 +25,14 @@ import io.vertx.reactivex.ext.sql.SQLClient;
 import io.vertx.reactivex.ext.web.Router;
 import io.vertx.reactivex.ext.web.RoutingContext;
 import io.vertx.reactivex.ext.web.client.WebClient;
+import io.vertx.reactivex.kafka.client.consumer.KafkaConsumer;
+import io.vertx.reactivex.kafka.client.producer.KafkaProducer;
+import io.vertx.reactivex.kafka.client.producer.KafkaProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Main Verticle for the Holding Service.
@@ -37,6 +52,10 @@ public class MainVerticle extends AbstractVerticle {
     private WebClient webClient;
     private WebClient tracedWebClient;
     private String pricingServiceUrl;
+    private KafkaProducer<String, String> kafkaProducer;
+    private String kafkaTopic;
+    private IAerospikeClient aerospikeClient;
+    private String aerospikeNamespace;
 
     @Override
     public Completable rxStart() {
@@ -68,6 +87,49 @@ public class MainVerticle extends AbstractVerticle {
 
         pricingServiceUrl = getEnvOrDefault("PRICING_SERVICE_URL", "http://localhost:8081");
 
+        // Initialize Kafka producer with tracing
+        kafkaTopic = getEnvOrDefault("KAFKA_TOPIC", "holding-events");
+        Map<String, String> kafkaConfig = new HashMap<>();
+        kafkaConfig.put("bootstrap.servers", getEnvOrDefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"));
+        kafkaConfig.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        kafkaConfig.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        kafkaConfig.put("acks", "1");
+        kafkaProducer = KafkaProducer.create(vertx, kafkaConfig);
+
+        // Initialize Kafka consumer with traced batch handler
+        Map<String, String> consumerConfig = new HashMap<>();
+        consumerConfig.put("bootstrap.servers", getEnvOrDefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"));
+        consumerConfig.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        consumerConfig.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        consumerConfig.put("group.id", "holding-service-consumer");
+        consumerConfig.put("auto.offset.reset", "earliest");
+        consumerConfig.put("enable.auto.commit", "true");
+
+        KafkaConsumer<String, String> kafkaConsumer = KafkaConsumer.create(vertx, consumerConfig);
+        // KafkaTracing works with core Vert.x types — use getDelegate() for the batch handler
+        kafkaConsumer.getDelegate().batchHandler(KafkaTracing.tracedBatchHandler(kafkaTopic, records -> {
+            logger.info("Consumed batch of {} records from topic '{}'", records.size(), kafkaTopic);
+            for (int i = 0; i < records.size(); i++) {
+                logger.info("  Record: key={}, value={}", records.recordAt(i).key(), records.recordAt(i).value());
+            }
+        }));
+        kafkaConsumer.subscribe(kafkaTopic);
+
+        // Initialize Aerospike with TracedAerospikeClient
+        aerospikeNamespace = getEnvOrDefault("AEROSPIKE_NAMESPACE", "test");
+        String aerospikeHost = getEnvOrDefault("AEROSPIKE_HOST", "localhost");
+        int aerospikePort = Integer.parseInt(getEnvOrDefault("AEROSPIKE_PORT", "3000"));
+        try {
+            ClientPolicy policy = new ClientPolicy();
+            policy.timeout = 5000;
+            policy.failIfNotConnected = false;
+            AerospikeClient rawClient = new AerospikeClient(policy, aerospikeHost, aerospikePort);
+            aerospikeClient = TracedAerospikeClient.wrap(rawClient, aerospikeNamespace);
+            logger.info("Aerospike client connected to {}:{}", aerospikeHost, aerospikePort);
+        } catch (Exception e) {
+            logger.warn("Aerospike not available — cache endpoints will return errors: {}", e.getMessage());
+        }
+
         // Create traced router for automatic HTTP server span creation
         Router router = TracedRouter.create(vertx);
 
@@ -89,6 +151,18 @@ public class MainVerticle extends AbstractVerticle {
         // External public API calls — demonstrates outbound tracing to third-party services
         router.get("/v1/external/joke").handler(this::handleExternalJoke);
         router.get("/v1/external/post/:id").handler(this::handleExternalPost);
+
+        // Kafka endpoints — demonstrates KafkaTracing for producer/consumer spans
+        router.post("/v1/kafka/produce").handler(this::handleKafkaProduce);
+        router.post("/v1/kafka/produce-batch").handler(this::handleKafkaProduceBatch);
+
+        // Aerospike endpoints — demonstrates TracedAerospikeClient for cache spans
+        router.post("/v1/cache/:key").handler(this::handleCachePut);
+        router.get("/v1/cache/:key").handler(this::handleCacheGet);
+        router.delete("/v1/cache/:key").handler(this::handleCacheDelete);
+
+        // Complex multi-system endpoint — DB + Aerospike + Kafka + outbound HTTP
+        router.get("/v1/portfolio-full/:userId").handler(this::handleFullPortfolio);
 
         int port = Integer.parseInt(getEnvOrDefault("APP_PORT", "8080"));
 
@@ -305,6 +379,287 @@ public class MainVerticle extends AbstractVerticle {
                                             .put("post", post)
                                             .encode());
                         },
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    // ---- Kafka Handlers ----
+
+    /**
+     * Produce a single message to Kafka. Demonstrates Kafka producer tracing.
+     */
+    private void handleKafkaProduce(RoutingContext ctx) {
+        JsonObject body = ctx.getBodyAsJson();
+        String key = body != null ? body.getString("key", "default") : "default";
+        String value = body != null ? body.getString("value", "{}") : "{}";
+
+        logger.info("Producing to Kafka topic '{}': key={}", kafkaTopic, key);
+
+        KafkaProducerRecord<String, String> record =
+                KafkaProducerRecord.create(kafkaTopic, key, value);
+
+        kafkaProducer.rxSend(record)
+                .subscribe(
+                        metadata -> ctx.response()
+                                .putHeader("content-type", "application/json")
+                                .end(new JsonObject()
+                                        .put("status", "produced")
+                                        .put("topic", kafkaTopic)
+                                        .put("partition", metadata.getPartition())
+                                        .put("offset", metadata.getOffset())
+                                        .encode()),
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    /**
+     * Produce multiple messages to Kafka. Creates multiple producer spans.
+     */
+    private void handleKafkaProduceBatch(RoutingContext ctx) {
+        JsonObject body = ctx.getBodyAsJson();
+        int count = body != null ? body.getInteger("count", 5) : 5;
+        String prefix = body != null ? body.getString("prefix", "event") : "event";
+
+        logger.info("Producing {} messages to Kafka topic '{}'", count, kafkaTopic);
+
+        io.reactivex.Observable.range(1, count)
+                .flatMapSingle(i -> {
+                    JsonObject event = new JsonObject()
+                            .put("type", prefix)
+                            .put("index", i)
+                            .put("timestamp", System.currentTimeMillis());
+                    KafkaProducerRecord<String, String> record =
+                            KafkaProducerRecord.create(kafkaTopic, prefix + "-" + i, event.encode());
+                    return kafkaProducer.rxSend(record);
+                })
+                .toList()
+                .subscribe(
+                        results -> ctx.response()
+                                .putHeader("content-type", "application/json")
+                                .end(new JsonObject()
+                                        .put("status", "produced")
+                                        .put("count", results.size())
+                                        .put("topic", kafkaTopic)
+                                        .encode()),
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    // ---- Aerospike Cache Handlers ----
+
+    /**
+     * Put a value into Aerospike cache. Demonstrates TracedAerospikeClient PUT span.
+     */
+    private void handleCachePut(RoutingContext ctx) {
+        String cacheKey = ctx.pathParam("key");
+        JsonObject body = ctx.getBodyAsJson();
+        if (body == null) {
+            ctx.response().setStatusCode(400)
+                    .end(new JsonObject().put("error", "Invalid JSON body").encode());
+            return;
+        }
+
+        if (aerospikeClient == null) {
+            ctx.response().setStatusCode(503)
+                    .end(new JsonObject().put("error", "Aerospike not available").encode());
+            return;
+        }
+
+        vertx.<String>rxExecuteBlocking(promise -> {
+            try {
+                Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
+                Bin valueBin = new Bin("data", body.encode());
+                Bin timestampBin = new Bin("updated", System.currentTimeMillis());
+                aerospikeClient.put(null, asKey, valueBin, timestampBin);
+                promise.complete("ok");
+            } catch (Exception e) {
+                promise.fail(e);
+            }
+        }).toSingle()
+                .subscribe(
+                        v -> ctx.response()
+                                .putHeader("content-type", "application/json")
+                                .end(new JsonObject()
+                                        .put("status", "cached")
+                                        .put("key", cacheKey)
+                                        .encode()),
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    /**
+     * Get a value from Aerospike cache. Demonstrates TracedAerospikeClient GET span.
+     */
+    private void handleCacheGet(RoutingContext ctx) {
+        String cacheKey = ctx.pathParam("key");
+
+        if (aerospikeClient == null) {
+            ctx.response().setStatusCode(503)
+                    .end(new JsonObject().put("error", "Aerospike not available").encode());
+            return;
+        }
+
+        vertx.<JsonObject>rxExecuteBlocking(promise -> {
+            try {
+                Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
+                Record record = aerospikeClient.get(null, asKey);
+                if (record != null) {
+                    String data = record.getString("data");
+                    promise.complete(new JsonObject()
+                            .put("key", cacheKey)
+                            .put("data", new JsonObject(data))
+                            .put("generation", record.generation)
+                            .put("expiration", record.expiration));
+                } else {
+                    promise.complete(new JsonObject().put("_notFound", true));
+                }
+            } catch (Exception e) {
+                promise.fail(e);
+            }
+        }).toSingle()
+                .subscribe(
+                        result -> {
+                            if (!result.containsKey("_notFound")) {
+                                ctx.response()
+                                        .putHeader("content-type", "application/json")
+                                        .end(result.encode());
+                            } else {
+                                ctx.response().setStatusCode(404)
+                                        .end(new JsonObject().put("error", "Key not found").encode());
+                            }
+                        },
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    /**
+     * Delete a value from Aerospike cache. Demonstrates TracedAerospikeClient DELETE span.
+     */
+    private void handleCacheDelete(RoutingContext ctx) {
+        String cacheKey = ctx.pathParam("key");
+
+        if (aerospikeClient == null) {
+            ctx.response().setStatusCode(503)
+                    .end(new JsonObject().put("error", "Aerospike not available").encode());
+            return;
+        }
+
+        vertx.<Boolean>rxExecuteBlocking(promise -> {
+            try {
+                Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
+                boolean deleted = aerospikeClient.delete(null, asKey);
+                promise.complete(deleted);
+            } catch (Exception e) {
+                promise.fail(e);
+            }
+        }).toSingle()
+                .subscribe(
+                        deleted -> ctx.response()
+                                .putHeader("content-type", "application/json")
+                                .end(new JsonObject()
+                                        .put("status", deleted ? "deleted" : "not_found")
+                                        .put("key", cacheKey)
+                                        .encode()),
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    // ---- Complex Multi-System Handler ----
+
+    /**
+     * Full portfolio endpoint: DB query + Aerospike cache + outbound HTTP pricing + Kafka event.
+     * Produces a rich trace spanning SQL, Aerospike, HTTP CLIENT, and Kafka PRODUCER spans.
+     */
+    private void handleFullPortfolio(RoutingContext ctx) {
+        String userId = ctx.pathParam("userId");
+        logger.info("Full portfolio for user: {} (DB + Cache + HTTP + Kafka)", userId);
+
+        holdingService.getHoldingsByUserId(userId)
+                .flatMapObservable(holdings -> io.reactivex.Observable.fromIterable(holdings))
+                .flatMapSingle(holding -> {
+                    // Check Aerospike cache first, fall back to pricing service
+                    String cacheKey = "price:" + holding.getSymbol();
+                    return vertx.<JsonObject>rxExecuteBlocking(promise -> {
+                        try {
+                            if (aerospikeClient != null) {
+                                Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
+                                Record cached = aerospikeClient.get(null, asKey);
+                                if (cached != null) {
+                                    promise.complete(new JsonObject(cached.getString("data"))
+                                            .put("source", "cache"));
+                                    return;
+                                }
+                            }
+                            promise.complete(new JsonObject().put("_miss", true));
+                        } catch (Exception e) {
+                            promise.complete(new JsonObject().put("_miss", true));
+                        }
+                    }).toSingle()
+                            .flatMap(cached -> {
+                                if (!cached.containsKey("_miss")) {
+                                    return Single.just(cached);
+                                }
+                                // Cache miss — call pricing service via TracedWebClient
+                                return tracedWebClient
+                                        .getAbs(pricingServiceUrl + "/v1/price/" + holding.getSymbol())
+                                        .rxSend()
+                                        .map(response -> {
+                                            JsonObject priceData = response.bodyAsJsonObject();
+                                            // Cache the price in Aerospike
+                                            if (aerospikeClient != null) {
+                                                try {
+                                                    Key asKey = new Key(aerospikeNamespace, "cache", cacheKey);
+                                                    Bin valueBin = new Bin("data", priceData.encode());
+                                                    aerospikeClient.put(null, asKey, valueBin);
+                                                } catch (Exception e) {
+                                                    logger.warn("Failed to cache price: {}", e.getMessage());
+                                                }
+                                            }
+                                            return priceData.put("source", "api");
+                                        });
+                            })
+                            .map(priceData -> holding.toJson()
+                                    .put("currentPrice", priceData.getDouble("price", 0.0))
+                                    .put("totalValue", holding.getQuantity() * priceData.getDouble("price", 0.0))
+                                    .put("priceSource", priceData.getString("source", "unknown")))
+                            .onErrorReturnItem(holding.toJson()
+                                    .put("currentPrice", 0.0)
+                                    .put("totalValue", 0.0)
+                                    .put("priceError", "Unable to fetch price"));
+                })
+                .toList()
+                .flatMap(portfolio -> {
+                    double total = 0;
+                    JsonArray holdingsArray = new JsonArray();
+                    for (Object item : portfolio) {
+                        JsonObject h = (JsonObject) item;
+                        holdingsArray.add(h);
+                        total += h.getDouble("totalValue", 0.0);
+                    }
+
+                    // Publish portfolio event to Kafka
+                    JsonObject event = new JsonObject()
+                            .put("type", "portfolio_viewed")
+                            .put("userId", userId)
+                            .put("totalValue", total)
+                            .put("holdingCount", portfolio.size())
+                            .put("timestamp", System.currentTimeMillis());
+
+                    KafkaProducerRecord<String, String> record =
+                            KafkaProducerRecord.create(kafkaTopic, userId, event.encode());
+
+                    double finalTotal = total;
+                    return kafkaProducer.rxSend(record)
+                            .map(metadata -> new JsonObject()
+                                    .put("userId", userId)
+                                    .put("holdings", holdingsArray)
+                                    .put("totalPortfolioValue", finalTotal)
+                                    .put("kafkaOffset", metadata.getOffset()));
+                })
+                .subscribe(
+                        result -> ctx.response()
+                                .putHeader("content-type", "application/json")
+                                .end(result.encode()),
                         error -> handleError(ctx, error)
                 );
     }
