@@ -1,0 +1,28 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Maven
+target/
+META-INF/
+*.jar
+lib/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
