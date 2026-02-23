@@ -1,6 +1,6 @@
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.144.0
+    image: otel/opentelemetry-collector-contrib:0.128.0
     container_name: otel-collector-atlas
     command: ["--config=/etc/otel/config.yaml", "--feature-gates=transform.flatten.logs"]
     environment:
