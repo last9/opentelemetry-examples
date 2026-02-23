@@ -2,7 +2,7 @@ receivers:
   # Filelog receiver to read logs from Ruby application
   # Detailed configuration: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver
   filelog:
-    include: [/Users/mukta/workspace/opentelemetry-examples/ruby/file-logs/logs/*.log]
+    include: [/path/to/opentelemetry-examples/ruby/file-logs/logs/*.log]
     include_file_path: true
     include_file_name: true
     retry_on_failure:
@@ -37,11 +37,9 @@ processors:
 exporters:
   # OTLP exporter - replace with your observability backend endpoint
   otlp:
-    endpoint: "<your endpoint>"
+    endpoint: "<YOUR_OTEL_ENDPOINT>"
     headers:
-      "Authorization": "<auth>"
-    tls:
-      insecure_skip_verify: true
+      "Authorization": "Basic <YOUR_AUTH_TOKEN>"
 
   # Debug exporter to see logs in console
   debug:
@@ -52,4 +50,5 @@ service:
     logs:
       receivers: [filelog]
       processors: [batch, resourcedetection/system]
-      exporters: [otlp, debug]
+      exporters: [debug]
+      # To send to your backend, add: exporters: [otlp, debug]
