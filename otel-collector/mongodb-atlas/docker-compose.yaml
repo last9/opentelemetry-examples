@@ -1,0 +1,27 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0
+    container_name: otel-collector-atlas
+    command: ["--config=/etc/otel/config.yaml", "--feature-gates=transform.flatten.logs"]
+    environment:
+      - MONGODB_ATLAS_PUBLIC_KEY=${MONGODB_ATLAS_PUBLIC_KEY}
+      - MONGODB_ATLAS_PRIVATE_KEY=${MONGODB_ATLAS_PRIVATE_KEY}
+      - MONGODB_ATLAS_PROJECT_NAME=${MONGODB_ATLAS_PROJECT_NAME}
+      - MONGODB_ATLAS_CLUSTER_NAME=${MONGODB_ATLAS_CLUSTER_NAME}
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "13135:13133"
+
+  slow-query-generator:
+    image: mongo:7.0
+    container_name: atlas-slow-query-generator
+    profiles: ["generate"]
+    environment:
+      - MONGODB_ATLAS_URI=${MONGODB_ATLAS_URI}
+    volumes:
+      - ./generate-slow-queries.js:/scripts/generate-slow-queries.js:ro
+    entrypoint:
+      - mongosh
+      - "${MONGODB_ATLAS_URI}"
+      - /scripts/generate-slow-queries.js
