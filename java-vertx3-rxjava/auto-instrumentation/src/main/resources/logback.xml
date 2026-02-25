@@ -24,6 +24,8 @@
     <logger name="io.netty" level="WARN"/>
     <logger name="org.postgresql" level="WARN"/>
     <logger name="com.zaxxer.hikari" level="WARN"/>
+    <logger name="org.apache.kafka" level="WARN"/>
+    <logger name="com.mchange" level="WARN"/>
 
     <!-- OpenTelemetry SDK logging -->
     <logger name="io.opentelemetry" level="WARN"/>

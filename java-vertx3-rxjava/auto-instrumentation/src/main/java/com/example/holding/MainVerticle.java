@@ -2,7 +2,6 @@ package com.example.holding;
 
 import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.Bin;
-import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.policy.ClientPolicy;
@@ -10,13 +9,18 @@ import com.example.holding.model.Holding;
 import com.example.holding.repository.HoldingRepository;
 import com.example.holding.service.HoldingService;
 import io.last9.tracing.otel.v3.ClientTracing;
+import io.last9.tracing.otel.v3.KafkaTracing;
 import io.last9.tracing.otel.v3.TracedAerospikeClient;
-import io.last9.tracing.otel.v3.TracedKafkaConsumer;
 import io.last9.tracing.otel.v3.TracedKafkaProducer;
+import io.last9.tracing.otel.v3.TracedMySQLClient;
 import io.last9.tracing.otel.v3.TracedRouter;
 import io.last9.tracing.otel.v3.TracedSQLClient;
 import io.last9.tracing.otel.v3.TracedVertx;
 import io.last9.tracing.otel.v3.TracedWebClient;
+import io.vertx.reactivex.mysqlclient.MySQLPool;
+import io.vertx.mysqlclient.MySQLConnectOptions;
+import io.vertx.sqlclient.PoolOptions;
+import io.vertx.reactivex.kafka.client.consumer.KafkaConsumer;
 import io.reactivex.Completable;
 import io.reactivex.Single;
 import io.vertx.core.json.JsonArray;
@@ -29,6 +33,8 @@ import io.vertx.reactivex.ext.web.RoutingContext;
 import io.vertx.reactivex.ext.web.client.WebClient;
 import io.vertx.reactivex.kafka.client.producer.KafkaProducer;
 import io.vertx.reactivex.kafka.client.producer.KafkaProducerRecord;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +51,7 @@ import java.util.Map;
  * - TracedWebClient:       drop-in WebClient with automatic CLIENT spans + traceparent
  * - ClientTracing:         manual traceparent injection for outbound WebClient requests
  * - TracedKafkaProducer:   automatic PRODUCER spans for Kafka sends + header propagation
- * - TracedKafkaConsumer:   automatic CONSUMER spans for Kafka batch handler
+ * - KafkaTracing.setupConsumer(): wire CONSUMER + ERROR spans on an existing KafkaConsumer
  * - TracedAerospikeClient: automatic CLIENT spans for Aerospike operations
  * - TracedVertx:           OTel context propagation to worker threads
  */
@@ -59,8 +65,9 @@ public class MainVerticle extends AbstractVerticle {
     private String pricingServiceUrl;
     private TracedKafkaProducer<String, String> tracedKafkaProducer;
     private String kafkaTopic;
-    private IAerospikeClient aerospikeClient;
+    private TracedAerospikeClient aerospikeClient;
     private String aerospikeNamespace;
+    private TracedMySQLClient mysqlClient;
 
     @Override
     public Completable rxStart() {
@@ -101,8 +108,9 @@ public class MainVerticle extends AbstractVerticle {
         kafkaConfig.put("acks", "1");
         tracedKafkaProducer = TracedKafkaProducer.wrap(KafkaProducer.create(vertx, kafkaConfig));
 
-        // Initialize Kafka consumer with TracedKafkaConsumer — automatic CONSUMER spans,
-        // subscription, and polling setup in one call
+        // Initialize Kafka consumer using KafkaTracing.setupConsumer() — wires batch handler,
+        // exception handler (ERROR spans for broker/auth/deserialization errors), no-op per-record
+        // handler (required by Vert.x to start polling), and subscribe — all in one call.
         String consumerGroup = "holding-service-consumer";
         Map<String, String> consumerConfig = new HashMap<>();
         consumerConfig.put("bootstrap.servers", getEnvOrDefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"));
@@ -112,10 +120,23 @@ public class MainVerticle extends AbstractVerticle {
         consumerConfig.put("auto.offset.reset", "earliest");
         consumerConfig.put("enable.auto.commit", "true");
 
-        TracedKafkaConsumer.create(vertx, consumerConfig, kafkaTopic, consumerGroup, records -> {
+        KafkaConsumer<String, String> consumer = KafkaConsumer.create(vertx, consumerConfig);
+        KafkaTracing.setupConsumer(consumer, kafkaTopic, consumerGroup, records -> {
             logger.info("Consumed batch of {} records from topic '{}'", records.size(), kafkaTopic);
             for (int i = 0; i < records.size(); i++) {
-                logger.info("  Record: key={}, value={}", records.recordAt(i).key(), records.recordAt(i).value());
+                var rec = records.recordAt(i);
+                if (rec.value() == null) {
+                    // Tombstone record — value is null, indicates deletion
+                    logger.info("  Tombstone record: key={}", rec.key());
+                } else if (rec.value() != null && rec.value().startsWith("__poison__")) {
+                    // Poison-pill record — deliberately throw to demonstrate exception recording
+                    // on the CONSUMER span. KafkaTracing.tracedBatchHandler catches this and
+                    // calls span.recordException() + span.setStatus(ERROR).
+                    throw new RuntimeException("Poison-pill message detected: key=" + rec.key()
+                            + ", value=" + rec.value());
+                } else {
+                    logger.info("  Record: key={}, value={}", rec.key(), rec.value());
+                }
             }
 
             // Process the batch: cache in Aerospike + outbound HTTP enrichment
@@ -128,7 +149,7 @@ public class MainVerticle extends AbstractVerticle {
                 if (aerospikeClient != null) {
                     TracedVertx.<String>rxExecuteBlocking(vertx, promise -> {
                         Key asKey = new Key(aerospikeNamespace, "events", "evt:" + lastKey);
-                        aerospikeClient.put(null, asKey, new Bin("data", lastValue),
+                        aerospikeClient.put(null, asKey, new Bin("data", lastValue != null ? lastValue : ""),
                                 new Bin("consumed_at", System.currentTimeMillis()));
                         logger.info("Cached consumed event: evt:{}", lastKey);
                         promise.complete("ok");
@@ -159,6 +180,23 @@ public class MainVerticle extends AbstractVerticle {
             logger.warn("Aerospike not available — cache endpoints will return errors: {}", e.getMessage());
         }
 
+        // Initialize MySQL reactive pool with TracedMySQLClient for automatic CLIENT spans
+        try {
+            MySQLConnectOptions mysqlOptions = new MySQLConnectOptions()
+                    .setHost(getEnvOrDefault("MYSQL_HOST", "localhost"))
+                    .setPort(Integer.parseInt(getEnvOrDefault("MYSQL_PORT", "3306")))
+                    .setDatabase(getEnvOrDefault("MYSQL_DB", "testdb"))
+                    .setUser(getEnvOrDefault("MYSQL_USER", "root"))
+                    .setPassword(getEnvOrDefault("MYSQL_PASSWORD", "root"));
+            PoolOptions poolOptions = new PoolOptions().setMaxSize(5);
+            MySQLPool pool = MySQLPool.pool(vertx, mysqlOptions, poolOptions);
+            mysqlClient = TracedMySQLClient.wrap(pool, getEnvOrDefault("MYSQL_DB", "testdb"));
+            logger.info("MySQL pool created ({}:{})", getEnvOrDefault("MYSQL_HOST", "localhost"),
+                    getEnvOrDefault("MYSQL_PORT", "3306"));
+        } catch (Exception e) {
+            logger.warn("MySQL not available — /v1/mysql/* endpoints will return errors: {}", e.getMessage());
+        }
+
         // Create traced router for automatic HTTP server span creation
         Router router = TracedRouter.create(vertx);
 
@@ -184,14 +222,40 @@ public class MainVerticle extends AbstractVerticle {
         // Kafka endpoints — demonstrates TracedKafkaProducer for automatic PRODUCER spans
         router.post("/v1/kafka/produce").handler(this::handleKafkaProduce);
         router.post("/v1/kafka/produce-batch").handler(this::handleKafkaProduceBatch);
+        // Tombstone endpoint — null-value record signals downstream consumers to delete a key
+        router.delete("/v1/kafka/tombstone/:key").handler(this::handleKafkaTombstone);
 
         // Aerospike endpoints — demonstrates TracedAerospikeClient + TracedVertx
         router.post("/v1/cache/:key").handler(this::handleCachePut);
         router.get("/v1/cache/:key").handler(this::handleCacheGet);
         router.delete("/v1/cache/:key").handler(this::handleCacheDelete);
 
+        // MySQL reactive client endpoints — demonstrates TracedMySQLClient CLIENT spans
+        router.get("/v1/mysql/ping").handler(this::handleMySQLPing);
+        router.get("/v1/mysql/query").handler(this::handleMySQLQuery);
+
         // Complex multi-system endpoint — DB + Aerospike + Kafka + outbound HTTP
         router.get("/v1/portfolio-full/:userId").handler(this::handleFullPortfolio);
+
+        // Exception scenario endpoints — demonstrate exception recording on spans
+        // /v1/error/http   — calls ctx.fail(throwable) so TracedRouter records the exception event
+        // /v1/error/try-catch — catches exception manually and records it via Span.current()
+        router.get("/v1/error/http").handler(this::handleErrorHttp);
+        router.get("/v1/error/try-catch").handler(this::handleErrorTryCatch);
+
+        // Global failure handler — handles ctx.fail(throwable) from any route.
+        // TracedRouter's headersEndHandler fires when this sends the response, picks up
+        // ctx.failure(), and calls span.recordException() so the exception appears in traces.
+        router.route().failureHandler(ctx -> {
+            int status = ctx.statusCode() > 0 ? ctx.statusCode() : 500;
+            Throwable failure = ctx.failure();
+            String message = failure != null ? failure.getMessage() : "Internal Server Error";
+            logger.error("Failure handler: status={}, error={}", status, message, failure);
+            ctx.response()
+                    .setStatusCode(status)
+                    .putHeader("content-type", "application/json")
+                    .end(new JsonObject().put("error", message).encode());
+        });
 
         int port = Integer.parseInt(getEnvOrDefault("APP_PORT", "8080"));
 
@@ -371,7 +435,7 @@ public class MainVerticle extends AbstractVerticle {
     private void handleExternalJoke(RoutingContext ctx) {
         logger.info("Fetching from external API (ClientTracing.inject)");
 
-        ClientTracing.inject(
+        ClientTracing.traced(
                 webClient.getAbs("https://httpbin.org/get")
                         .addQueryParam("source", "holding-service")
         )
@@ -471,6 +535,34 @@ public class MainVerticle extends AbstractVerticle {
                                         .put("status", "produced")
                                         .put("count", results.size())
                                         .put("topic", kafkaTopic)
+                                        .encode()),
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    /**
+     * Send a Kafka tombstone (null-value record) for the given key.
+     * Tombstones signal downstream consumers to delete the record associated with that key.
+     * The PRODUCER span sets {@code messaging.kafka.message.tombstone = true}.
+     */
+    private void handleKafkaTombstone(RoutingContext ctx) {
+        String key = ctx.pathParam("key");
+        logger.info("Sending Kafka tombstone for key '{}' on topic '{}'", key, kafkaTopic);
+
+        // Null value = tombstone — KafkaTracing sets messaging.kafka.message.tombstone = true on the span
+        KafkaProducerRecord<String, String> record =
+                KafkaProducerRecord.create(kafkaTopic, key, null);
+
+        tracedKafkaProducer.rxSend(record)
+                .subscribe(
+                        metadata -> ctx.response()
+                                .putHeader("content-type", "application/json")
+                                .end(new JsonObject()
+                                        .put("status", "tombstone_sent")
+                                        .put("topic", kafkaTopic)
+                                        .put("key", key)
+                                        .put("partition", metadata.getPartition())
+                                        .put("offset", metadata.getOffset())
                                         .encode()),
                         error -> handleError(ctx, error)
                 );
@@ -587,6 +679,75 @@ public class MainVerticle extends AbstractVerticle {
                 );
     }
 
+    // ---- MySQL Handlers ----
+
+    /**
+     * Runs a MySQL ping (SELECT 1) and returns the server time.
+     * TracedMySQLClient produces a CLIENT span for the query.
+     */
+    private void handleMySQLPing(RoutingContext ctx) {
+        if (mysqlClient == null) {
+            ctx.response().setStatusCode(503)
+                    .end(new JsonObject().put("error", "MySQL not available").encode());
+            return;
+        }
+
+        mysqlClient.query("SELECT 1 AS alive, NOW() AS server_time")
+                .subscribe(
+                        rows -> {
+                            io.vertx.reactivex.sqlclient.Row row = rows.iterator().next();
+                            ctx.response()
+                                    .putHeader("content-type", "application/json")
+                                    .end(new JsonObject()
+                                            .put("alive", row.getInteger("alive"))
+                                            .put("server_time", String.valueOf(row.getValue("server_time")))
+                                            .encode());
+                        },
+                        error -> handleError(ctx, error)
+                );
+    }
+
+    /**
+     * Runs an arbitrary MySQL query passed as ?sql=... query param.
+     * Falls back to SHOW TABLES if no query is supplied.
+     * TracedMySQLClient produces a CLIENT span.
+     */
+    private void handleMySQLQuery(RoutingContext ctx) {
+        if (mysqlClient == null) {
+            ctx.response().setStatusCode(503)
+                    .end(new JsonObject().put("error", "MySQL not available").encode());
+            return;
+        }
+
+        String sql = ctx.request().getParam("sql");
+        if (sql == null || sql.isBlank()) {
+            sql = "SHOW TABLES";
+        }
+        String finalSql = sql;
+
+        mysqlClient.query(finalSql)
+                .subscribe(
+                        rows -> {
+                            io.vertx.core.json.JsonArray results = new io.vertx.core.json.JsonArray();
+                            rows.forEach(row -> {
+                                io.vertx.core.json.JsonObject obj = new io.vertx.core.json.JsonObject();
+                                for (int i = 0; i < row.size(); i++) {
+                                    obj.put(String.valueOf(i), String.valueOf(row.getValue(i)));
+                                }
+                                results.add(obj);
+                            });
+                            ctx.response()
+                                    .putHeader("content-type", "application/json")
+                                    .end(new JsonObject()
+                                            .put("sql", finalSql)
+                                            .put("rows", results.size())
+                                            .put("results", results)
+                                            .encode());
+                        },
+                        error -> handleError(ctx, error)
+                );
+    }
+
     // ---- Complex Multi-System Handler ----
 
     /**
@@ -683,12 +844,60 @@ public class MainVerticle extends AbstractVerticle {
                 );
     }
 
+    /**
+     * Intentional exception via ctx.fail(throwable).
+     * TracedRouter's headersEndHandler picks up ctx.failure() and calls span.recordException(),
+     * so the exception appears as a span event with exception.type, exception.message,
+     * and exception.stacktrace in the observability platform.
+     */
+    private void handleErrorHttp(RoutingContext ctx) {
+        String type = ctx.request().getParam("type");
+        if (type == null) type = "runtime";
+        try {
+            if ("npe".equals(type)) {
+                String s = null;
+                s.length(); // deliberate NullPointerException
+            } else if ("illegal".equals(type)) {
+                throw new IllegalArgumentException("Simulated illegal argument: type=" + type);
+            } else {
+                throw new RuntimeException("Simulated runtime error for exception tracing demo");
+            }
+        } catch (Exception e) {
+            logger.error("Simulated error (will appear as span exception event)", e);
+            ctx.fail(e); // ← key: ctx.fail() sets ctx.failure(), picked up by TracedRouter
+        }
+    }
+
+    /**
+     * Manual try-catch with Span.current().recordException().
+     * Shows how application code can record exceptions on the active span
+     * even when not using ctx.fail() — e.g. inside business logic that
+     * catches and recovers from errors but still wants observability.
+     */
+    private void handleErrorTryCatch(RoutingContext ctx) {
+        Span span = Span.current();
+        try {
+            String divisor = ctx.request().getParam("divisor");
+        if (divisor == null) divisor = "0";
+            int result = 100 / Integer.parseInt(divisor); // ArithmeticException when divisor=0
+            ctx.response()
+                    .putHeader("content-type", "application/json")
+                    .end(new JsonObject().put("result", result).encode());
+        } catch (Exception e) {
+            logger.error("Caught exception — recording on span manually", e);
+            // Manually record on the active SERVER span so it shows up in traces
+            span.recordException(e);
+            span.setStatus(StatusCode.ERROR, e.getMessage());
+            ctx.response()
+                    .setStatusCode(500)
+                    .putHeader("content-type", "application/json")
+                    .end(new JsonObject().put("error", e.getMessage()).encode());
+        }
+    }
+
     private void handleError(RoutingContext ctx, Throwable error) {
         logger.error("Request failed", error);
-        ctx.response()
-                .setStatusCode(500)
-                .putHeader("content-type", "application/json")
-                .end(new JsonObject().put("error", error.getMessage()).encode());
+        ctx.fail(500, error);
     }
 
     private String getEnvOrDefault(String name, String defaultValue) {
