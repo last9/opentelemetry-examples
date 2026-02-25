@@ -21,16 +21,15 @@
         <vertx.version>3.9.16</vertx.version>
         <rxjava2.version>2.2.21</rxjava2.version>
 
-        <!-- OpenTelemetry -->
+        <!-- OpenTelemetry API version — must match the version bundled in the fat JAR -->
         <otel.version>1.35.0</otel.version>
-        <otel.instrumentation.version>2.4.0</otel.instrumentation.version>
 
         <!-- Logging -->
         <logback.version>1.2.13</logback.version>
         <slf4j.version>1.7.36</slf4j.version>
 
         <!-- Auto-instrumentation JAR -->
-        <vertx3.otel.autoconfigure.version>1.2.0</vertx3.otel.autoconfigure.version>
+        <vertx3.otel.autoconfigure.version>1.3.0</vertx3.otel.autoconfigure.version>
 
         <!-- Main verticle -->
         <main.verticle>com.example.holding.MainVerticle</main.verticle>
@@ -79,6 +78,13 @@
             <version>${vertx.version}</version>
         </dependency>
 
+        <!-- Vert.x 3 MySQL Reactive Client (for TracedMySQLClient) -->
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-mysql-client</artifactId>
+            <version>${vertx.version}</version>
+        </dependency>
+
         <!-- PostgreSQL JDBC Driver -->
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -93,45 +99,54 @@
             <version>4.0.3</version>
         </dependency>
 
-        <!-- Last9 Vert.x OpenTelemetry Core (SDK setup, MDC filter) -->
-        <dependency>
-            <groupId>io.last9</groupId>
-            <artifactId>vertx-otel-core</artifactId>
-            <version>${vertx3.otel.autoconfigure.version}</version>
-        </dependency>
-
-        <!-- Last9 Vert.x 3 RxJava2 OpenTelemetry Auto-Configure -->
+        <!-- Last9 Vert.x 3 RxJava2 OpenTelemetry Auto-Configure
+             This is a self-contained fat JAR: OTel SDK, exporters, semconv,
+             instrumentation libs, and cloud resource detectors are all shaded
+             inside. Exclude their Maven coordinates so Maven does not pull them
+             onto the classpath again (which would cause duplicate
+             HttpSenderProvider errors). -->
         <dependency>
             <groupId>io.last9</groupId>
             <artifactId>vertx3-rxjava2-otel-autoconfigure</artifactId>
             <version>${vertx3.otel.autoconfigure.version}</version>
+            <exclusions>
+                <!-- Shaded inside the fat JAR — must not appear on classpath -->
+                <exclusion>
+                    <groupId>io.last9</groupId>
+                    <artifactId>vertx-otel-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry.instrumentation</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry.semconv</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry.contrib</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.cloud.opentelemetry</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
-        <!-- OpenTelemetry API -->
+        <!-- OpenTelemetry API — compile-time access to Span, StatusCode, etc.
+             The SDK, exporters, semconv, and instrumentation libs are all
+             bundled inside the vertx3-rxjava2-otel-autoconfigure fat JAR.
+             Do NOT add opentelemetry-sdk, opentelemetry-exporter-otlp, or any
+             opentelemetry-instrumentation/* deps here — they would conflict with
+             the shaded copies and cause duplicate HttpSenderProvider errors. -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-api</artifactId>
-            <version>${otel.version}</version>
-        </dependency>
-
-        <!-- OpenTelemetry SDK -->
-        <dependency>
-            <groupId>io.opentelemetry</groupId>
-            <artifactId>opentelemetry-sdk</artifactId>
-            <version>${otel.version}</version>
-        </dependency>
-
-        <!-- OpenTelemetry SDK Auto-configure -->
-        <dependency>
-            <groupId>io.opentelemetry</groupId>
-            <artifactId>opentelemetry-sdk-extension-autoconfigure</artifactId>
-            <version>${otel.version}</version>
-        </dependency>
-
-        <!-- OpenTelemetry OTLP Exporter -->
-        <dependency>
-            <groupId>io.opentelemetry</groupId>
-            <artifactId>opentelemetry-exporter-otlp</artifactId>
             <version>${otel.version}</version>
         </dependency>
 
@@ -145,27 +160,6 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
-        </dependency>
-
-        <!-- OpenTelemetry Logback Appender (required by vertx-otel-core) -->
-        <dependency>
-            <groupId>io.opentelemetry.instrumentation</groupId>
-            <artifactId>opentelemetry-logback-appender-1.0</artifactId>
-            <version>${otel.instrumentation.version}-alpha</version>
-        </dependency>
-
-        <!-- OpenTelemetry Logback MDC (trace_id/span_id in logs) -->
-        <dependency>
-            <groupId>io.opentelemetry.instrumentation</groupId>
-            <artifactId>opentelemetry-logback-mdc-1.0</artifactId>
-            <version>${otel.instrumentation.version}-alpha</version>
-        </dependency>
-
-        <!-- OpenTelemetry Semantic Conventions (required by v3 autoconfig) -->
-        <dependency>
-            <groupId>io.opentelemetry.semconv</groupId>
-            <artifactId>opentelemetry-semconv</artifactId>
-            <version>1.23.1-alpha</version>
         </dependency>
 
         <!-- Aerospike Client -->

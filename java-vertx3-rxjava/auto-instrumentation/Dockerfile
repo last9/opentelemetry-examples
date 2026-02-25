@@ -11,14 +11,14 @@ RUN mvn install:install-file \
     -Dfile=/tmp/lib/vertx-otel-core.jar \
     -DgroupId=io.last9 \
     -DartifactId=vertx-otel-core \
-    -Dversion=1.2.0 \
+    -Dversion=1.3.0 \
     -Dpackaging=jar \
     -DgeneratePom=true && \
     mvn install:install-file \
     -Dfile=/tmp/lib/vertx3-rxjava2-otel-autoconfigure.jar \
     -DgroupId=io.last9 \
     -DartifactId=vertx3-rxjava2-otel-autoconfigure \
-    -Dversion=1.2.0 \
+    -Dversion=1.3.0 \
     -Dpackaging=jar \
     -DgeneratePom=true
 

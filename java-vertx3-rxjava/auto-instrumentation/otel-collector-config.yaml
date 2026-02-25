@@ -39,3 +39,8 @@ service:
       receivers: [otlp]
       processors: [batch, resource]
       exporters: [debug, otlphttp/last9]
+
+    metrics:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [debug, otlphttp/last9]
