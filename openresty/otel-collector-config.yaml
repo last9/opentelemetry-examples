@@ -32,24 +32,46 @@ receivers:
     start_at: beginning
     operators:
       - type: json_parser
+      # OTel HTTP semconv v1.23+
       - type: move
         from: attributes.request_method
-        to: attributes["http.method"]
+        to: attributes["http.request.method"]
       - type: move
         from: attributes.request_uri
-        to: attributes["http.target"]
+        to: attributes["url.path"]
+      - type: move
+        from: attributes.server_protocol
+        to: attributes["network.protocol.version"]
       - type: move
         from: attributes.status
-        to: attributes["http.status_code"]
+        to: attributes["http.response.status_code"]
+      - type: move
+        from: attributes.request_length
+        to: attributes["http.request.body.size"]
+      - type: move
+        from: attributes.body_bytes_sent
+        to: attributes["http.response.body.size"]
       - type: move
         from: attributes.request_time
-        to: attributes["http.request_duration"]
+        to: attributes["http.request.duration"]
       - type: move
         from: attributes.upstream_response_time
         to: attributes["http.upstream_response_time"]
       - type: move
+        from: attributes.upstream_connect_time
+        to: attributes["upstream.connect_time_ms"]
+      - type: move
         from: attributes.upstream_addr
-        to: attributes["net.peer.name"]
+        to: attributes["server.address"]
+      - type: move
+        from: attributes.upstream_status
+        to: attributes["http.upstream_status"]
+      - type: move
+        from: attributes.upstream_cache_status
+        to: attributes["http.cache_status"]
+      - type: move
+        from: attributes.remote_addr
+        to: attributes["client.address"]
       - type: move
         from: attributes.trace_id
         to: attributes["trace_id"]
@@ -119,28 +141,25 @@ exporters:
   debug:
     verbosity: detailed
 
-  # Uncomment and fill in to send data to Last9.
-  # Replace <last9_otlp_endpoint> with your endpoint (e.g. https://otlp.last9.io:443)
-  # and add otlp/last9 to the exporters list in each pipeline below.
-  #
-  # otlp/last9:
-  #   endpoint: <last9_otlp_endpoint>
-  #   headers:
-  #     Authorization: "Basic <last9_api_key>"
+  # Credentials come from environment — see .env.example (never commit real values)
+  otlp/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_OTLP_AUTH}
 
 service:
   pipelines:
     traces:
       receivers:  [otlp]
       processors: [memory_limiter, batch]
-      exporters:  [debug]
+      exporters:  [debug, otlp/last9]
 
     metrics:
       receivers:  [prometheus/lua, nginx]
       processors: [memory_limiter, resourcedetection/system, resource, batch]
-      exporters:  [debug]
+      exporters:  [debug, otlp/last9]
 
     logs:
       receivers:  [filelog/access, filelog/error]
       processors: [memory_limiter, resource, batch]
-      exporters:  [debug]
+      exporters:  [debug, otlp/last9]

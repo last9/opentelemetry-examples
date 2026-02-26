@@ -28,6 +28,9 @@ services:
     image: otel/opentelemetry-collector-contrib:0.144.0
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
+    environment:
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_OTLP_AUTH=${LAST9_OTLP_AUTH}
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
       - nginx_logs:/var/log/nginx:ro
