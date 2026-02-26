@@ -1,0 +1,11 @@
+services:
+  play-reporting-collector:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      # Mount the service account JSON at the path referenced by
+      # GOOGLE_APPLICATION_CREDENTIALS — the file is never baked into the image.
+      # Adjust the host path to wherever you stored the file locally.
+      - ${SERVICE_ACCOUNT_JSON_PATH:-/tmp/service-account.json}:/run/secrets/service-account.json:ro
+    restart: unless-stopped
