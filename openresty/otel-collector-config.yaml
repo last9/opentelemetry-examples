@@ -32,9 +32,6 @@ receivers:
     start_at: beginning
     operators:
       - type: json_parser
-        timestamp:
-          parse_from: attributes.timestamp
-          layout: "2006-01-02T15:04:05-07:00"
       - type: move
         from: attributes.request_method
         to: attributes["http.method"]
@@ -73,7 +70,8 @@ receivers:
         regex: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#(?P<tid>\d+): (?P<message>.*)'
         timestamp:
           parse_from: attributes.timestamp
-          layout: "2006/01/02 15:04:05"
+          layout: "%Y/%m/%d %H:%M:%S"
+          layout_type: strptime
       - type: severity_parser
         parse_from: attributes.level
         mapping:
@@ -121,24 +119,28 @@ exporters:
   debug:
     verbosity: detailed
 
-  otlp/last9:
-    endpoint: <last9_otlp_endpoint>
-    headers:
-      Authorization: "Basic <last9_api_key>"
+  # Uncomment and fill in to send data to Last9.
+  # Replace <last9_otlp_endpoint> with your endpoint (e.g. https://otlp.last9.io:443)
+  # and add otlp/last9 to the exporters list in each pipeline below.
+  #
+  # otlp/last9:
+  #   endpoint: <last9_otlp_endpoint>
+  #   headers:
+  #     Authorization: "Basic <last9_api_key>"
 
 service:
   pipelines:
     traces:
       receivers:  [otlp]
       processors: [memory_limiter, batch]
-      exporters:  [debug, otlp/last9]
+      exporters:  [debug]
 
     metrics:
       receivers:  [prometheus/lua, nginx]
       processors: [memory_limiter, resourcedetection/system, resource, batch]
-      exporters:  [debug, otlp/last9]
+      exporters:  [debug]
 
     logs:
       receivers:  [filelog/access, filelog/error]
       processors: [memory_limiter, resource, batch]
-      exporters:  [debug, otlp/last9]
+      exporters:  [debug]

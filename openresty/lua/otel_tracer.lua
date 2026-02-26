@@ -20,6 +20,17 @@ local SERVICE_NAME   = os.getenv("OTEL_SERVICE_NAME")            or "openresty"
 local SERVICE_VER    = os.getenv("OTEL_SERVICE_VERSION")         or "1.0.0"
 local ENVIRONMENT    = os.getenv("DEPLOYMENT_ENVIRONMENT")       or "production"
 
+-- Convert ngx.now() float (seconds) to a nanosecond decimal string suitable
+-- for OTLP uint64 fields. Lua doubles can represent integers exactly up to
+-- 2^53; a Unix timestamp in nanoseconds (~1.77e18) exceeds that, so we split
+-- into whole seconds and the fractional nanosecond portion to avoid scientific
+-- notation from tostring().
+local function ns_string(t)
+    local secs = math.floor(t)
+    local frac_ns = math.floor((t - secs) * 1e9)
+    return string.format("%d%09d", secs, frac_ns)
+end
+
 -- Seed PRNG once per worker (Lua 5.1 math.random)
 math.randomseed(ngx.now() * 1000 + ngx.worker.id())
 
@@ -51,14 +62,14 @@ end
 
 -- Build an OTLP span table (not yet JSON-encoded)
 local function build_span(trace_id, span_id, parent_span_id, name, kind,
-                          start_ns, end_ns, attrs, status_code, events)
+                          start_s, end_s, attrs, status_code, events)
     local span = {
         traceId            = trace_id,
         spanId             = span_id,
         name               = name,
         kind               = kind,
-        startTimeUnixNano  = tostring(math.floor(start_ns)),
-        endTimeUnixNano    = tostring(math.floor(end_ns)),
+        startTimeUnixNano  = ns_string(start_s),
+        endTimeUnixNano    = ns_string(end_s),
         attributes         = attrs or {},
         status             = { code = status_code or 0 },
     }
@@ -145,7 +156,7 @@ function _M.start_span()
         span_id            = span_id,
         parent_span_id     = parent_span_id,
         upstream_span_id   = upstream_span_id,
-        start_ns           = ngx.now() * 1e9,
+        start_t            = ngx.now(),  -- stored in seconds; ns_string() converts on export
         method             = ngx.req.get_method(),
         uri                = ngx.var.request_uri,
         host               = ngx.var.host or "",
@@ -167,7 +178,7 @@ function _M.finish_span()
     local o   = ctx.otel
     if not o then return end
 
-    local end_ns    = ngx.now() * 1e9
+    local end_t     = ngx.now()
     local status    = ngx.status or 0
     local is_error  = status >= 500
 
@@ -200,7 +211,7 @@ function _M.finish_span()
     if is_error then
         events[#events + 1] = {
             name              = "exception",
-            timeUnixNano      = tostring(math.floor(end_ns)),
+            timeUnixNano      = ns_string(end_t),
             attributes        = {
                 { key = "exception.message",
                   value = { stringValue = string.format("HTTP %d from upstream", status) } },
@@ -215,8 +226,8 @@ function _M.finish_span()
         o.parent_span_id,
         string.format("%s %s", o.method, o.uri),
         2,  -- SPAN_KIND_SERVER
-        o.start_ns,
-        end_ns,
+        o.start_t,
+        end_t,
         server_attrs,
         otel_status,
         events
@@ -230,9 +241,9 @@ function _M.finish_span()
         local upstream_addr   = ngx.var.upstream_addr   or ""
         local upstream_status = tonumber(ngx.var.upstream_status) or 0
 
-        -- Approximate upstream start time: end - response_time
-        local upstream_end_ns   = end_ns
-        local upstream_start_ns = end_ns - upstream_rt * 1e9
+        -- Approximate upstream start time: end - response_time (in seconds)
+        local upstream_end_t   = end_t
+        local upstream_start_t = end_t - upstream_rt
 
         local upstream_attrs = {
             { key = "http.method",         value = { stringValue = o.method } },
@@ -248,8 +259,8 @@ function _M.finish_span()
             o.span_id,   -- parent = server span
             string.format("%s %s (upstream)", o.method, o.uri),
             3,  -- SPAN_KIND_CLIENT
-            upstream_start_ns,
-            upstream_end_ns,
+            upstream_start_t,
+            upstream_end_t,
             upstream_attrs,
             upstream_status >= 500 and 2 or 0
         )

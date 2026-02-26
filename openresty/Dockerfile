@@ -1,7 +1,7 @@
 FROM openresty/openresty:1.25.3.1-bullseye-fat
 
-# Install lua-resty-prometheus via OpenResty Package Manager (opm)
-RUN opm get knyar/nginx-lua-prometheus
+# Install Lua dependencies via OpenResty Package Manager (opm)
+RUN opm get knyar/nginx-lua-prometheus ledgetech/lua-resty-http
 
 # Copy nginx configuration
 COPY nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
