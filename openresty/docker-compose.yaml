@@ -1,0 +1,45 @@
+services:
+  openresty:
+    build: .
+    container_name: openresty
+    ports:
+      - "80:80"
+      - "9145:9145"   # Prometheus metrics + nginx_status
+    environment:
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-openresty}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-1.0.0}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT:-production}
+    volumes:
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - otel-collector
+    networks:
+      - monitoring
+
+  # Example upstream application — replace with your own service
+  httpbin:
+    image: kennethreitz/httpbin:latest
+    container_name: httpbin
+    networks:
+      - monitoring
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+      - nginx_logs:/var/log/nginx:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    networks:
+      - monitoring
+
+volumes:
+  nginx_logs:
+
+networks:
+  monitoring:
+    name: monitoring
