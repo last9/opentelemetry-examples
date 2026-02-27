@@ -52,71 +52,80 @@ docker compose up
 
 ## Metrics Exported
 
+All rate metrics have unit `1` (dimensionless ratio, range 0–1). In Last9/Prometheus the metric name gets a `_ratio` suffix. Count metrics use annotation units (`{user}`, `{error}`) and have no suffix.
+
 ### Crash rate (`crashRateMetricSet`)
-| Metric | Description |
-|---|---|
-| `android.vitals.crash_rate` | Daily crash rate |
-| `android.vitals.crash_rate_7d` | 7-day user-weighted crash rate |
-| `android.vitals.crash_rate_28d` | 28-day user-weighted crash rate |
-| `android.vitals.user_perceived_crash_rate` | Foreground crash rate |
-| `android.vitals.user_perceived_crash_rate_7d` | 7-day user-perceived crash rate |
-| `android.vitals.user_perceived_crash_rate_28d` | 28-day user-perceived crash rate |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.crash_rate` | `1` | Daily crash rate |
+| `android.vitals.crash_rate_7d` | `1` | 7-day user-weighted crash rate |
+| `android.vitals.crash_rate_28d` | `1` | 28-day user-weighted crash rate |
+| `android.vitals.user_perceived_crash_rate` | `1` | Foreground crash rate |
+| `android.vitals.user_perceived_crash_rate_7d` | `1` | 7-day user-perceived crash rate |
+| `android.vitals.user_perceived_crash_rate_28d` | `1` | 28-day user-perceived crash rate |
+| `android.vitals.crash_distinct_users` | `{user}` | Distinct users in the crash rate denominator |
 
 ### ANR rate (`anrRateMetricSet`)
-| Metric | Description |
-|---|---|
-| `android.vitals.anr_rate` | Daily ANR rate |
-| `android.vitals.anr_rate_7d` | 7-day user-weighted ANR rate |
-| `android.vitals.anr_rate_28d` | 28-day user-weighted ANR rate |
-| `android.vitals.user_perceived_anr_rate` | Foreground ANR rate |
-| `android.vitals.user_perceived_anr_rate_7d` | 7-day user-perceived ANR rate |
-| `android.vitals.user_perceived_anr_rate_28d` | 28-day user-perceived ANR rate |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.anr_rate` | `1` | Daily ANR rate |
+| `android.vitals.anr_rate_7d` | `1` | 7-day user-weighted ANR rate |
+| `android.vitals.anr_rate_28d` | `1` | 28-day user-weighted ANR rate |
+| `android.vitals.user_perceived_anr_rate` | `1` | Foreground ANR rate |
+| `android.vitals.user_perceived_anr_rate_7d` | `1` | 7-day user-perceived ANR rate |
+| `android.vitals.user_perceived_anr_rate_28d` | `1` | 28-day user-perceived ANR rate |
+| `android.vitals.anr_distinct_users` | `{user}` | Distinct users in the ANR rate denominator |
 
 ### Slow rendering (`slowRenderingRateMetricSet`)
-| Metric | Description |
-|---|---|
-| `android.vitals.slow_rendering_rate_20fps` | Sessions rendering below 20 FPS |
-| `android.vitals.slow_rendering_rate_20fps_7d` | 7-day slow rendering <20 FPS |
-| `android.vitals.slow_rendering_rate_30fps` | Sessions rendering below 30 FPS |
-| `android.vitals.slow_rendering_rate_30fps_7d` | 7-day slow rendering <30 FPS |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.slow_rendering_rate_20fps` | `1` | Sessions rendering below 20 FPS |
+| `android.vitals.slow_rendering_rate_20fps_7d` | `1` | 7-day slow rendering <20 FPS |
+| `android.vitals.slow_rendering_rate_30fps` | `1` | Sessions rendering below 30 FPS |
+| `android.vitals.slow_rendering_rate_30fps_7d` | `1` | 7-day slow rendering <30 FPS |
+| `android.vitals.slow_rendering_distinct_users` | `{user}` | Distinct users in the slow rendering denominator |
 
 ### Slow start (`slowStartRateMetricSet`)
 Broken down by `android.startType` dimension (COLD / WARM / HOT).
 
-| Metric | Description |
-|---|---|
-| `android.vitals.slow_start_rate` | Fraction of slow app starts |
-| `android.vitals.slow_start_rate_7d` | 7-day slow start rate |
-| `android.vitals.slow_start_rate_28d` | 28-day slow start rate |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.slow_start_rate` | `1` | Fraction of slow app starts |
+| `android.vitals.slow_start_rate_7d` | `1` | 7-day slow start rate |
+| `android.vitals.slow_start_rate_28d` | `1` | 28-day slow start rate |
+| `android.vitals.slow_start_distinct_users` | `{user}` | Distinct users in the slow start denominator |
 
 ### Excessive wakeup (`excessiveWakeupRateMetricSet`)
-| Metric | Description |
-|---|---|
-| `android.vitals.excessive_wakeup_rate` | Sessions with >10 AlarmManager wakeups/hour |
-| `android.vitals.excessive_wakeup_rate_7d` | 7-day excessive wakeup rate |
-| `android.vitals.excessive_wakeup_rate_28d` | 28-day excessive wakeup rate |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.excessive_wakeup_rate` | `1` | Sessions with >10 AlarmManager wakeups/hour |
+| `android.vitals.excessive_wakeup_rate_7d` | `1` | 7-day excessive wakeup rate |
+| `android.vitals.excessive_wakeup_rate_28d` | `1` | 28-day excessive wakeup rate |
+| `android.vitals.excessive_wakeup_distinct_users` | `{user}` | Distinct users in the excessive wakeup denominator |
 
 ### Stuck background wakelock (`stuckBackgroundWakelockRateMetricSet`)
-| Metric | Description |
-|---|---|
-| `android.vitals.stuck_background_wakelock_rate` | Sessions with wakelock held >1 hour in background |
-| `android.vitals.stuck_background_wakelock_rate_7d` | 7-day stuck wakelock rate |
-| `android.vitals.stuck_background_wakelock_rate_28d` | 28-day stuck wakelock rate |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.stuck_background_wakelock_rate` | `1` | Sessions with wakelock held >1 hour in background |
+| `android.vitals.stuck_background_wakelock_rate_7d` | `1` | 7-day stuck wakelock rate |
+| `android.vitals.stuck_background_wakelock_rate_28d` | `1` | 28-day stuck wakelock rate |
+| `android.vitals.stuck_wakelock_distinct_users` | `{user}` | Distinct users in the stuck wakelock denominator |
 
 ### Low Memory Kill (`lmkRateMetricSet`)
-| Metric | Description |
-|---|---|
-| `android.vitals.lmk_rate` | App killed by Android OOM killer during active use |
-| `android.vitals.lmk_rate_7d` | 7-day LMK rate |
-| `android.vitals.lmk_rate_28d` | 28-day LMK rate |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.lmk_rate` | `1` | App killed by Android OOM killer during active use |
+| `android.vitals.lmk_rate_7d` | `1` | 7-day LMK rate |
+| `android.vitals.lmk_rate_28d` | `1` | 28-day LMK rate |
+| `android.vitals.lmk_distinct_users` | `{user}` | Distinct users in the LMK denominator |
 
 ### Error counts (`errorCountMetricSet`, hourly)
 Broken down by `android.reportType` dimension (CRASH / ANR).
 
-| Metric | Description |
-|---|---|
-| `android.vitals.error_report_count` | Hourly error report count (leading indicator, ~2–4h lag) |
-| `android.vitals.error_distinct_users` | Distinct users with errors |
+| Metric | Unit | Description |
+|---|---|---|
+| `android.vitals.error_report_count` | `{error}` | Hourly error report count (leading indicator, ~2–4h lag) |
+| `android.vitals.error_distinct_users` | `{user}` | Distinct users with errors |
 
 ### Anomalies
 Google-detected anomalies (metric deviates from 28-day baseline) are exported as
