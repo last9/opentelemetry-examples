@@ -1,0 +1,165 @@
+receivers:
+  # ── Traces ──────────────────────────────────────────────────────────────
+  # Receives OTLP spans exported by otel_tracer.lua
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # ── Metrics ─────────────────────────────────────────────────────────────
+  # Custom Lua metrics from lua-resty-prometheus
+  prometheus/lua:
+    config:
+      scrape_configs:
+        - job_name: openresty_lua
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["openresty:9145"]
+          metrics_path: /metrics
+
+  # Built-in nginx connection metrics via stub_status
+  nginx:
+    endpoint: "http://openresty:9145/nginx_status"
+    collection_interval: 30s
+
+  # ── Logs ────────────────────────────────────────────────────────────────
+  # JSON-formatted access logs (see log_format json_combined in nginx.conf)
+  filelog/access:
+    include:
+      - /var/log/nginx/access.log
+    start_at: beginning
+    operators:
+      - type: json_parser
+      # OTel HTTP semconv v1.23+
+      - type: move
+        from: attributes.request_method
+        to: attributes["http.request.method"]
+      - type: move
+        from: attributes.request_uri
+        to: attributes["url.path"]
+      - type: move
+        from: attributes.server_protocol
+        to: attributes["network.protocol.version"]
+      - type: move
+        from: attributes.status
+        to: attributes["http.response.status_code"]
+      - type: move
+        from: attributes.request_length
+        to: attributes["http.request.body.size"]
+      - type: move
+        from: attributes.body_bytes_sent
+        to: attributes["http.response.body.size"]
+      - type: move
+        from: attributes.request_time
+        to: attributes["http.request.duration"]
+      - type: move
+        from: attributes.upstream_response_time
+        to: attributes["http.upstream_response_time"]
+      - type: move
+        from: attributes.upstream_connect_time
+        to: attributes["upstream.connect_time_ms"]
+      - type: move
+        from: attributes.upstream_addr
+        to: attributes["server.address"]
+      - type: move
+        from: attributes.upstream_status
+        to: attributes["http.upstream_status"]
+      - type: move
+        from: attributes.upstream_cache_status
+        to: attributes["http.cache_status"]
+      - type: move
+        from: attributes.remote_addr
+        to: attributes["client.address"]
+      - type: move
+        from: attributes.trace_id
+        to: attributes["trace_id"]
+      - type: add
+        field: attributes["service.name"]
+        value: "openresty"
+      - type: add
+        field: attributes["log.source"]
+        value: "nginx.access"
+
+  # nginx error logs
+  filelog/error:
+    include:
+      - /var/log/nginx/error.log
+    start_at: beginning
+    operators:
+      - type: regex_parser
+        regex: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#(?P<tid>\d+): (?P<message>.*)'
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: "%Y/%m/%d %H:%M:%S"
+          layout_type: strptime
+      - type: severity_parser
+        parse_from: attributes.level
+        mapping:
+          debug: debug
+          info: info
+          notice: info2
+          warn: warn
+          error: error
+          crit: fatal
+          alert: fatal
+          emerg: fatal
+      - type: add
+        field: attributes["service.name"]
+        value: "openresty"
+      - type: add
+        field: attributes["log.source"]
+        value: "nginx.error"
+
+processors:
+  # Always first — prevents OOM under burst traffic
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 85
+    spike_limit_percentage: 15
+
+  batch:
+    timeout: 5s
+    send_batch_size: 100000
+
+  resource:
+    attributes:
+      - key: service.name
+        value: openresty
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: insert
+
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+
+exporters:
+  debug:
+    verbosity: detailed
+
+  # Credentials come from environment — see .env.example (never commit real values)
+  otlp/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_OTLP_AUTH}
+
+service:
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [debug, otlp/last9]
+
+    metrics:
+      receivers:  [prometheus/lua, nginx]
+      processors: [memory_limiter, resourcedetection/system, resource, batch]
+      exporters:  [debug, otlp/last9]
+
+    logs:
+      receivers:  [filelog/access, filelog/error]
+      processors: [memory_limiter, resource, batch]
+      exporters:  [debug, otlp/last9]
