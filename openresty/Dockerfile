@@ -1,14 +1,11 @@
 FROM openresty/openresty:1.25.3.1-bullseye-fat
 
-# Install Lua dependencies via OpenResty Package Manager (opm)
-RUN opm get knyar/nginx-lua-prometheus ledgetech/lua-resty-http
+# Install OTel SDK and dependencies via OPM
+RUN opm get last9/openresty-otel knyar/nginx-lua-prometheus
 
 # Copy nginx configuration
 COPY nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
 COPY conf.d/    /etc/nginx/conf.d/
-
-# Copy Lua modules
-COPY lua/       /usr/local/openresty/site/lualib/
 
 EXPOSE 80 9145
 
