@@ -106,7 +106,7 @@ kubectl create secret generic last9-prometheus-credentials \
 
 ### 2. Apply the AnalysisTemplates
 
-Edit `analysis-template.yaml` and replace `<your-last9-org>` and `<your-org>` with the values from your Last9 Prometheus endpoint URL:
+Edit `analysis-template.yaml` and replace `<your-last9-prometheus-read-endpoint>` with the full read URL from the Last9 Integrations page (Prometheus section):
 
 ```bash
 kubectl apply -f analysis-template.yaml

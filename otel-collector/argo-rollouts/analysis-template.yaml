@@ -23,12 +23,10 @@ spec:
       failureLimit: 3
       provider:
         prometheus:
-          # Last9 Prometheus-compatible query endpoint.
-          # Get this from https://app.last9.io/integrations (Prometheus section).
-          # Use the base URL without /api/v1/query — Argo Rollouts appends that.
-          address: https://<your-last9-org>.last9.io/api/v1/organizations/<your-org>/prometheus
-          authentication:
-            sigv4: {}     # Leave empty — use basic_auth below instead
+          # Last9 Prometheus-compatible query endpoint (read URL).
+          # Get the full URL from https://app.last9.io/integrations (Prometheus section).
+          # Use the base URL as-is — Argo Rollouts appends /api/v1/query automatically.
+          address: <your-last9-prometheus-read-endpoint>
           basicAuth:
             username:
               secretKeyRef:
@@ -70,7 +68,7 @@ spec:
       failureLimit: 3
       provider:
         prometheus:
-          address: https://<your-last9-org>.last9.io/api/v1/organizations/<your-org>/prometheus
+          address: <your-last9-prometheus-read-endpoint>
           basicAuth:
             username:
               secretKeyRef:
