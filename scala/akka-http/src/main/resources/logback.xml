@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console appender: prints trace_id/span_id from MDC for local debugging -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} trace_id=%X{trace_id} span_id=%X{span_id} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+        OpenTelemetry Logback appender — exports log records via OTLP to the collector.
+        The OTel Java agent populates trace_id/span_id in the MDC for every log record
+        emitted within an active span, enabling log-trace correlation in Last9.
+    -->
+    <appender name="OTEL" class="io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender">
+        <captureExperimentalAttributes>true</captureExperimentalAttributes>
+        <captureMdcAttributes>*</captureMdcAttributes>
+    </appender>
+
+    <!-- Application logging -->
+    <logger name="com.example" level="INFO"/>
+
+    <!-- Reduce framework noise -->
+    <logger name="org.apache.pekko" level="WARN"/>
+    <logger name="io.netty"         level="WARN"/>
+    <logger name="org.postgresql"   level="WARN"/>
+    <logger name="com.zaxxer"       level="WARN"/>
+    <logger name="org.apache.kafka" level="WARN"/>
+    <logger name="io.lettuce"       level="WARN"/>
+    <logger name="com.aerospike"    level="WARN"/>
+    <logger name="io.opentelemetry" level="WARN"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="OTEL"/>
+    </root>
+</configuration>

@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # PostgreSQL — JDBC calls auto-instrumented by OTel Java agent
+  postgres:
+    image: postgres:15-alpine
+    container_name: akka-http-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: portfoliodb
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis — Lettuce client auto-instrumented by OTel Java agent
+  redis:
+    image: redis:7-alpine
+    container_name: akka-http-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Kafka — kafka-clients auto-instrumented by OTel Java agent
+  # Using Redpanda: lightweight Kafka-compatible broker, no Zookeeper required
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.1
+    container_name: akka-http-redpanda
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 256M
+      - --overprovisioned
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --mode dev-container
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Aerospike — manually instrumented (OTel agent does not cover Aerospike)
+  aerospike:
+    image: aerospike/aerospike-server:7.0.0.4
+    container_name: akka-http-aerospike
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "asinfo", "-v", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # OpenTelemetry Collector — receives OTLP from app, exports to Last9
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: akka-http-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_OTLP_AUTH_HEADER=${LAST9_OTLP_AUTH_HEADER}
+      - DEPLOYMENT_ENV=${DEPLOYMENT_ENV:-local}
+
+  # Portfolio Service
+  portfolio-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: akka-http-portfolio
+    environment:
+      APP_PORT: "8080"
+      POSTGRES_URL: "jdbc:postgresql://postgres:5432/portfoliodb"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      KAFKA_TOPIC: portfolio-events
+      AEROSPIKE_HOST: aerospike
+      AEROSPIKE_PORT: "3000"
+      AEROSPIKE_NAMESPACE: test
+      PRICING_SERVICE_URL: http://portfolio-service:8080
+      OTEL_SERVICE_NAME: portfolio-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local,service.version=0.1.0
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      aerospike:
+        condition: service_started
+      otel-collector:
+        condition: service_started
