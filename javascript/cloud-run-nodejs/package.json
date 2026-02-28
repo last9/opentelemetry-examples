@@ -1,25 +1,28 @@
 {
-  "name": "polka-app",
+  "name": "cloud-run-nodejs-otel",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "description": "OpenTelemetry example for Google Cloud Run with Node.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node --require ./instrumentation.js app.js"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.201.1",
     "@opentelemetry/auto-instrumentations-node": "^0.59.0",
     "@opentelemetry/core": "^2.5.1",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.201.1",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.201.1",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.201.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.201.1",
     "@opentelemetry/instrumentation": "^0.201.1",
-    "@opentelemetry/instrumentation-runtime-node": "^0.16.0",
     "@opentelemetry/resources": "^2.5.1",
+    "@opentelemetry/sdk-logs": "^0.201.1",
     "@opentelemetry/sdk-metrics": "^2.5.1",
     "@opentelemetry/sdk-node": "^0.201.1",
     "@opentelemetry/sdk-trace-base": "^2.5.1",
     "@opentelemetry/sdk-trace-node": "^2.5.1",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "polka": "^0.5.0"
+    "express": "^4.21.0"
   }
 }

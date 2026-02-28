@@ -1,15 +1,31 @@
 const { NodeSDK } = require('@opentelemetry/sdk-node');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { Resource } = require('@opentelemetry/resources');
-const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
+const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+const { resourceFromAttributes } = require('@opentelemetry/resources');
+const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
+const api = require('@opentelemetry/api');
 const FastifyOtelInstrumentation = require('@fastify/otel');
 // Initialize the Fastify OpenTelemetry instrumentation. This will register the instrumentation automatically on the Fastify server.
 const fastifyOtelInstrumentation = new FastifyOtelInstrumentation({ registerOnInitialization: true });
 
-// Enable logging for OpenTelemetry if needed for debugging
-// const { diag, DiagConsoleLogger, DiagLogLevel } = require("@opentelemetry/api");
+// For troubleshooting, uncomment the following lines to enable OpenTelemetry debug logging:
+// const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
 // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+
+// BaggageSpanProcessor - propagates W3C Baggage entries as span attributes for RUM correlation
+class BaggageSpanProcessor {
+  onStart(span, parentContext) {
+    const baggage = api.propagation.getBaggage(parentContext || api.context.active());
+    if (!baggage) return;
+    for (const [key, entry] of baggage.getAllEntries()) {
+      span.setAttribute(key, entry.value);
+    }
+  }
+  onEnd() {}
+  forceFlush() { return Promise.resolve(); }
+  shutdown() { return Promise.resolve(); }
+}
 
 // Simple logging utility
 const logger = {
@@ -19,13 +35,15 @@ const logger = {
 
 logger.info(`Initializing OpenTelemetry for service: ${process.env.OTEL_SERVICE_NAME}`);
 
-// Create and configure SDK
 const sdk = new NodeSDK({
-  resource: new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME,
-    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
+  resource: resourceFromAttributes({
+    [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME,
+    'deployment.environment': process.env.NODE_ENV,
   }),
-  traceExporter: new OTLPTraceExporter(),
+  spanProcessors: [
+    new BaggageSpanProcessor(),
+    new BatchSpanProcessor(new OTLPTraceExporter()),
+  ],
   instrumentations: [
     getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': { enabled: false },
@@ -34,9 +52,13 @@ const sdk = new NodeSDK({
 });
 
 // Initialize the SDK and register with the OpenTelemetry API
-sdk.start()
-  .then(() => logger.info('Tracing initialized successfully'))
-  .catch((error) => logger.error('Failed to initialize tracing', error));
+// sdk.start() is synchronous in sdk-node 0.201.x+
+try {
+  sdk.start();
+  logger.info('Tracing initialized successfully');
+} catch (error) {
+  logger.error('Failed to initialize tracing', error);
+}
 
 // Gracefully shut down the SDK on process exit
 process.on('SIGTERM', () => {
