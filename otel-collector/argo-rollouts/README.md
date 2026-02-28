@@ -89,6 +89,61 @@ If you already have an OTel Collector running, copy the receiver and pipeline co
 | `experiment_info` | Experiment status | `namespace`, `experiment` |
 | `argo_rollouts_controller_workqueue_depth` | Controller queue backlog | `name` |
 
+## Automated Canary Analysis with Last9
+
+Beyond dashboards, Last9's Prometheus-compatible endpoint can act as an **automated canary gate** — Argo Rollouts queries your metrics at each rollout step and promotes or rolls back automatically.
+
+### 1. Create the credentials Secret
+
+Get your Prometheus username and password from the [Last9 Integrations page](https://app.last9.io/integrations) (Prometheus section):
+
+```bash
+kubectl create secret generic last9-prometheus-credentials \
+  --namespace <your-app-namespace> \
+  --from-literal=username=<your-last9-username> \
+  --from-literal=password=<your-last9-write-token>
+```
+
+### 2. Apply the AnalysisTemplates
+
+Edit `analysis-template.yaml` and replace `<your-last9-org>` and `<your-org>` with the values from your Last9 Prometheus endpoint URL:
+
+```bash
+kubectl apply -f analysis-template.yaml
+```
+
+This creates two templates:
+- **`last9-http-error-rate`** — rolls back if HTTP 5xx error rate ≥ 10%, promotes if < 5%
+- **`last9-latency-p99`** — rolls back if p99 latency ≥ 1s, promotes if < 500ms
+
+### 3. Reference them in your Rollout
+
+`rollout-example.yaml` shows how to wire both templates into a canary rollout with 10% → 25% → 50% → 100% steps. Apply and adapt it:
+
+```bash
+kubectl apply -f rollout-example.yaml
+```
+
+Watch analysis runs live:
+
+```bash
+kubectl argo rollouts get rollout my-app --watch
+kubectl argo rollouts list analysisruns
+```
+
+### How it works
+
+```
+Canary at 10% traffic
+      ↓
+Argo Rollouts queries Last9 every 2 min
+      ↓
+error rate < 5%?  →  promote to 25%
+error rate ≥ 10%? →  auto rollback (after 3 failures)
+```
+
+> **Note:** Your application must emit `http_requests_total` and `http_request_duration_seconds_bucket` metrics (standard Prometheus HTTP metrics). If you use different metric names, update the PromQL in `analysis-template.yaml`.
+
 ## Dashboard Attributes
 
 | Attribute | Example | Use |

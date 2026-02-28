@@ -1,0 +1,98 @@
+---
+# AnalysisTemplate: Last9 HTTP Error Rate Check
+# Queries Last9's Prometheus-compatible endpoint to evaluate canary health.
+# Argo Rollouts will auto-promote if error rate stays below 5%,
+# and auto-rollback after 3 consecutive failures above 10%.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: last9-http-error-rate
+spec:
+  args:
+    - name: service-name
+    - name: namespace
+  metrics:
+    - name: http-error-rate
+      # How often to evaluate the metric during the analysis window
+      interval: 2m
+      # Promote if error rate is below 5%
+      successCondition: result[0] < 0.05
+      # Rollback if error rate is at or above 10%
+      failureCondition: result[0] >= 0.10
+      # Allow up to 3 consecutive failures before rolling back
+      failureLimit: 3
+      provider:
+        prometheus:
+          # Last9 Prometheus-compatible query endpoint.
+          # Get this from https://app.last9.io/integrations (Prometheus section).
+          # Use the base URL without /api/v1/query — Argo Rollouts appends that.
+          address: https://<your-last9-org>.last9.io/api/v1/organizations/<your-org>/prometheus
+          authentication:
+            sigv4: {}     # Leave empty — use basic_auth below instead
+          basicAuth:
+            username:
+              secretKeyRef:
+                name: last9-prometheus-credentials
+                key: username
+            password:
+              secretKeyRef:
+                name: last9-prometheus-credentials
+                key: password
+          query: |
+            sum(rate(http_requests_total{
+              namespace="{{args.namespace}}",
+              service="{{args.service-name}}",
+              status=~"5.."
+            }[5m]))
+            /
+            sum(rate(http_requests_total{
+              namespace="{{args.namespace}}",
+              service="{{args.service-name}}"
+            }[5m]))
+---
+# AnalysisTemplate: Last9 P99 Latency Check
+# Rolls back if the canary's p99 response time exceeds 500ms.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: last9-latency-p99
+spec:
+  args:
+    - name: service-name
+    - name: namespace
+  metrics:
+    - name: p99-latency
+      interval: 2m
+      # Promote if p99 latency is below 500ms
+      successCondition: result[0] < 0.5
+      # Rollback if p99 latency exceeds 1s
+      failureCondition: result[0] >= 1.0
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: https://<your-last9-org>.last9.io/api/v1/organizations/<your-org>/prometheus
+          basicAuth:
+            username:
+              secretKeyRef:
+                name: last9-prometheus-credentials
+                key: username
+            password:
+              secretKeyRef:
+                name: last9-prometheus-credentials
+                key: password
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{
+                namespace="{{args.namespace}}",
+                service="{{args.service-name}}"
+              }[5m])) by (le)
+            )
+---
+# Secret: Last9 Prometheus credentials
+# Create this before applying the AnalysisTemplates.
+# Get credentials from https://app.last9.io/integrations (Prometheus section).
+#
+# kubectl create secret generic last9-prometheus-credentials \
+#   --namespace <your-app-namespace> \
+#   --from-literal=username=<your-last9-username> \
+#   --from-literal=password=<your-last9-write-token>
