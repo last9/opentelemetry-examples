@@ -3,6 +3,19 @@
 # Queries Last9's Prometheus-compatible endpoint to evaluate canary health.
 # Argo Rollouts will auto-promote if error rate stays below 5%,
 # and auto-rollback after 3 consecutive failures above 10%.
+#
+# Auth: The Prometheus provider passes credentials via an arg that sources
+# a pre-encoded "Basic <base64(username:password)>" value from a K8s Secret:
+#
+#   kubectl create secret generic last9-prometheus-auth \
+#     --namespace <your-app-namespace> \
+#     --from-literal=authorization="Basic $(printf '<username>:<password>' | base64 | tr -d '\n')"
+#
+# Note: use printf + tr -d '\n' to avoid newlines in the base64 output,
+# which would cause "invalid header field value" errors at runtime.
+#
+# Get the read endpoint, username, and password from:
+# https://app.last9.io/integrations (Prometheus section)
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
@@ -11,9 +24,13 @@ spec:
   args:
     - name: service-name
     - name: namespace
+    - name: last9-auth
+      valueFrom:
+        secretKeyRef:
+          name: last9-prometheus-auth
+          key: authorization
   metrics:
     - name: http-error-rate
-      # How often to evaluate the metric during the analysis window
       interval: 2m
       # Promote if error rate is below 5%
       successCondition: result[0] < 0.05
@@ -23,19 +40,13 @@ spec:
       failureLimit: 3
       provider:
         prometheus:
-          # Last9 Prometheus-compatible query endpoint (read URL).
+          # Last9 Prometheus-compatible read endpoint.
           # Get the full URL from https://app.last9.io/integrations (Prometheus section).
-          # Use the base URL as-is — Argo Rollouts appends /api/v1/query automatically.
+          # Argo Rollouts appends /api/v1/query to this base URL automatically.
           address: <your-last9-prometheus-read-endpoint>
-          basicAuth:
-            username:
-              secretKeyRef:
-                name: last9-prometheus-credentials
-                key: username
-            password:
-              secretKeyRef:
-                name: last9-prometheus-credentials
-                key: password
+          headers:
+            - key: Authorization
+              value: "{{args.last9-auth}}"
           query: |
             sum(rate(http_requests_total{
               namespace="{{args.namespace}}",
@@ -58,6 +69,11 @@ spec:
   args:
     - name: service-name
     - name: namespace
+    - name: last9-auth
+      valueFrom:
+        secretKeyRef:
+          name: last9-prometheus-auth
+          key: authorization
   metrics:
     - name: p99-latency
       interval: 2m
@@ -69,15 +85,9 @@ spec:
       provider:
         prometheus:
           address: <your-last9-prometheus-read-endpoint>
-          basicAuth:
-            username:
-              secretKeyRef:
-                name: last9-prometheus-credentials
-                key: username
-            password:
-              secretKeyRef:
-                name: last9-prometheus-credentials
-                key: password
+          headers:
+            - key: Authorization
+              value: "{{args.last9-auth}}"
           query: |
             histogram_quantile(0.99,
               sum(rate(http_request_duration_seconds_bucket{
@@ -85,12 +95,3 @@ spec:
                 service="{{args.service-name}}"
               }[5m])) by (le)
             )
----
-# Secret: Last9 Prometheus credentials
-# Create this before applying the AnalysisTemplates.
-# Get credentials from https://app.last9.io/integrations (Prometheus section).
-#
-# kubectl create secret generic last9-prometheus-credentials \
-#   --namespace <your-app-namespace> \
-#   --from-literal=username=<your-last9-username> \
-#   --from-literal=password=<your-last9-write-token>

@@ -82,12 +82,18 @@ If you already have an OTel Collector running, copy the receiver and pipeline co
 
 | Metric | Description | Key Labels |
 |---|---|---|
-| `rollout_info` | Rollout status, phase, canary weight | `namespace`, `rollout`, `phase`, `canary_weight` |
-| `rollout_reconcile` | Reconcile duration histogram | `namespace`, `rollout` |
-| `rollout_reconcile_error` | Reconcile error count | `namespace`, `rollout` |
-| `analysis_run_info` | Analysis run status | `namespace`, `rollout`, `phase` |
-| `experiment_info` | Experiment status | `namespace`, `experiment` |
+| `rollout_info` | Rollout presence and current phase | `name`, `namespace`, `phase`, `strategy` |
+| `rollout_phase` | Phase gauge — one series per phase, value is 0 or 1 | `name`, `namespace`, `phase`, `strategy` |
+| `rollout_info_replicas_available` | Available replica count | `name`, `namespace` |
+| `rollout_info_replicas_updated` | Updated (canary) replica count | `name`, `namespace` |
+| `rollout_reconcile` | Reconcile duration histogram | `name`, `namespace` |
+| `rollout_reconcile_error` | Reconcile error count | `name`, `namespace` |
+| `rollout_events_total` | Rollout lifecycle events | `name`, `namespace`, `reason`, `type` |
+| `analysis_run_info` | Analysis run status | `name`, `namespace`, `phase` |
+| `experiment_info` | Experiment status | `name`, `namespace` |
 | `argo_rollouts_controller_workqueue_depth` | Controller queue backlog | `name` |
+
+> **Note on canary traffic percentage:** Current Argo Rollouts versions do not expose `canary_weight` as a metric label. Track the canary replica fraction via `rollout_info_replicas_updated / rollout_info_replicas_desired`.
 
 ## Automated Canary Analysis with Last9
 
@@ -95,14 +101,17 @@ Beyond dashboards, Last9's Prometheus-compatible endpoint can act as an **automa
 
 ### 1. Create the credentials Secret
 
-Get your Prometheus username and password from the [Last9 Integrations page](https://app.last9.io/integrations) (Prometheus section):
+Get your Prometheus username and password from the [Last9 Integrations page](https://app.last9.io/integrations) (Prometheus section).
+
+> **Note:** The Argo Rollouts Prometheus provider does not support `basic_auth` natively. Pass credentials as a pre-encoded `Authorization` header stored in a K8s Secret:
 
 ```bash
-kubectl create secret generic last9-prometheus-credentials \
+kubectl create secret generic last9-prometheus-auth \
   --namespace <your-app-namespace> \
-  --from-literal=username=<your-last9-username> \
-  --from-literal=password=<your-last9-write-token>
+  --from-literal=authorization="Basic $(printf '<your-last9-username>:<your-last9-password>' | base64 | tr -d '\n')"
 ```
+
+> Use `printf` and `tr -d '\n'` to avoid trailing newlines in the base64 output, which cause `invalid header field value` errors at runtime.
 
 ### 2. Apply the AnalysisTemplates
 
@@ -152,16 +161,15 @@ error rate ≥ 10%? →  auto rollback (after 3 failures)
 | `k8s.cluster.name` | `prod-us-east-1` | Multi-cluster view |
 | `deployment.environment` | `production` | Environment comparison |
 | `namespace` | `payments` | Per-namespace health |
-| `rollout` | `checkout-rollout` | Per-rollout panels |
-| `canary_weight` | `0`–`100` | Canary traffic split |
-| `phase` | `Progressing`, `Paused`, `Healthy`, `Degraded` | Rollout status |
+| `name` | `checkout-rollout` | Per-rollout panels |
+| `phase` | `Progressing`, `Paused`, `Completed`, `Error` | Rollout status via `rollout_phase` |
 
 <details>
 <summary>Canary vs Stable Pod Metrics</summary>
 
 To compare canary vs stable pods in dashboards, the collector config also scrapes `kube-state-metrics`. Argo Rollouts automatically labels pods with `rollouts-pod-template-hash` during progressive delivery.
 
-Use `rollout_info{canary_weight="X"}` to see current traffic split, and filter pod metrics by `label_rollouts_pod_template_hash` to compare canary vs stable performance.
+Use `rollout_info_replicas_updated / rollout_info_replicas_desired` to see the current canary replica fraction, and filter pod metrics by `label_rollouts_pod_template_hash` to compare canary vs stable performance.
 
 | Kubernetes Label | Description |
 |---|---|
@@ -173,10 +181,10 @@ Use `rollout_info{canary_weight="X"}` to see current traffic split, and filter p
 <details>
 <summary>Suggested Dashboard Panels</summary>
 
-1. **Canary Traffic Weight Over Time** — `rollout_info` grouped by `canary_weight`
-2. **Rollout Phase Status** — `rollout_info` grouped by `phase` and `rollout`
-3. **Reconcile Error Rate** — `rate(rollout_reconcile_error[5m])` grouped by `rollout`, `namespace`
-4. **Analysis Run Success/Failure** — `analysis_run_info` grouped by `phase`, `rollout`
+1. **Canary Replica Fraction** — `rollout_info_replicas_updated / rollout_info_replicas_desired` grouped by `name`
+2. **Rollout Phase Status** — `rollout_phase{phase="Progressing"}` or `rollout_phase` grouped by `phase` and `name`
+3. **Reconcile Error Rate** — `rate(rollout_reconcile_error[5m])` grouped by `name`, `namespace`
+4. **Analysis Run Success/Failure** — `analysis_run_info` grouped by `phase`, `name`
 5. **Pod Count: Canary vs Stable** — `kube_pod_status_phase` filtered by `label_rollouts_pod_template_hash`
 
 </details>
