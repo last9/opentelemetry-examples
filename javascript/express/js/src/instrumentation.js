@@ -6,6 +6,7 @@ const { RuntimeNodeInstrumentation } = require('@opentelemetry/instrumentation-r
 const { PeriodicExportingMetricReader, ConsoleMetricExporter } = require('@opentelemetry/sdk-metrics');
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
 const { NodeSDK } = require('@opentelemetry/sdk-node');
+const api = require('@opentelemetry/api');
 // const { containerDetector } = require('@opentelemetry/resource-detector-container');
 // const { awsEc2Detector, awsEcsDetector, awsLambdaDetector } = require('@opentelemetry/resource-detector-aws');
 // const { gcpDetector } = require('@opentelemetry/resource-detector-gcp');
@@ -15,6 +16,20 @@ const { NodeSDK } = require('@opentelemetry/sdk-node');
 // Uncomment the following lines to enable OpenTelemetry debug logging:
 // const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
 // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+
+// BaggageSpanProcessor - propagates W3C Baggage entries as span attributes for RUM correlation
+class BaggageSpanProcessor {
+  onStart(span, parentContext) {
+    const baggage = api.propagation.getBaggage(parentContext || api.context.active());
+    if (!baggage) return;
+    for (const [key, entry] of baggage.getAllEntries()) {
+      span.setAttribute(key, entry.value);
+    }
+  }
+  onEnd() {}
+  forceFlush() { return Promise.resolve(); }
+  shutdown() { return Promise.resolve(); }
+}
 
 const logger = {
   info: (message) => console.log(`[OpenTelemetry] ${message}`),
@@ -30,30 +45,33 @@ const sdk = new NodeSDK({
     'service.name': process.env.OTEL_SERVICE_NAME,
     'deployment.environment': process.env.NODE_ENV,
   }),
-  spanProcessor: new BatchSpanProcessor(traceExporter),
+  spanProcessors: [
+    new BaggageSpanProcessor(),
+    new BatchSpanProcessor(traceExporter),
+  ],
   instrumentations: [
     getNodeAutoInstrumentations({}),
     new RuntimeNodeInstrumentation({
       monitoringPrecision: 5000,
     }),
   ],
-    resourceDetectors: [
-      // containerDetector,
-      // awsEc2Detector,
-      // awsEcsDetector,
-      // awsLambdaDetector,
-      // gcpDetector,
-      // azureVmDetector,
-      envDetector,
-      processDetector,
-      hostDetector
-    ],
+  resourceDetectors: [
+    // containerDetector,
+    // awsEc2Detector,
+    // awsEcsDetector,
+    // awsLambdaDetector,
+    // gcpDetector,
+    // azureVmDetector,
+    envDetector,
+    processDetector,
+    hostDetector
+  ],
   metricReader: new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter(),
     // For local debugging
     // exporter: new ConsoleMetricExporter(),
   }),
-})
+});
 
 sdk.start();
 
