@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Sample logback configuration with OpenTelemetry trace correlation.
+    Copy this to your project as logback.xml and customize as needed.
+-->
+<configuration>
+    <!-- Console appender with trace correlation -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- Pattern with trace_id and span_id for log correlation -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - trace_id=%X{trace_id} span_id=%X{span_id} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- JSON appender for production (recommended for log aggregation) -->
+    <!-- Uncomment and add logstash-logback-encoder dependency to use -->
+    <!--
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>trace_id</includeMdcKeyName>
+            <includeMdcKeyName>span_id</includeMdcKeyName>
+            <includeMdcKeyName>trace_flags</includeMdcKeyName>
+            <includeMdcKeyName>service.name</includeMdcKeyName>
+        </encoder>
+    </appender>
+    -->
+
+    <!-- Set log levels -->
+    <logger name="io.vertx" level="INFO"/>
+    <logger name="io.opentelemetry" level="INFO"/>
+    <logger name="io.otel.rxjava.vertx" level="DEBUG"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <!-- <appender-ref ref="JSON"/> -->
+    </root>
+</configuration>

@@ -1,0 +1,32 @@
+<!--
+    Add this dependency to your existing pom.xml after building the SDK.
+
+    Build the SDK first:
+    cd otel-rxjava-vertx-sdk && mvn clean install
+
+    Then add this dependency to your main pom.xml:
+-->
+
+<!-- Add this to your <dependencies> section -->
+<dependency>
+    <groupId>io.otel.rxjava.vertx</groupId>
+    <artifactId>otel-rxjava-vertx-sdk</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!--
+    You can REMOVE these dependencies as they are included in the SDK:
+    - opentelemetry-api
+    - opentelemetry-sdk
+    - opentelemetry-exporter-otlp
+    - opentelemetry-semconv
+    - vertx-opentelemetry (still needed but now a provided dependency)
+
+    Keep these:
+    - vertx-core
+    - vertx-web
+    - vertx-rx-java3
+    - vertx-web-client
+    - vertx-opentelemetry
+    - All other application dependencies
+-->

@@ -1,0 +1,41 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Transform span names: "GET" -> "GET /v1/holding"
+  transform:
+    trace_statements:
+      - context: span
+        statements:
+          - set(name, Concat([name, " ", attributes["url.path"]], "")) where attributes["url.path"] != nil
+
+  batch:
+    timeout: 5s
+    send_batch_size: 100
+
+exporters:
+  # Export to your observability backend
+  otlphttp:
+    endpoint: ${OTLP_ENDPOINT}
+    headers:
+      Authorization: "${OTLP_AUTH_HEADER}"
+
+  # Debug output for local testing
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform, batch]
+      exporters: [otlphttp, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp, debug]

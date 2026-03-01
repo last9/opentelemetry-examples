@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  cpp-otel-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cpp-otel-sample
+    env_file:
+      - .env
+    # Override or add additional environment variables here if needed
+    environment:
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-cpp-sample-app}
+      - DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT:-local}
