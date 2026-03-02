@@ -1,0 +1,182 @@
+use axum::{
+    extract::{Path, State},
+    middleware,
+    response::Json,
+    routing::get,
+    Router,
+};
+use rusqlite::{params, Connection};
+use rust_otel_auto::{client::TracedClient, current_trace_id, db as otel_db, init};
+use rust_otel_auto::layer::{OtelLayer, record_matched_route};
+use serde::Serialize;
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
+use tracing::info;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+struct User {
+    id: u32,
+    name: String,
+    email: String,
+}
+
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
+    service: &'static str,
+}
+
+type Db = Arc<Mutex<Connection>>;
+
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
+
+#[tokio::main]
+async fn main() {
+    let _guard = init().expect("Failed to initialize OpenTelemetry");
+
+    let conn = Connection::open_in_memory().expect("Failed to open SQLite");
+    seed_db(&conn).expect("Failed to seed database");
+    let db: Db = Arc::new(Mutex::new(conn));
+
+    let app = Router::new()
+        .route("/", get(root))
+        .route("/health", get(health))
+        .route("/users", get(list_users))
+        .route("/users/:id", get(get_user))
+        .route("/external", get(external_call))
+        // route_layer runs AFTER routing — MatchedPath is available here
+        .route_layer(middleware::from_fn(record_matched_route))
+        .layer(OtelLayer::new())
+        .with_state(db);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    info!("Listening on {}", addr);
+
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// DB setup
+// ---------------------------------------------------------------------------
+
+fn seed_db(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL);
+         INSERT INTO users VALUES (1, 'Alice', 'alice@example.com');
+         INSERT INTO users VALUES (2, 'Bob',   'bob@example.com');",
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+async fn root() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "message": "Hello from Rust + Axum + OTel 0.27" }))
+}
+
+async fn health() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "ok",
+        service: "rust-axum-service",
+    })
+}
+
+async fn list_users(State(db): State<Db>) -> Json<Vec<User>> {
+    info!(trace_id = %current_trace_id(), "Fetching all users");
+    let users = fetch_users_from_db(db).await;
+    info!(trace_id = %current_trace_id(), count = users.len(), "Returning users");
+    Json(users)
+}
+
+async fn get_user(
+    State(db): State<Db>,
+    Path(id): Path<u32>,
+) -> Result<Json<User>, axum::http::StatusCode> {
+    info!(trace_id = %current_trace_id(), user_id = id, "Looking up user");
+    match find_user(db, id).await {
+        Some(user) => Ok(Json(user)),
+        None => Err(axum::http::StatusCode::NOT_FOUND),
+    }
+}
+
+async fn external_call() -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    info!(trace_id = %current_trace_id(), "Starting external HTTP call");
+    fetch_external_data().await.map(Json).map_err(|e| {
+        tracing::error!(
+            trace_id = %current_trace_id(),
+            error = %e,
+            "External API call failed"
+        );
+        axum::http::StatusCode::BAD_GATEWAY
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Business logic
+// ---------------------------------------------------------------------------
+
+async fn fetch_users_from_db(db: Db) -> Vec<User> {
+    const SQL: &str = "SELECT id, name, email FROM users ORDER BY id";
+    // Create the span and move it into spawn_blocking — enter() inside the
+    // sync closure so no !Send guard crosses the .await boundary.
+    let span = otel_db::sqlite_span("SELECT", SQL, "users");
+
+    tokio::task::spawn_blocking(move || {
+        let _enter = span.enter();
+        let conn = db.lock().unwrap();
+        let mut stmt = conn.prepare(SQL).unwrap();
+        stmt.query_map([], |row| {
+            Ok(User {
+                id: row.get::<_, u32>(0)?,
+                name: row.get(1)?,
+                email: row.get(2)?,
+            })
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+async fn find_user(db: Db, id: u32) -> Option<User> {
+    const SQL: &str = "SELECT id, name, email FROM users WHERE id = ?1";
+    let span = otel_db::sqlite_span("SELECT", SQL, "users");
+
+    tokio::task::spawn_blocking(move || {
+        let _enter = span.enter();
+        let conn = db.lock().unwrap();
+        conn.query_row(SQL, params![id], |row| {
+            Ok(User {
+                id: row.get::<_, u32>(0)?,
+                name: row.get(1)?,
+                email: row.get(2)?,
+            })
+        })
+        .ok()
+    })
+    .await
+    .unwrap_or(None)
+}
+
+async fn fetch_external_data() -> Result<serde_json::Value, reqwest::Error> {
+    TracedClient::new()
+        .get("https://httpbin.org/json")
+        .send()
+        .await?
+        .json::<serde_json::Value>()
+        .await
+}

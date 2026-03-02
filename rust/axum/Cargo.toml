@@ -1,0 +1,29 @@
+[package]
+name = "rust-axum-otel"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+
+[dependencies]
+rust-otel-auto = { path = "../../../rust-opentelemetry/rust-otel-auto", features = ["axum", "reqwest", "db"] }
+
+# Axum 0.6 — axum 0.7+ requires Rust 1.75
+axum = "0.6"
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client — only needed for Response type + .json()
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
+
+# SQLite — bundled compiles SQLite from source, no system dep needed
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Tracing macros (info!, error!, etc.)
+tracing = "0.1"
+
+# Pin url + idna to avoid icu4x transitive deps that require Rust 1.83+
+url = "=2.5.0"
+idna = "=0.5.0"
