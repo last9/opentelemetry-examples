@@ -1,6 +1,6 @@
 # Monitoring Argo Rollouts with OpenTelemetry and Last9
 
-Monitor Argo Rollouts canary deployments by scraping Prometheus metrics via the OpenTelemetry Collector and shipping them to Last9. This enables dashboards that track rollout phase, canary traffic weight, and pod-level canary vs stable comparisons.
+Monitor Argo Rollouts canary deployments with Last9 using the OpenTelemetry Collector. Ships metrics (rollout phase, replica counts, analysis run status) and pod logs (enriched with `rollouts-pod-template-hash` for canary vs stable filtering) to Last9 via OTLP.
 
 ## Prerequisites
 
@@ -39,13 +39,13 @@ Apply the manifest:
 kubectl apply -f collector-deployment.yaml
 ```
 
-This creates the `monitoring` namespace, a ConfigMap with the OTel config, the Collector Deployment, and the RBAC resources needed for Prometheus scraping.
+This creates the `last9` namespace, a ConfigMap with the OTel config, a DaemonSet (required for pod log access), and RBAC resources.
 
 ### 2. Verify the Collector is Running
 
 ```bash
-kubectl get pods -n monitoring -l app=otel-collector
-kubectl logs -n monitoring -l app=otel-collector --tail=50
+kubectl get pods -n last9 -l app=otel-collector
+kubectl logs -n last9 -l app=otel-collector --tail=50
 ```
 
 Look for log lines showing successful scrape of `argo-rollouts` and metric export to Last9.
@@ -73,6 +73,26 @@ See `.env.example` for all required variables.
 | `LAST9_AUTH_HEADER` | Last9 authorization header |
 | `K8S_CLUSTER_NAME` | Cluster label for multi-cluster dashboards |
 | `DEPLOYMENT_ENVIRONMENT` | Environment label (`production`, `staging`, etc.) |
+
+### APM Correlation via `service.name` and `deployment.environment`
+
+By default, rollout metrics land under `service.name = "argo-rollouts"` (the controller). To correlate rollout health with your **APM traces and metrics** in Last9, the config uses two processors to map the rollout `name` label to `service.name`:
+
+```
+rollout_info{name="checkout", ...}
+        ↓ transform/apm_labels
+service.name = "checkout"          ← matches APM service
+service.namespace = "payments"
+deployment.environment = "production"
+        ↓ groupbyattrs/service
+Resource: {service.name="checkout", deployment.environment="production"}
+```
+
+**Prerequisite:** your Rollout name must match the `service.name` your application sets in its OTel SDK. This is the natural convention — a Rollout named `checkout` deploys the `checkout` service.
+
+After this, in Last9 you can query:
+- `rollout_phase{service_name="checkout"}` alongside `http_request_duration_seconds{service_name="checkout"}`
+- Filter by `deployment_environment="production"` across both rollout and APM metrics in the same dashboard
 
 ### Using `otel-config.yaml` with an Existing Collector
 
@@ -200,7 +220,7 @@ kubectl logs -n argo-rollouts deploy/argo-rollouts
 
 **Collector not scraping:**
 ```bash
-kubectl logs -n monitoring -l app=otel-collector | grep -i error
+kubectl logs -n last9 -l app=otel-collector | grep -i error
 ```
 
 **No data in Last9:**

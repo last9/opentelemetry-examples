@@ -2,13 +2,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: monitoring
+  name: last9
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: otel-collector-config
-  namespace: monitoring
+  namespace: last9
 data:
   config.yaml: |
     receivers:
@@ -36,22 +36,82 @@ data:
                   regex: ".+"
                   action: keep
 
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          - /var/log/pods/last9_*/*/*.log
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+        operators:
+          - type: regex_parser
+            id: extract_k8s_metadata
+            # Matches both UUID pods (regular) and hex-hash pods (static: etcd, kube-apiserver)
+            regex: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod_name>.+)_(?P<uid>[0-9a-f-]{32,36})/(?P<container_name>[^/]+)/[0-9]+\.log'
+            parse_from: attributes["log.file.path"]
+            on_error: send
+          - type: move
+            from: attributes.pod_name
+            to: resource["k8s.pod.name"]
+            if: 'attributes.pod_name != nil'
+          - type: move
+            from: attributes.namespace
+            to: resource["k8s.namespace.name"]
+            if: 'attributes.namespace != nil'
+          - type: move
+            from: attributes.uid
+            to: resource["k8s.pod.uid"]
+            if: 'attributes.uid != nil'
+          - type: move
+            from: attributes.container_name
+            to: resource["k8s.container.name"]
+            if: 'attributes.container_name != nil'
+
     processors:
+      transform/apm_labels:
+        metric_statements:
+          - context: datapoint
+            statements:
+              - set(attributes["service.name"], attributes["name"]) where attributes["name"] != nil
+              - set(attributes["service.namespace"], attributes["namespace"]) where attributes["namespace"] != nil
+              - set(attributes["deployment.environment"], "YOUR_ENVIRONMENT")
+      groupbyattrs/service:
+        keys:
+          - service.name
+          - service.namespace
+          - deployment.environment
+      k8sattributes:
+        auth_type: serviceAccount
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.namespace.name
+            - k8s.node.name
+            - k8s.deployment.name
+          labels:
+            - tag_name: k8s.pod.labels.app
+              key: app
+              from: pod
+            - tag_name: k8s.pod.labels.rollouts-pod-template-hash
+              key: rollouts-pod-template-hash
+              from: pod
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.name
+      resource:
+        attributes:
+          - key: k8s.cluster.name
+            value: "YOUR_CLUSTER_NAME"
+            action: upsert
       batch:
         timeout: 10s
         send_batch_size: 10000
         send_batch_max_size: 10000
-      resource:
-        attributes:
-          - key: service.name
-            value: "argo-rollouts"
-            action: upsert
-          - key: k8s.cluster.name
-            value: "YOUR_CLUSTER_NAME"
-            action: upsert
-          - key: deployment.environment
-            value: "production"
-            action: upsert
 
     exporters:
       otlp/last9:
@@ -64,18 +124,25 @@ data:
       pipelines:
         metrics:
           receivers: [prometheus]
-          processors: [resource, batch]
+          processors: [transform/apm_labels, groupbyattrs/service, resource, batch]
+          exporters: [otlp/last9]
+        logs:
+          receivers: [filelog]
+          processors: [k8sattributes, resource, batch]
           exporters: [otlp/last9]
 ---
+# DaemonSet so each node's /var/log/pods is accessible.
+# Note: the prometheus receiver scrapes cluster-wide endpoints (Argo Rollouts, kube-state-metrics)
+# from every node. In multi-node clusters, run a separate single-replica Deployment for the
+# metrics pipeline and a separate DaemonSet for the logs pipeline to avoid duplicate metric scrapes.
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: otel-collector
-  namespace: monitoring
+  namespace: last9
   labels:
     app: otel-collector
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: otel-collector
@@ -84,6 +151,7 @@ spec:
       labels:
         app: otel-collector
     spec:
+      serviceAccountName: otel-collector
       containers:
         - name: otel-collector
           image: otel/opentelemetry-collector-contrib:0.144.0
@@ -98,16 +166,28 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/otel
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
       volumes:
         - name: config
           configMap:
             name: otel-collector-config
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: otel-collector
-  namespace: monitoring
+  namespace: last9
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -115,7 +195,7 @@ metadata:
   name: otel-collector-metrics-reader
 rules:
   - apiGroups: [""]
-    resources: ["nodes", "pods", "services", "endpoints"]
+    resources: ["nodes", "pods", "services", "endpoints", "namespaces"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["extensions", "apps"]
     resources: ["deployments", "replicasets"]
@@ -134,4 +214,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: otel-collector
-    namespace: monitoring
+    namespace: last9

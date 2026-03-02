@@ -23,22 +23,96 @@ receivers:
               regex: ".+"
               action: keep
 
+  filelog:
+    include:
+      - /var/log/pods/*/*/*.log
+    exclude:
+      - /var/log/pods/last9_*/*/*.log
+    start_at: end
+    include_file_path: true
+    include_file_name: false
+    operators:
+      # Parse pod identity from the log file path:
+      # /var/log/pods/<namespace>_<pod-name>_<pod-uid>/<container>/<n>.log
+      # The UUID anchor lets us handle pod names that contain dashes.
+      - type: regex_parser
+        id: extract_k8s_metadata
+        # Matches both UUID pods (regular) and hex-hash pods (static: etcd, kube-apiserver)
+        regex: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod_name>.+)_(?P<uid>[0-9a-f-]{32,36})/(?P<container_name>[^/]+)/[0-9]+\.log'
+        parse_from: attributes["log.file.path"]
+        on_error: send
+      - type: move
+        from: attributes.pod_name
+        to: resource["k8s.pod.name"]
+        if: 'attributes.pod_name != nil'
+      - type: move
+        from: attributes.namespace
+        to: resource["k8s.namespace.name"]
+        if: 'attributes.namespace != nil'
+      - type: move
+        from: attributes.uid
+        to: resource["k8s.pod.uid"]
+        if: 'attributes.uid != nil'
+      - type: move
+        from: attributes.container_name
+        to: resource["k8s.container.name"]
+        if: 'attributes.container_name != nil'
+
 processors:
+  # Metrics: Step 1 — copy rollout labels to OTel semantic convention attributes
+  # so they can be promoted to resource scope by groupbyattrs below.
+  # Rollout name → service.name enables correlation with APM traces and metrics.
+  transform/apm_labels:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["service.name"], attributes["name"]) where attributes["name"] != nil
+          - set(attributes["service.namespace"], attributes["namespace"]) where attributes["namespace"] != nil
+          - set(attributes["deployment.environment"], "${DEPLOYMENT_ENVIRONMENT}")
+
+  # Metrics: Step 2 — promote service identity attributes to resource scope.
+  # Each rollout gets its own resource with service.name matching your APM service.
+  groupbyattrs/service:
+    keys:
+      - service.name
+      - service.namespace
+      - deployment.environment
+
+  # Logs: enrich with pod metadata from K8s API, including rollouts-pod-template-hash.
+  # This label distinguishes canary pods from stable pods in Last9 log queries.
+  k8sattributes:
+    auth_type: serviceAccount
+    extract:
+      metadata:
+        - k8s.pod.name
+        - k8s.namespace.name
+        - k8s.node.name
+        - k8s.deployment.name
+      labels:
+        - tag_name: k8s.pod.labels.app
+          key: app
+          from: pod
+        - tag_name: k8s.pod.labels.rollouts-pod-template-hash
+          key: rollouts-pod-template-hash
+          from: pod
+    pod_association:
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.name
+
+  resource:
+    attributes:
+      - key: k8s.cluster.name
+        value: "${K8S_CLUSTER_NAME}"
+        action: upsert
+
   batch:
     timeout: 10s
     send_batch_size: 10000
     send_batch_max_size: 10000
-  resource:
-    attributes:
-      - key: service.name
-        value: "argo-rollouts"
-        action: upsert
-      - key: k8s.cluster.name
-        value: "${K8S_CLUSTER_NAME}"
-        action: upsert
-      - key: deployment.environment
-        value: "${DEPLOYMENT_ENVIRONMENT}"
-        action: upsert
 
 exporters:
   otlp/last9:
@@ -46,12 +120,14 @@ exporters:
     headers:
       "Authorization": "${LAST9_AUTH_HEADER}"
     compression: gzip
-  debug:
-    verbosity: detailed
 
 service:
   pipelines:
     metrics:
       receivers: [prometheus]
-      processors: [resource, batch]
-      exporters: [otlp/last9, debug]
+      processors: [transform/apm_labels, groupbyattrs/service, resource, batch]
+      exporters: [otlp/last9]
+    logs:
+      receivers: [filelog]
+      processors: [k8sattributes, resource, batch]
+      exporters: [otlp/last9]
