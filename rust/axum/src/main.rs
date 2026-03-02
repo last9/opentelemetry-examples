@@ -8,8 +8,8 @@ use axum::{
     Router,
 };
 use rusqlite::{params, Connection};
-use rust_otel_auto::{client::TracedClient, current_trace_id, db as otel_db, init};
-use rust_otel_auto::layer::{OtelLayer, record_matched_route};
+use otel_rust_axum::{client::TracedClient, current_trace_id, db as otel_db, init};
+use otel_rust_axum::layer::{OtelLayer, record_matched_route};
 use serde::Serialize;
 use std::{
     net::SocketAddr,

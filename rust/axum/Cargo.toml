@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.74"
 
 [dependencies]
-rust-otel-auto = { path = "../../../rust-opentelemetry/rust-otel-auto", features = ["axum", "reqwest", "db"] }
+otel-rust-axum = { git = "https://github.com/last9/otel-rust-axum", features = ["axum", "reqwest", "db"] }
 
 # Axum 0.6 — axum 0.7+ requires Rust 1.75
 axum = "0.6"
