@@ -1,0 +1,78 @@
+# OpenTelemetry Collector configuration for ruby/rails-api
+#
+# This collector receives spans from the Rails app, drops noisy spans,
+# then exports clean data to Last9.
+#
+# Flow: Rails app → OTel Collector (filter) → Last9
+#
+# Usage:
+#   Set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 in the Rails app
+#   so it sends to the collector instead of directly to Last9.
+#   The collector holds the Last9 credentials.
+#
+# Start: docker compose up
+# or:    docker run -v $(pwd)/otel-collector/config.yaml:/etc/otel/config.yaml \
+#                   -p 4317:4317 -p 4318:4318 \
+#                   otel/opentelemetry-collector-contrib:0.144.0 \
+#                   --config /etc/otel/config.yaml
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+  # Optional: probabilistic sampling at the collector level.
+  # sampling_percentage: 10 means keep 10% of traces.
+  # Uses hash of TraceID — consistent across collector replicas, same trace always
+  # gets the same decision. Uncomment and add to the pipeline to enable.
+  # probabilistic_sampler:
+  #   sampling_percentage: 10
+
+  filter/drop_noise:
+    error_mode: ignore
+    traces:
+      span:
+        # DB transaction boundary spans — 2 extra spans per transaction, no debug value
+        - 'IsMatch(name, "^(BEGIN|COMMIT|ROLLBACK)")'
+
+        # Health check paths polled by load balancers every few seconds
+        - 'IsMatch(attributes["http.target"], "^(/health|/healthz|/ping|/readyz|/livez|/metrics|/favicon\\.ico)(/.*)?$")'
+
+        # Noisy Redis commands — high-frequency cache ops with no actionable signal
+        - |
+          attributes["db.system"] == "redis" and
+          IsMatch(name, "^(HGET|HSET|HMGET|HMSET|HGETALL|HDEL|GET|SET|SETEX|SETNX|GETEX|EXPIRE|TTL|PEXPIRE|PTTL|EXISTS|DEL|PIPELINED|MULTI|EXEC)$")
+
+exporters:
+  otlp:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_OTLP_AUTH_HEADER}
+    tls:
+      insecure: false
+
+  # Uncomment to debug: logs all spans that pass the filter to stdout
+  # debug:
+  #   verbosity: detailed
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      # To enable probabilistic sampling, add probabilistic_sampler before batch:
+      # processors: [filter/drop_noise, probabilistic_sampler, batch]
+      processors: [filter/drop_noise, batch]
+      exporters: [otlp]

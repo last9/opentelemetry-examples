@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      RAILS_ENV: production
+      OTEL_SERVICE_NAME: ruby-on-rails-api-service
+      OTEL_TRACES_EXPORTER: otlp
+      # Send to the local collector, not directly to Last9
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_LOG_LEVEL: error
+      # Optional: probabilistic sampling (e.g. 0.1 = 10%)
+      # OTEL_SAMPLE_RATE: "0.1"
+      # Optional: Sidekiq queue/job filters
+      # OTEL_FILTER_SIDEKIQ_QUEUES: mailers,low
+      # OTEL_FILTER_SIDEKIQ_JOBS: HeartbeatJob
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "13133:13133" # health_check
+    environment:
+      # Last9 credentials — set these in your shell or a .env file
+      LAST9_OTLP_ENDPOINT: ${LAST9_OTLP_ENDPOINT}
+      LAST9_OTLP_AUTH_HEADER: ${LAST9_OTLP_AUTH_HEADER}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
