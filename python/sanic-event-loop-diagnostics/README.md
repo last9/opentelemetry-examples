@@ -29,6 +29,8 @@ These metrics are crucial for diagnosing async application performance issues.
 | `asyncio.eventloop.blocking_events` | Counter | Count of detected blocking operations |
 | `asyncio.eventloop.lag_distribution` | Histogram | Distribution of lag measurements |
 
+**Note on Metric Labels**: All metrics automatically include OpenTelemetry Resource attributes such as `service.name`, `deployment.environment`, `service.version`, and any Kubernetes/cloud-specific attributes. These are set once in the Resource configuration and propagate to all metrics, traces, and logs. See the [Configuration](#configuration) section for details.
+
 ### How It Works
 
 The monitoring uses the **sleep-based lag detection** technique:
@@ -185,14 +187,19 @@ cp .env.example .env
 |----------|-------------|---------|
 | `OTEL_SERVICE_NAME` | Service name shown in Last9 | `sanic-event-loop-demo` |
 | `SERVICE_VERSION` | Service version for tracking deployments | - |
-| `DEPLOYMENT_ENVIRONMENT` | Environment (production/staging/development) | `development` |
+| `DEPLOYMENT_ENVIRONMENT` | **OpenTelemetry Resource attribute** - automatically added as `deployment.environment` label to ALL metrics, traces, and logs | `development` |
 | `SERVICE_NAMESPACE` | Logical grouping (e.g., "payments", "user-management") | - |
 
 ```bash
 OTEL_SERVICE_NAME=my-async-service
 SERVICE_VERSION=1.0.0
-DEPLOYMENT_ENVIRONMENT=production
+DEPLOYMENT_ENVIRONMENT=production  # Becomes deployment.environment label in all telemetry
 SERVICE_NAMESPACE=backend
+```
+
+**Alternative (Standard OpenTelemetry)**: You can also set resource attributes using the standard `OTEL_RESOURCE_ATTRIBUTES` environment variable:
+```bash
+export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production,service.namespace=backend"
 ```
 
 #### OTLP Export Configuration
