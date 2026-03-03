@@ -49,6 +49,7 @@ async def setup_otel_and_monitor(app, loop):
     global tracer, meter, event_loop_monitor
 
     service_name = os.getenv("OTEL_SERVICE_NAME", "sanic-event-loop-demo")
+    deployment_environment = os.getenv("DEPLOYMENT_ENVIRONMENT", "unknown")
 
     # Setup OpenTelemetry (tracing + metrics)
     tracer, meter = setup_opentelemetry(service_name=service_name)
@@ -59,11 +60,13 @@ async def setup_otel_and_monitor(app, loop):
         interval=0.1,  # Check every 100ms
         blocking_threshold=0.05,  # 50ms = blocking warning
         critical_threshold=0.5,  # 500ms = critical
-        service_name=service_name
+        service_name=service_name,
+        deployment_environment=deployment_environment
     )
     await event_loop_monitor.start()
 
     print(f"Event loop monitor started for {service_name}")
+    print(f"  - Deployment environment: {deployment_environment}")
     print(f"  - Monitoring interval: 100ms")
     print(f"  - Blocking threshold: 50ms")
     print(f"  - Critical threshold: 500ms")

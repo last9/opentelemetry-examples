@@ -53,7 +53,8 @@ class EventLoopMonitor:
         interval: float = 0.1,
         blocking_threshold: float = 0.05,
         critical_threshold: float = 0.5,
-        service_name: str = "unknown"
+        service_name: str = "unknown",
+        deployment_environment: str = "unknown"
     ):
         """
         Initialize the event loop monitor.
@@ -66,12 +67,15 @@ class EventLoopMonitor:
                                Default 50ms - typical threshold for user-perceptible delay.
             critical_threshold: Lag above this is "critical" (seconds). Default 500ms.
             service_name: Service name for metric attributes.
+            deployment_environment: Deployment environment (production, staging, development, etc.)
+                                   for metric attributes. Helps filter metrics by environment.
         """
         self._meter = meter
         self._interval = interval
         self._blocking_threshold = blocking_threshold
         self._critical_threshold = critical_threshold
         self._service_name = service_name
+        self._deployment_environment = deployment_environment
 
         # Current stats (updated by monitoring task)
         self._stats = EventLoopStats()
@@ -103,6 +107,17 @@ class EventLoopMonitor:
 
         # Create OTEL metrics
         self._setup_metrics()
+
+    def _get_metric_attributes(self) -> Dict[str, str]:
+        """
+        Get common metric attributes for all metrics.
+
+        Returns a dictionary with service.name and deployment.environment.
+        """
+        return {
+            "service.name": self._service_name,
+            "deployment.environment": self._deployment_environment
+        }
 
     def _setup_metrics(self):
         """Create OpenTelemetry metric instruments."""
@@ -176,28 +191,28 @@ class EventLoopMonitor:
         """Callback for lag gauge."""
         yield Observation(
             self._stats.lag_ms,
-            {"service.name": self._service_name}
+            self._get_metric_attributes()
         )
 
     def _observe_active_tasks(self, options: CallbackOptions):
         """Callback for active tasks gauge."""
         yield Observation(
             self._stats.active_tasks,
-            {"service.name": self._service_name}
+            self._get_metric_attributes()
         )
 
     def _observe_utilization(self, options: CallbackOptions):
         """Callback for utilization gauge."""
         yield Observation(
             self._stats.utilization_percent,
-            {"service.name": self._service_name}
+            self._get_metric_attributes()
         )
 
     def _observe_max_lag(self, options: CallbackOptions):
         """Callback for max lag gauge."""
         yield Observation(
             self._stats.max_lag_ms,
-            {"service.name": self._service_name}
+            self._get_metric_attributes()
         )
 
     def _observe_task_breakdown(self, options: CallbackOptions):
@@ -210,13 +225,9 @@ class EventLoopMonitor:
         trend analysis of which tasks are active over time.
         """
         for coro_name, count in self._stats.task_breakdown.items():
-            yield Observation(
-                count,
-                {
-                    "service.name": self._service_name,
-                    "task.coroutine": coro_name,
-                }
-            )
+            attributes = self._get_metric_attributes()
+            attributes["task.coroutine"] = coro_name
+            yield Observation(count, attributes)
 
     async def start(self):
         """Start the monitoring task."""
@@ -307,7 +318,7 @@ class EventLoopMonitor:
                 # Record lag in histogram for distribution analysis (in milliseconds)
                 self._lag_histogram.record(
                     lag_ms,
-                    {"service.name": self._service_name}
+                    self._get_metric_attributes()
                 )
 
                 # Detect blocking events and attribute lag to contributing tasks
@@ -320,14 +331,10 @@ class EventLoopMonitor:
                     else:
                         severity = "warning"
 
-                    self._blocking_counter.add(
-                        1,
-                        {
-                            "service.name": self._service_name,
-                            "blocking.severity": severity,
-                            "blocking.lag_ms": str(round(lag_ms, 3))
-                        }
-                    )
+                    blocking_attributes = self._get_metric_attributes()
+                    blocking_attributes["blocking.severity"] = severity
+                    blocking_attributes["blocking.lag_ms"] = str(round(lag_ms, 3))
+                    self._blocking_counter.add(1, blocking_attributes)
 
                     # Record the interval [start, now] during which the block
                     # occurred. The block happened somewhere between 'start'
@@ -344,14 +351,10 @@ class EventLoopMonitor:
                     # metric is still emitted.
                     contributing_tasks = task_breakdown if task_breakdown else {"unknown": 1}
                     for coro_name in contributing_tasks:
-                        self._task_lag_histogram.record(
-                            lag_ms,
-                            {
-                                "service.name": self._service_name,
-                                "task.coroutine": coro_name,
-                                "blocking.severity": severity,
-                            }
-                        )
+                        task_lag_attributes = self._get_metric_attributes()
+                        task_lag_attributes["task.coroutine"] = coro_name
+                        task_lag_attributes["blocking.severity"] = severity
+                        self._task_lag_histogram.record(lag_ms, task_lag_attributes)
 
             except asyncio.CancelledError:
                 break

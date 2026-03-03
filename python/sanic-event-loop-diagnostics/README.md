@@ -29,6 +29,8 @@ These metrics are crucial for diagnosing async application performance issues.
 | `asyncio.eventloop.blocking_events` | Counter | Count of detected blocking operations |
 | `asyncio.eventloop.lag_distribution` | Histogram | Distribution of lag measurements |
 
+**Metric Labels:** All metrics include `service.name` and `deployment.environment` labels, enabling you to filter metrics by service and environment (production, staging, development, etc.) in your observability platform.
+
 ### How It Works
 
 The monitoring uses the **sleep-based lag detection** technique:
@@ -185,7 +187,7 @@ cp .env.example .env
 |----------|-------------|---------|
 | `OTEL_SERVICE_NAME` | Service name shown in Last9 | `sanic-event-loop-demo` |
 | `SERVICE_VERSION` | Service version for tracking deployments | - |
-| `DEPLOYMENT_ENVIRONMENT` | Environment (production/staging/development) | `development` |
+| `DEPLOYMENT_ENVIRONMENT` | Environment label included in all metrics (production/staging/development) | `development` |
 | `SERVICE_NAMESPACE` | Logical grouping (e.g., "payments", "user-management") | - |
 
 ```bash
