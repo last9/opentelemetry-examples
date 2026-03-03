@@ -22,10 +22,10 @@ These metrics are crucial for diagnosing async application performance issues.
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `asyncio.eventloop.lag` | Gauge | Current event loop lag in seconds |
+| `asyncio.eventloop.lag` | Gauge | Current event loop lag in milliseconds |
 | `asyncio.eventloop.active_tasks` | Gauge | Number of active asyncio tasks |
 | `asyncio.eventloop.utilization` | Gauge | Event loop utilization (0-100%) |
-| `asyncio.eventloop.max_lag` | Gauge | Maximum lag observed since start |
+| `asyncio.eventloop.max_lag` | Gauge | Maximum lag observed since start in milliseconds |
 | `asyncio.eventloop.blocking_events` | Counter | Count of detected blocking operations |
 | `asyncio.eventloop.lag_distribution` | Histogram | Distribution of lag measurements |
 
@@ -389,12 +389,12 @@ Same computation, completely different impact on the event loop.
 Switch from **Traces** to **Metrics** in Last9 and search for these metric names:
 
 #### `asyncio_eventloop_lag`
-- **Type:** Gauge (seconds)
+- **Type:** Gauge (milliseconds)
 - **What to look for:** Spikes aligned with when you called blocking endpoints. Should be near 0 during non-blocking traffic.
 - **Query example:** `asyncio_eventloop_lag{service_name="sanic-event-loop-demo"}`
 
 #### `asyncio_eventloop_lag_distribution`
-- **Type:** Histogram (seconds)
+- **Type:** Histogram (milliseconds)
 - **What to look for:** P99 lag — the worst 1% of measurements
 - **Query example (PromQL):**
   ```promql

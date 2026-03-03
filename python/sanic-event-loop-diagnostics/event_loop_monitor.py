@@ -22,11 +22,11 @@ from opentelemetry.metrics import Meter, CallbackOptions, Observation
 @dataclass
 class EventLoopStats:
     """Current event loop statistics."""
-    lag_seconds: float = 0.0
+    lag_ms: float = 0.0
     active_tasks: int = 0
     utilization_percent: float = 0.0
     blocking_events: int = 0
-    max_lag_seconds: float = 0.0
+    max_lag_ms: float = 0.0
     total_measurements: int = 0
     # Per-coroutine active task counts (updated every monitoring interval)
     task_breakdown: Dict[str, int] = field(default_factory=dict)
@@ -113,7 +113,7 @@ class EventLoopMonitor:
             name="asyncio.eventloop.lag",
             callbacks=[self._observe_lag],
             description="Event loop lag - delay between task scheduling and execution",
-            unit="s"
+            unit="ms"
         )
 
         # Active tasks gauge
@@ -137,7 +137,7 @@ class EventLoopMonitor:
             name="asyncio.eventloop.max_lag",
             callbacks=[self._observe_max_lag],
             description="Maximum event loop lag observed since start",
-            unit="s"
+            unit="ms"
         )
 
         # Blocking detection counter
@@ -151,7 +151,7 @@ class EventLoopMonitor:
         self._lag_histogram = self._meter.create_histogram(
             name="asyncio.eventloop.lag_distribution",
             description="Distribution of event loop lag measurements",
-            unit="s"
+            unit="ms"
         )
 
         # Per-coroutine active task count - shows trends of which coroutines
@@ -175,7 +175,7 @@ class EventLoopMonitor:
     def _observe_lag(self, options: CallbackOptions):
         """Callback for lag gauge."""
         yield Observation(
-            self._stats.lag_seconds,
+            self._stats.lag_ms,
             {"service.name": self._service_name}
         )
 
@@ -196,7 +196,7 @@ class EventLoopMonitor:
     def _observe_max_lag(self, options: CallbackOptions):
         """Callback for max lag gauge."""
         yield Observation(
-            self._stats.max_lag_seconds,
+            self._stats.max_lag_ms,
             {"service.name": self._service_name}
         )
 
@@ -268,15 +268,16 @@ class EventLoopMonitor:
                 elapsed = loop.time() - start
 
                 # Calculate lag (excess time beyond requested sleep)
-                lag = max(0, elapsed - self._interval)
+                lag_seconds = max(0, elapsed - self._interval)
+                lag_ms = lag_seconds * 1000  # Convert to milliseconds
 
                 # Update statistics
-                self._stats.lag_seconds = lag
+                self._stats.lag_ms = lag_ms
                 self._stats.total_measurements += 1
 
                 # Track maximum lag
-                if lag > self._stats.max_lag_seconds:
-                    self._stats.max_lag_seconds = lag
+                if lag_ms > self._stats.max_lag_ms:
+                    self._stats.max_lag_ms = lag_ms
 
                 # Count active tasks and build per-coroutine breakdown
                 all_tasks = asyncio.all_tasks()
@@ -298,23 +299,23 @@ class EventLoopMonitor:
 
                 # Calculate utilization (simplified: lag/interval ratio)
                 # High lag = high utilization (loop was busy)
-                self._busy_time += lag
+                self._busy_time += lag_seconds
                 self._total_time += self._interval
                 if self._total_time > 0:
                     self._stats.utilization_percent = min(100, (self._busy_time / self._total_time) * 100)
 
-                # Record lag in histogram for distribution analysis
+                # Record lag in histogram for distribution analysis (in milliseconds)
                 self._lag_histogram.record(
-                    lag,
+                    lag_ms,
                     {"service.name": self._service_name}
                 )
 
                 # Detect blocking events and attribute lag to contributing tasks
-                if lag > self._blocking_threshold:
+                if lag_seconds > self._blocking_threshold:
                     self._stats.blocking_events += 1
 
                     # Determine severity
-                    if lag > self._critical_threshold:
+                    if lag_seconds > self._critical_threshold:
                         severity = "critical"
                     else:
                         severity = "warning"
@@ -324,7 +325,7 @@ class EventLoopMonitor:
                         {
                             "service.name": self._service_name,
                             "blocking.severity": severity,
-                            "blocking.lag_seconds": str(round(lag, 3))
+                            "blocking.lag_ms": str(round(lag_ms, 3))
                         }
                     )
 
@@ -335,13 +336,12 @@ class EventLoopMonitor:
                     # overlaps with [_last_blocking_start, _last_blocking_end].
                     self._last_blocking_start = start
                     self._last_blocking_end = loop.time()
-                    self._last_blocking_lag_ms = lag * 1000
+                    self._last_blocking_lag_ms = lag_ms
 
                     # Record lag contribution per coroutine that was active
                     # during this blocking event. If no tasks are identified,
                     # attribute the lag to an "unknown" contributor so the
                     # metric is still emitted.
-                    lag_ms = lag * 1000
                     contributing_tasks = task_breakdown if task_breakdown else {"unknown": 1}
                     for coro_name in contributing_tasks:
                         self._task_lag_histogram.record(
@@ -366,13 +366,13 @@ class EventLoopMonitor:
         Useful for exposing via an HTTP endpoint.
         """
         return {
-            "lag_seconds": round(self._stats.lag_seconds, 6),
-            "lag_ms": round(self._stats.lag_seconds * 1000, 3),
+            "lag_ms": round(self._stats.lag_ms, 3),
+            "lag_seconds": round(self._stats.lag_ms / 1000, 6),
             "active_tasks": self._stats.active_tasks,
             "utilization_percent": round(self._stats.utilization_percent, 2),
             "blocking_events_total": self._stats.blocking_events,
-            "max_lag_seconds": round(self._stats.max_lag_seconds, 6),
-            "max_lag_ms": round(self._stats.max_lag_seconds * 1000, 3),
+            "max_lag_ms": round(self._stats.max_lag_ms, 3),
+            "max_lag_seconds": round(self._stats.max_lag_ms / 1000, 6),
             "total_measurements": self._stats.total_measurements,
             "monitoring_interval_ms": self._interval * 1000,
             "blocking_threshold_ms": self._blocking_threshold * 1000,
@@ -384,12 +384,12 @@ class EventLoopMonitor:
 
     def _get_health_status(self) -> str:
         """Determine event loop health status based on current lag."""
-        lag = self._stats.lag_seconds
-        if lag < 0.01:  # < 10ms
+        lag_seconds = self._stats.lag_ms / 1000
+        if lag_seconds < 0.01:  # < 10ms
             return "healthy"
-        elif lag < self._blocking_threshold:
+        elif lag_seconds < self._blocking_threshold:
             return "ok"
-        elif lag < self._critical_threshold:
+        elif lag_seconds < self._critical_threshold:
             return "degraded"
         else:
             return "critical"
