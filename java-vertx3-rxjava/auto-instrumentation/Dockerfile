@@ -4,21 +4,19 @@ FROM maven:3.9-eclipse-temurin-11 AS build
 WORKDIR /app
 
 # Install Last9 auto-configure JARs into local Maven repo.
-# These JARs must be present in the build context — see docker-compose.yaml
-# and .env for how they are referenced. They are .gitignored.
 COPY lib/ /tmp/lib/
 RUN mvn install:install-file \
     -Dfile=/tmp/lib/vertx-otel-core.jar \
     -DgroupId=io.last9 \
     -DartifactId=vertx-otel-core \
-    -Dversion=1.3.0 \
+    -Dversion=2.1.0-beta.1 \
     -Dpackaging=jar \
     -DgeneratePom=true && \
     mvn install:install-file \
     -Dfile=/tmp/lib/vertx3-rxjava2-otel-autoconfigure.jar \
     -DgroupId=io.last9 \
     -DartifactId=vertx3-rxjava2-otel-autoconfigure \
-    -Dversion=1.3.0 \
+    -Dversion=2.1.0-beta.1 \
     -Dpackaging=jar \
     -DgeneratePom=true
 
@@ -31,7 +29,7 @@ COPY src ./src
 RUN mvn package -DskipTests
 
 # Runtime stage
-FROM eclipse-temurin:11-jre
+FROM eclipse-temurin:11-jdk
 
 WORKDIR /app
 
@@ -46,6 +44,6 @@ ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 ENV OTEL_TRACES_EXPORTER=otlp
 ENV OTEL_LOGS_EXPORTER=otlp
 
-# Run with verticle argument
+# OtelLauncher handles everything: OTel SDK + ByteBuddy auto-instrumentation
 ENTRYPOINT ["java", "-jar", "app.jar", "run"]
 CMD ["com.example.holding.MainVerticle"]

@@ -1,6 +1,5 @@
 package com.example.pricing;
 
-import io.last9.tracing.otel.v3.TracedRouter;
 import io.reactivex.Completable;
 import io.vertx.core.json.JsonObject;
 import io.vertx.reactivex.core.AbstractVerticle;
@@ -36,8 +35,8 @@ public class PricingVerticle extends AbstractVerticle {
         basePrices.put("TSLA", 245.00);
         basePrices.put("NVDA", 875.00);
 
-        // Create traced router
-        Router router = TracedRouter.create(vertx);
+        // Plain router — auto-instrumented by RouterImplAdvice
+        Router router = Router.router(vertx);
 
         // Health check
         router.get("/health").handler(this::handleHealth);

@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * Repository for Holding entity using Vert.x 3 rx SQLClient.
- * When wrapped with TracedSQLClient, all queries get automatic OTel CLIENT spans.
+ * All queries get automatic OTel CLIENT spans via JdbcClientAdvice auto-instrumentation.
  */
 public class HoldingRepository {
 
