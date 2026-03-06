@@ -29,7 +29,7 @@
         <slf4j.version>1.7.36</slf4j.version>
 
         <!-- Auto-instrumentation JAR -->
-        <vertx3.otel.autoconfigure.version>1.3.0</vertx3.otel.autoconfigure.version>
+        <vertx3.otel.autoconfigure.version>2.1.0-beta.1</vertx3.otel.autoconfigure.version>
 
         <!-- Main verticle -->
         <main.verticle>com.example.holding.MainVerticle</main.verticle>
@@ -100,17 +100,13 @@
         </dependency>
 
         <!-- Last9 Vert.x 3 RxJava2 OpenTelemetry Auto-Configure
-             This is a self-contained fat JAR: OTel SDK, exporters, semconv,
-             instrumentation libs, and cloud resource detectors are all shaded
-             inside. Exclude their Maven coordinates so Maven does not pull them
-             onto the classpath again (which would cause duplicate
-             HttpSenderProvider errors). -->
+             Self-contained fat JAR: OTel SDK, ByteBuddy, exporters, semconv.
+             OtelLauncher auto-installs ByteBuddy instrumentation — no -javaagent needed. -->
         <dependency>
             <groupId>io.last9</groupId>
             <artifactId>vertx3-rxjava2-otel-autoconfigure</artifactId>
             <version>${vertx3.otel.autoconfigure.version}</version>
             <exclusions>
-                <!-- Shaded inside the fat JAR — must not appear on classpath -->
                 <exclusion>
                     <groupId>io.last9</groupId>
                     <artifactId>vertx-otel-core</artifactId>
@@ -138,12 +134,7 @@
             </exclusions>
         </dependency>
 
-        <!-- OpenTelemetry API — compile-time access to Span, StatusCode, etc.
-             The SDK, exporters, semconv, and instrumentation libs are all
-             bundled inside the vertx3-rxjava2-otel-autoconfigure fat JAR.
-             Do NOT add opentelemetry-sdk, opentelemetry-exporter-otlp, or any
-             opentelemetry-instrumentation/* deps here — they would conflict with
-             the shaded copies and cause duplicate HttpSenderProvider errors. -->
+        <!-- OpenTelemetry API — compile-time access to Span, StatusCode, etc. -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-api</artifactId>
@@ -202,9 +193,9 @@
                         </goals>
                         <configuration>
                             <transformers>
-                                <!-- Use the Last9 OtelLauncher for Vert.x 3 -->
+                                <!-- Standard Vert.x Launcher — no OtelLauncher needed when using -javaagent -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>io.last9.tracing.otel.v3.OtelLauncher</mainClass>
+                                    <mainClass>io.vertx.core.Launcher</mainClass>
                                     <manifestEntries>
                                         <Main-Verticle>${main.verticle}</Main-Verticle>
                                     </manifestEntries>
