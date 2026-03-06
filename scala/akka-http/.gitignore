@@ -1,0 +1,27 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# sbt build artifacts
+target/
+project/target/
+project/project/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.metals/
+.bloop/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Java agent (downloaded at build time)
+*.jar
