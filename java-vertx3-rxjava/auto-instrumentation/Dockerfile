@@ -28,13 +28,14 @@ RUN mvn dependency:go-offline -B
 COPY src ./src
 RUN mvn package -DskipTests
 
-# Runtime stage
-FROM eclipse-temurin:11-jdk
+# Runtime stage — JRE is sufficient (no JDK needed with -javaagent approach)
+FROM eclipse-temurin:11-jre
 
 WORKDIR /app
 
-# Copy built JAR
+# Copy built JAR and standalone agent JAR
 COPY --from=build /app/target/vertx3-rxjava2-otel-example-1.0.0.jar app.jar
+COPY lib/vertx3-otel-agent.jar vertx3-otel-agent.jar
 
 # Default environment variables
 ENV APP_PORT=8080
@@ -44,6 +45,7 @@ ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 ENV OTEL_TRACES_EXPORTER=otlp
 ENV OTEL_LOGS_EXPORTER=otlp
 
-# OtelLauncher handles everything: OTel SDK + ByteBuddy auto-instrumentation
-ENTRYPOINT ["java", "-jar", "app.jar", "run"]
+# Standalone agent handles everything: OTel SDK + RxJava hooks + ByteBuddy auto-instrumentation
+# No OtelLauncher needed — standard Vert.x Launcher as main class
+ENTRYPOINT ["java", "-javaagent:vertx3-otel-agent.jar", "-jar", "app.jar", "run"]
 CMD ["com.example.holding.MainVerticle"]

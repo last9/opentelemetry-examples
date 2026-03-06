@@ -193,9 +193,9 @@
                         </goals>
                         <configuration>
                             <transformers>
-                                <!-- Use the Last9 OtelLauncher for Vert.x 3 -->
+                                <!-- Standard Vert.x Launcher — no OtelLauncher needed when using -javaagent -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>io.last9.tracing.otel.v3.OtelLauncher</mainClass>
+                                    <mainClass>io.vertx.core.Launcher</mainClass>
                                     <manifestEntries>
                                         <Main-Verticle>${main.verticle}</Main-Verticle>
                                     </manifestEntries>
