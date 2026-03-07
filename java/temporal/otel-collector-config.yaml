@@ -1,0 +1,36 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: demo
+        action: upsert
+
+exporters:
+  # Last9 OTLP exporter
+  otlphttp/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_OTLP_HEADER}
+
+  # Debug exporter (logs to console)
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [otlphttp/last9, debug]

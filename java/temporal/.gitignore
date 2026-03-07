@@ -1,0 +1,24 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+/bin/
+/out/
