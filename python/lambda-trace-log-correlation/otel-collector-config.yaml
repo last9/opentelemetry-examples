@@ -1,0 +1,69 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  awscloudwatch:
+    # Region of your AWS account
+    region: <your-aws-region>  # e.g., us-east-1, ap-south-1
+    logs:
+      poll_interval: 2m
+      groups:
+        # Configure your Lambda log group name
+        named:
+          /aws/lambda/<your-lambda-function-name>:
+
+processors:
+  batch:
+    timeout: 40s
+    send_batch_size: 100000
+    send_batch_max_size: 100000
+
+  transform/extract_trace_id:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Extract trace_id from log body using regex with named capture groups
+          - set(attributes["trace_id"], ExtractPatterns(body, "trace_id=(?P<trace_id>[a-f0-9]{32})")["trace_id"])
+          - set(attributes["span_id"], ExtractPatterns(body, "span_id=(?P<span_id>[a-f0-9]{16})")["span_id"])
+
+  transform/add_timestamp:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        conditions:
+        - time_unix_nano == 0
+        statements:
+          - set(observed_time, Now())
+          - set(time_unix_nano, observed_time_unix_nano)
+
+  transform/logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(resource.attributes["service.name"], "cloudwatch-logs")
+          - set(attributes["source"], "cloudwatch")
+
+  resourcedetection/ec2:
+    detectors: [env, ec2]
+    timeout: 2s
+    override: false
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp:
+    endpoint: "<your-otlp-endpoint>"  # e.g., https://otlp.example.com:443
+    headers:
+      Authorization: "<your-authorization-header>"  # e.g., Basic <base64-encoded-credentials>
+
+service:
+  pipelines:
+    logs:
+      receivers: [awscloudwatch]
+      processors: [batch, resourcedetection/ec2, transform/add_timestamp, transform/extract_trace_id, transform/logs]
+      exporters: [otlp, debug]
