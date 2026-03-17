@@ -14,6 +14,7 @@ import asyncio
 import time
 import hashlib
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
@@ -154,6 +155,7 @@ async def otel_response_middleware(request: Request, response_obj):
     #   3. Here we check: did that blocking event fall between start and now?
     #   4. If yes → THIS handler caused the block (true positive)
     #   5. If no  → block happened before/after this request (not its fault)
+    print(f"[MIDDLEWARE] Processing response for {request.path}")
     if event_loop_monitor and hasattr(request.ctx, 'request_start_loop_time'):
         loop = asyncio.get_running_loop()
         request_end_loop_time = loop.time()
@@ -203,10 +205,33 @@ async def otel_response_middleware(request: Request, response_obj):
         span.set_attribute("asyncio.eventloop.request_blocked", was_blocked)
         span.set_attribute("asyncio.eventloop.active_tasks", stats["active_tasks"])
 
+        # Debug logging with forced flush
+        debug_msg = f"[DEBUG] was_blocked={was_blocked}, path={request.path}, stamped_block={stamped_block}, inflight_block={inflight_block}\n"
+        sys.stderr.write(debug_msg)
+        sys.stderr.flush()
+
+        with open("/tmp/blocking_debug.log", "a") as f:
+            f.write(debug_msg)
+
         if was_blocked:
             span.set_attribute("asyncio.eventloop.blocking_lag_ms", round(last_blocking_lag_ms, 2))
             severity = "critical" if last_blocking_lag_ms > stats["blocking_threshold_ms"] * 10 else "warning"
             span.set_attribute("asyncio.eventloop.blocking_severity", severity)
+
+            # Report blocking operation with operation name for better observability
+            operation_name = f"{request.method} {request.path}"
+            blocking_msg = f"[BLOCKING DETECTED] Operation: {operation_name}, Lag: {last_blocking_lag_ms}ms, Severity: {severity}\n"
+            sys.stderr.write(blocking_msg)
+            sys.stderr.flush()
+
+            with open("/tmp/blocking_debug.log", "a") as f:
+                f.write(blocking_msg)
+
+            event_loop_monitor.report_blocking_operation(
+                operation_name=operation_name,
+                lag_ms=last_blocking_lag_ms,
+                severity=severity
+            )
 
     span.end()
 

@@ -36,26 +36,24 @@ exporters:
   debug:
     verbosity: detailed
 
-  # OTLP exporter for Last9 or other backends
-  # Configure via environment variables:
-  #   LAST9_OTLP_ENDPOINT
-  #   LAST9_AUTH_HEADER
-  otlp:
-    endpoint: ${LAST9_OTLP_ENDPOINT:-https://otlp.last9.io}
+  # OTLP exporter for Last9
+  # Replace with your Last9 credentials
+  otlp/last9:
+    endpoint: "YOUR_OTLP_ENDPOINT"
     headers:
-      Authorization: ${LAST9_AUTH_HEADER:-}
+      Authorization: "Basic YOUR_BASE64_CREDENTIALS"
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [debug]  # Add 'otlp' to export to Last9
+      exporters: [debug, otlp/last9]
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [debug]  # Add 'otlp' to export to Last9
+      exporters: [debug, otlp/last9]
 
   telemetry:
     logs:

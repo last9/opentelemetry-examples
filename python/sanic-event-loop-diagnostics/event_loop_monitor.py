@@ -101,6 +101,9 @@ class EventLoopMonitor:
         # yet because the event loop was frozen during the request).
         self._current_interval_start: float = 0.0
 
+        # Track the operation that caused blocking (set by report_blocking_operation)
+        self._last_blocking_operation: str = "unknown"
+
         # Create OTEL metrics
         self._setup_metrics()
 
@@ -320,14 +323,11 @@ class EventLoopMonitor:
                     else:
                         severity = "warning"
 
-                    self._blocking_counter.add(
-                        1,
-                        {
-                            "service.name": self._service_name,
-                            "blocking.severity": severity,
-                            "blocking.lag_ms": str(round(lag_ms, 3))
-                        }
-                    )
+                    # NOTE: We DO NOT emit the blocking counter here anymore.
+                    # The middleware will report blocking events with accurate
+                    # operation labels via report_blocking_operation().
+                    # This avoids duplicate/incorrect attributions where innocent
+                    # requests get blamed for blocking that happened before them.
 
                     # Record the interval [start, now] during which the block
                     # occurred. The block happened somewhere between 'start'
@@ -399,3 +399,25 @@ class EventLoopMonitor:
         self._stats = EventLoopStats()
         self._busy_time = 0.0
         self._total_time = 0.0
+
+    def report_blocking_operation(self, operation_name: str, lag_ms: float, severity: str):
+        """
+        Report a blocking operation detected by external code (e.g., middleware).
+
+        This allows the application middleware to report which specific HTTP endpoint
+        or operation caused the blocking, with accurate labels for observability.
+
+        Args:
+            operation_name: Name of the operation (e.g., "GET /blocking-io")
+            lag_ms: Measured lag in milliseconds
+            severity: "warning" or "critical"
+        """
+        self._blocking_counter.add(
+            1,
+            {
+                "service.name": self._service_name,
+                "blocking.severity": severity,
+                "blocking.lag_ms": str(round(lag_ms, 3)),
+                "operation": operation_name,
+            }
+        )

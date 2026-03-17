@@ -669,6 +669,21 @@ await monitor.start()
 await monitor.stop()
 ```
 
+## Frequently Asked Questions
+
+For common questions about event loop monitoring, see the **[Event Loop Monitoring FAQ](./EVENT_LOOP_MONITORING_FAQ.md)**:
+
+- **Q: Event loop lag shows 300ms but utilization is only 9% - how is this possible?**
+- **Q: How do I identify which operation is blocking the event loop?**
+- **Q: Max lag is showing seconds (e.g., 1.25s) - what does this mean?**
+
+The FAQ includes:
+- Detailed explanations of all metrics
+- PromQL query examples for Grafana
+- Production alerting recommendations
+- Debugging and optimization patterns
+- Troubleshooting guide
+
 ## References
 
 ### Event Loop Monitoring
