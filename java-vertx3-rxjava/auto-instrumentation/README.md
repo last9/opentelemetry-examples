@@ -1,142 +1,157 @@
-# Vert.x 3 RxJava2 OpenTelemetry Auto-Instrumentation Example
+# Vert.x 3 RxJava2 — Zero-Code OpenTelemetry with `-javaagent`
 
-Production-ready OpenTelemetry auto-instrumentation for Vert.x 3 applications using RxJava2. Zero-code tracing with automatic span creation for HTTP requests, database queries, and distributed traces.
+Zero-code OpenTelemetry tracing for Vert.x 3 + RxJava2 applications. No code changes required — just add `-javaagent:vertx3-otel-agent.jar` to your JVM args and the agent automatically instruments everything.
+
+## How It Works
+
+The `vertx3-otel-agent.jar` is a self-contained Java agent that uses ByteBuddy to intercept Vert.x internals at class-load time. **Your application code stays completely untouched** — no `TracedRouter`, no `OtelLauncher`, no OpenTelemetry dependency needed.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  java -javaagent:vertx3-otel-agent.jar -jar my-app.jar │
+│                                                         │
+│  Agent auto-instruments:                                │
+│  ├── Router          → SERVER spans (HTTP routes)       │
+│  ├── WebClient       → CLIENT spans + traceparent       │
+│  ├── JDBCClient      → CLIENT spans (SQL queries)       │
+│  ├── KafkaProducer   → PRODUCER spans                   │
+│  ├── KafkaConsumer   → CONSUMER spans                   │
+│  ├── AerospikeClient → CLIENT spans (cache ops)         │
+│  ├── MySQLPool       → CLIENT spans (reactive SQL)      │
+│  ├── Jedis/Lettuce   → CLIENT spans (Redis)             │
+│  └── Netty HTTP      → CLIENT spans (raw HTTP)          │
+│                                                         │
+│  Exports via OkHttp OTLP sender (Java 8+ compatible)    │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## Prerequisites
 
-- Java 11+
+- Java 8+ (agent gracefully skips instrumentation on Java 8, fully instruments on Java 11+)
 - Maven 3.6+
-- Docker & Docker Compose
-- Last9 account (for observability backend)
+- Docker & Docker Compose (for infrastructure)
+- [Last9](https://last9.io) account (or any OTLP-compatible backend)
 
 ## Quick Start
 
-### 1. Download the auto-instrumentation JAR
+### 1. Get the agent JAR
+
+Download from [releases](https://github.com/last9/vertx-opentelemetry/releases) or build from source:
 
 ```bash
-curl -L -o vertx3-rxjava2-otel-autoconfigure-1.0.0.jar \
-  https://github.com/last9/vertx-opentelemetry/releases/download/v1.0.0/vertx3-rxjava2-otel-autoconfigure-1.0.0.jar
+# From the vertx-rxjava3-otel-autoconfigure repo
+mvn clean package -pl vertx3-otel-agent -am
+cp vertx3-otel-agent/target/vertx3-otel-agent-*.jar ./vertx3-otel-agent.jar
 ```
 
-### 2. Install JAR to local Maven repository
-
-```bash
-mvn install:install-file \
-  -Dfile=vertx3-rxjava2-otel-autoconfigure-1.0.0.jar \
-  -DgroupId=io.last9 \
-  -DartifactId=vertx3-rxjava2-otel-autoconfigure \
-  -Dversion=1.0.0 \
-  -Dpackaging=jar
-```
-
-### 3. Configure environment
-
-```bash
-cp .env.example .env
-# Edit .env with your Last9 credentials
-```
-
-### 4. Start with Docker Compose
-
-```bash
-docker-compose up --build
-```
-
-### 5. Test the API
-
-```bash
-# Health check
-curl http://localhost:8080/health
-
-# Create a holding
-curl -X POST http://localhost:8080/v1/holding \
-  -H "Content-Type: application/json" \
-  -d '{"userId": "user1", "symbol": "AAPL", "quantity": 100}'
-
-# Get portfolio with pricing (distributed trace)
-curl http://localhost:8080/v1/portfolio/user1
-```
-
-## Local Development (without Docker)
-
-### 1. Start PostgreSQL
-
-```bash
-docker run -d --name postgres-vertx3 \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=holdingdb \
-  -p 5432:5432 \
-  postgres:15-alpine
-```
-
-### 2. Build and run
+### 2. Build your app (no OTel dependency needed)
 
 ```bash
 mvn clean package
-
-# Run pricing service
-OTEL_SERVICE_NAME=pricing-service \
-APP_PORT=8081 \
-java -jar target/vertx3-rxjava2-otel-example-1.0.0.jar run com.example.pricing.PricingVerticle
-
-# Run holding service (in another terminal)
-OTEL_SERVICE_NAME=holding-service \
-APP_PORT=8080 \
-java -jar target/vertx3-rxjava2-otel-example-1.0.0.jar run com.example.holding.MainVerticle
 ```
 
+### 3. Run with the agent
+
+```bash
+export OTEL_SERVICE_NAME=holding-service
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.last9.io
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <your-token>"
+
+java -javaagent:vertx3-otel-agent.jar \
+     -jar target/your-app.jar
+```
+
+That's it. Every Router endpoint, JDBC query, Kafka message, Aerospike operation, and outbound HTTP call is automatically traced.
+
+### 4. Start infrastructure and test
+
+```bash
+# Start Postgres, Kafka, Aerospike, MySQL
+docker compose up -d
+
+# Test endpoints
+curl http://localhost:8080/health
+curl http://localhost:8080/v1/holding
+curl -X POST http://localhost:8080/v1/holding \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "user1", "symbol": "AAPL", "quantity": 100}'
+curl http://localhost:8080/v1/portfolio-full/user1
+```
+
+## What Gets Auto-Traced
+
+| Component | Span Kind | Agent Advice | Attributes |
+|-----------|-----------|--------------|------------|
+| `Router` | SERVER | `RouterImplAdvice` | `http.method`, `http.route`, `http.status_code` |
+| `WebClient` | CLIENT | `WebClientAdvice` | `http.method`, `net.peer.name`, `http.status_code` |
+| `JDBCClient` | CLIENT | `JdbcClientAdvice` | `db.system`, `db.statement`, `db.name` |
+| `KafkaProducer` | PRODUCER | `KafkaProducerAdvice` | `messaging.system`, `messaging.destination` |
+| `KafkaConsumer` | CONSUMER | `KafkaConsumerAdvice` | `messaging.system`, `messaging.destination` |
+| `AerospikeClient` | CLIENT | `AerospikeClientAdvice` | `db.system`, `db.operation`, `db.name` |
+| `MySQLPool` | CLIENT | `ReactiveSqlAdvice` | `db.system`, `db.statement`, `net.peer.name` |
+| `Jedis` / `Lettuce` | CLIENT | `JedisAdvice` / `LettuceAdvice` | `db.system=redis`, `db.statement` |
+
+## Java 8 Compatibility
+
+The agent works on **Java 8+** JVMs:
+
+- **Java 8**: Agent detects the JVM version, prints `"Requires Java 11+"`, and **skips instrumentation**. Your app starts normally with zero overhead.
+- **Java 11+**: Full instrumentation. Traces exported via OkHttp OTLP sender (shaded to avoid classpath conflicts).
+
+This means you can ship `vertx3-otel-agent.jar` bundled with your deployment — it's safe to attach on any JVM version.
+
 ## Configuration
+
+All configuration is via standard OpenTelemetry environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OTEL_SERVICE_NAME` | Service name in traces | `unknown_service` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint URL | `http://localhost:4318` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Auth headers (e.g. `Authorization=Basic ...`) | — |
+| `OTEL_TRACES_SAMPLER` | Sampling strategy | `parentbased_always_on` |
+| `OTEL_RESOURCE_ATTRIBUTES` | Extra resource attributes | — |
+
+Application-specific variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `APP_PORT` | HTTP server port | `8080` |
-| `POSTGRES_HOST` | PostgreSQL host | `localhost` |
-| `POSTGRES_PORT` | PostgreSQL port | `5432` |
-| `POSTGRES_DB` | Database name | `holdingdb` |
-| `POSTGRES_USER` | Database user | `postgres` |
-| `POSTGRES_PASSWORD` | Database password | `postgres` |
-| `PRICING_SERVICE_URL` | Pricing service URL | `http://localhost:8081` |
-| `OTEL_SERVICE_NAME` | Service name in traces | `vertx3-service` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint | `http://localhost:4318` |
-
-## How It Works
-
-### Auto-Instrumentation Setup
-
-1. **Launcher**: The JAR provides `io.last9.tracing.otel.v3.OtelLauncher` as the main class, which initializes OpenTelemetry before starting Vert.x
-
-2. **TracedRouter**: Replace `Router.router(vertx)` with `TracedRouter.create(vertx)` for automatic HTTP span creation with route patterns
-
-3. **Log Correlation**: Configure `logback.xml` with `MdcTraceTurboFilter` to inject `trace_id` and `span_id` into logs
-
-### What Gets Traced
-
-- HTTP server requests (method, route, status code)
-- Database queries (SQL statements, connection info)
-- HTTP client calls (downstream services)
-- RxJava2 context propagation across operators
+| `POSTGRES_HOST` / `POSTGRES_PORT` | PostgreSQL connection | `localhost:5432` |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka brokers | `localhost:9092` |
+| `AEROSPIKE_HOST` / `AEROSPIKE_PORT` | Aerospike connection | `localhost:3000` |
+| `MYSQL_HOST` / `MYSQL_PORT` | MySQL connection | `localhost:3306` |
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| GET | `/v1/holding` | List all holdings |
-| GET | `/v1/holding/:userId` | Get user's holdings |
-| POST | `/v1/holding` | Create holding |
-| DELETE | `/v1/holding/:id` | Delete holding |
-| GET | `/v1/portfolio/:userId` | Get portfolio with prices |
+| Method | Path | Description | Auto-Traced By |
+|--------|------|-------------|----------------|
+| GET | `/health` | Health check | Router |
+| GET | `/v1/holding` | List all holdings | Router + JDBC |
+| GET | `/v1/holding/:userId` | Get user holdings | Router + JDBC |
+| POST | `/v1/holding` | Create holding | Router + JDBC |
+| DELETE | `/v1/holding/:id` | Delete holding | Router + JDBC |
+| GET | `/v1/portfolio/:userId` | Portfolio with pricing | Router + JDBC + WebClient |
+| GET | `/v1/external/joke` | External API call | Router + WebClient |
+| POST | `/v1/kafka/produce` | Produce Kafka message | Router + Kafka Producer |
+| POST | `/v1/kafka/produce-batch` | Batch produce | Router + Kafka Producer |
+| POST | `/v1/cache/:key` | Cache put | Router + Aerospike |
+| GET | `/v1/cache/:key` | Cache get | Router + Aerospike |
+| DELETE | `/v1/cache/:key` | Cache delete | Router + Aerospike |
+| GET | `/v1/mysql/ping` | MySQL health | Router + MySQL |
+| GET | `/v1/portfolio-full/:userId` | Multi-system query | Router + JDBC + Aerospike + WebClient + Kafka |
+| GET | `/v1/error/http` | Error scenario | Router (exception recording) |
+| GET | `/v1/error/try-catch` | Manual span error | Router + `Span.recordException()` |
 
-## Vert.x 3 vs Vert.x 4
+## Key Difference: Zero-Code vs Manual
 
-| Feature | Vert.x 3 | Vert.x 4 |
-|---------|----------|----------|
-| Java Version | 11+ | 17+ |
-| RxJava | RxJava 2 | RxJava 3 |
-| Database Client | JDBC Client | Reactive PG Client |
-| Launcher | `io.last9.tracing.otel.v3.OtelLauncher` | `io.last9.tracing.otel.v4.OtelLauncher` |
-| TracedRouter | `io.last9.tracing.otel.v3.TracedRouter` | `io.last9.tracing.otel.v4.TracedRouter` |
+| | Zero-Code (`-javaagent`) | Manual (TracedRouter/OtelLauncher) |
+|---|---|---|
+| **Code changes** | None | Replace Router, change Launcher |
+| **Dependencies** | None (agent is external) | Add library to pom.xml |
+| **Scope** | All supported components | Only what you wrap |
+| **Java version** | 8+ (graceful skip on 8) | 11+ |
+| **Recommended** | **Yes** | Legacy only |
 
 ## Resources
 
