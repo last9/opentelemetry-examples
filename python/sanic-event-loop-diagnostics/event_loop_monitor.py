@@ -7,14 +7,24 @@ does NOT provide:
 - Active task count
 - Blocking detection
 - Event loop utilization
+- GC pause correlation (attribute lag spikes to garbage collection)
+- Connection pool saturation (asyncpg, aiohttp, aioredis)
 
 The standard OTEL asyncio instrumentation only tracks coroutine duration and count,
 which tells you WHAT your coroutines are doing, but not HOW HEALTHY your event loop is.
+
+Competitive context (as of March 2026):
+- Datadog: event loop metrics for Node.js only, nothing for Python
+- New Relic: per-transaction eventLoopWait, no global lag/utilization/task breakdown
+- Dynatrace/Sentry: no event loop metrics for Python
+- OTel asyncio instrumentation: coroutine duration/count only, no health metrics
+This module fills all those gaps.
 """
 
 import asyncio
+import gc
 import time
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, List
 from dataclasses import dataclass, field
 from opentelemetry.metrics import Meter, CallbackOptions, Observation
 
@@ -30,6 +40,9 @@ class EventLoopStats:
     total_measurements: int = 0
     # Per-coroutine active task counts (updated every monitoring interval)
     task_breakdown: Dict[str, int] = field(default_factory=dict)
+    gc_collections_since_last: Dict[int, int] = field(default_factory=dict)
+    gc_objects_collected_since_last: Dict[int, int] = field(default_factory=dict)
+    gc_lag_correlation: bool = False
 
 
 class EventLoopMonitor:
@@ -53,7 +66,8 @@ class EventLoopMonitor:
         interval: float = 0.1,
         blocking_threshold: float = 0.05,
         critical_threshold: float = 0.5,
-        service_name: str = "unknown"
+        service_name: str = "unknown",
+        resource_attributes: Optional[Dict[str, str]] = None
     ):
         """
         Initialize the event loop monitor.
@@ -66,12 +80,22 @@ class EventLoopMonitor:
                                Default 50ms - typical threshold for user-perceptible delay.
             critical_threshold: Lag above this is "critical" (seconds). Default 500ms.
             service_name: Service name for metric attributes.
+            resource_attributes: Extra attributes to attach to every metric data
+                point. When using Prometheus client export (or any pull-based
+                exporter), OTel Resource attributes are NOT automatically
+                propagated as metric labels — they only appear in the
+                Resource descriptor.  Pass key infrastructure labels here
+                (e.g. deployment.environment, k8s.pod.name) so they are
+                included on every Observation / record call.
         """
         self._meter = meter
         self._interval = interval
         self._blocking_threshold = blocking_threshold
         self._critical_threshold = critical_threshold
         self._service_name = service_name
+        self._base_attributes = {"service.name": service_name}
+        if resource_attributes:
+            self._base_attributes.update(resource_attributes)
 
         # Current stats (updated by monitoring task)
         self._stats = EventLoopStats()
@@ -103,6 +127,12 @@ class EventLoopMonitor:
 
         # Track the operation that caused blocking (set by report_blocking_operation)
         self._last_blocking_operation: str = "unknown"
+
+        # GC tracking — snapshot counts at last check to compute deltas
+        self._last_gc_stats = self._snapshot_gc()
+
+        # Connection pool registry — callers register pools for monitoring
+        self._connection_pools: Dict[str, Any] = {}
 
         # Create OTEL metrics
         self._setup_metrics()
@@ -175,32 +205,73 @@ class EventLoopMonitor:
             unit="ms"
         )
 
+        # ── GC metrics ──────────────────────────────────────────
+        self._gc_collections_counter = self._meter.create_counter(
+            name="asyncio.gc.collections",
+            description="Garbage collection runs by generation",
+            unit="{collections}"
+        )
+
+        self._gc_collected_counter = self._meter.create_counter(
+            name="asyncio.gc.objects_collected",
+            description="Objects collected by the garbage collector, by generation",
+            unit="{objects}"
+        )
+
+        self._gc_lag_correlation_counter = self._meter.create_counter(
+            name="asyncio.gc.lag_correlated",
+            description="Count of monitoring intervals where GC ran AND lag exceeded the blocking threshold",
+            unit="{events}"
+        )
+
+        # ── Connection pool metrics ─────────────────────────────
+        self._meter.create_observable_gauge(
+            name="asyncio.pool.size",
+            callbacks=[self._observe_pool_size],
+            description="Total size of a connection pool (max connections)",
+            unit="{connections}"
+        )
+
+        self._meter.create_observable_gauge(
+            name="asyncio.pool.available",
+            callbacks=[self._observe_pool_available],
+            description="Number of available (idle) connections in a pool",
+            unit="{connections}"
+        )
+
+        self._meter.create_observable_gauge(
+            name="asyncio.pool.waiters",
+            callbacks=[self._observe_pool_waiters],
+            description="Number of coroutines waiting for a connection from the pool",
+            unit="{waiters}"
+        )
+
     def _observe_lag(self, options: CallbackOptions):
         """Callback for lag gauge."""
         yield Observation(
             self._stats.lag_ms,
-            {"service.name": self._service_name}
+            self._base_attributes
         )
 
     def _observe_active_tasks(self, options: CallbackOptions):
         """Callback for active tasks gauge."""
         yield Observation(
             self._stats.active_tasks,
-            {"service.name": self._service_name}
+            self._base_attributes
         )
 
     def _observe_utilization(self, options: CallbackOptions):
         """Callback for utilization gauge."""
         yield Observation(
             self._stats.utilization_percent,
-            {"service.name": self._service_name}
+            self._base_attributes
         )
 
     def _observe_max_lag(self, options: CallbackOptions):
         """Callback for max lag gauge."""
         yield Observation(
             self._stats.max_lag_ms,
-            {"service.name": self._service_name}
+            self._base_attributes
         )
 
     def _observe_task_breakdown(self, options: CallbackOptions):
@@ -216,10 +287,70 @@ class EventLoopMonitor:
             yield Observation(
                 count,
                 {
-                    "service.name": self._service_name,
+                    **self._base_attributes,
                     "task.coroutine": coro_name,
                 }
             )
+
+    @staticmethod
+    def _snapshot_gc() -> List[Dict[str, int]]:
+        """Return per-generation GC counters from gc.get_stats().
+
+        Each entry is ``{"collections": <int>, "collected": <int>}`` keyed by
+        generation index.  We snapshot these so the monitor loop can compute
+        deltas between iterations.
+        """
+        return [
+            {"collections": s.get("collections", 0), "collected": s.get("collected", 0)}
+            for s in gc.get_stats()
+        ]
+
+    def _observe_pool_size(self, options: CallbackOptions):
+        """Callback for pool size gauge — yields one Observation per registered pool."""
+        for name, pool in self._connection_pools.items():
+            size = getattr(pool, "size", None) or getattr(pool, "maxsize", 0)
+            yield Observation(
+                size,
+                {**self._base_attributes, "pool.name": name}
+            )
+
+    def _observe_pool_available(self, options: CallbackOptions):
+        """Callback for pool available (idle) connections gauge."""
+        for name, pool in self._connection_pools.items():
+            available = getattr(pool, "freesize", None)
+            if available is None:
+                available = getattr(pool, "available", 0)
+            yield Observation(
+                available,
+                {**self._base_attributes, "pool.name": name}
+            )
+
+    def _observe_pool_waiters(self, options: CallbackOptions):
+        """Callback for pool waiters gauge — coroutines waiting for a connection."""
+        for name, pool in self._connection_pools.items():
+            # asyncpg: pool._queue.qsize() (internal)
+            queue = getattr(pool, "_queue", None)
+            if queue is not None and hasattr(queue, "qsize"):
+                waiters = queue.qsize()
+            else:
+                waiters = getattr(pool, "wait_count", 0)
+            yield Observation(
+                waiters,
+                {**self._base_attributes, "pool.name": name}
+            )
+
+    def register_pool(self, name: str, pool: Any) -> None:
+        """Register a connection pool for monitoring.
+
+        Stores the pool so that the observable gauge callbacks can read its
+        size / available / waiters on every metric collection cycle.
+
+        Compatible pool types:
+        - ``asyncpg.Pool``   — size, freesize, _queue
+        - ``aiohttp.TCPConnector`` — available / limit
+        - ``aioredis.ConnectionPool`` — maxsize, available, wait_count
+        """
+        self._connection_pools[name] = pool
 
     async def start(self):
         """Start the monitoring task."""
@@ -307,10 +438,40 @@ class EventLoopMonitor:
                 if self._total_time > 0:
                     self._stats.utilization_percent = min(100, (self._busy_time / self._total_time) * 100)
 
+                # ── GC delta tracking ──────────────────────────────
+                current_gc = self._snapshot_gc()
+                gc_ran = False
+                for gen in range(len(current_gc)):
+                    delta_collections = current_gc[gen]["collections"] - self._last_gc_stats[gen]["collections"]
+                    delta_collected = current_gc[gen]["collected"] - self._last_gc_stats[gen]["collected"]
+
+                    if delta_collections > 0:
+                        gc_ran = True
+                        self._gc_collections_counter.add(
+                            delta_collections,
+                            {**self._base_attributes, "gc.generation": str(gen)}
+                        )
+                        self._stats.gc_collections_since_last[gen] = delta_collections
+
+                    if delta_collected > 0:
+                        self._gc_collected_counter.add(
+                            delta_collected,
+                            {**self._base_attributes, "gc.generation": str(gen)}
+                        )
+                        self._stats.gc_objects_collected_since_last[gen] = delta_collected
+
+                if gc_ran and lag_seconds > self._blocking_threshold:
+                    self._gc_lag_correlation_counter.add(1, self._base_attributes)
+                    self._stats.gc_lag_correlation = True
+                else:
+                    self._stats.gc_lag_correlation = False
+
+                self._last_gc_stats = current_gc
+
                 # Record lag in histogram for distribution analysis (in milliseconds)
                 self._lag_histogram.record(
                     lag_ms,
-                    {"service.name": self._service_name}
+                    self._base_attributes
                 )
 
                 # Detect blocking events and attribute lag to contributing tasks
@@ -347,7 +508,7 @@ class EventLoopMonitor:
                         self._task_lag_histogram.record(
                             lag_ms,
                             {
-                                "service.name": self._service_name,
+                                **self._base_attributes,
                                 "task.coroutine": coro_name,
                                 "blocking.severity": severity,
                             }
@@ -380,6 +541,20 @@ class EventLoopMonitor:
             # Per-coroutine breakdown: shows which tasks are active right now
             # and (via OTEL) which ones have been contributing to lag over time.
             "task_breakdown": dict(self._stats.task_breakdown),
+            "gc_lag_correlated": self._stats.gc_lag_correlation,
+            "gc_stats": [
+                {"generation": i, **s}
+                for i, s in enumerate(gc.get_stats())
+            ],
+            "connection_pools": {
+                name: {
+                    "size": getattr(pool, "size", None) or getattr(pool, "maxsize", 0),
+                    "available": getattr(pool, "freesize", None)
+                    if getattr(pool, "freesize", None) is not None
+                    else getattr(pool, "available", 0),
+                }
+                for name, pool in self._connection_pools.items()
+            },
         }
 
     def _get_health_status(self) -> str:
@@ -415,7 +590,7 @@ class EventLoopMonitor:
         self._blocking_counter.add(
             1,
             {
-                "service.name": self._service_name,
+                **self._base_attributes,
                 "blocking.severity": severity,
                 "blocking.lag_ms": str(round(lag_ms, 3)),
                 "operation": operation_name,

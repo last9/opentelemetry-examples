@@ -14,7 +14,6 @@ import asyncio
 import time
 import hashlib
 import os
-import sys
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
@@ -24,7 +23,7 @@ from opentelemetry import trace, context
 from opentelemetry.propagate import extract
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
-from otel_setup import setup_opentelemetry, shutdown_opentelemetry
+from otel_setup import setup_opentelemetry, shutdown_opentelemetry, create_resource
 from event_loop_monitor import EventLoopMonitor
 
 
@@ -54,13 +53,32 @@ async def setup_otel_and_monitor(app, loop):
     # Setup OpenTelemetry (tracing + metrics)
     tracer, meter = setup_opentelemetry(service_name=service_name)
 
+    # Extract key infrastructure labels from the OTel Resource so they can
+    # be propagated as metric attributes.  When using Prometheus client
+    # export, Resource attributes are NOT automatically added as labels.
+    resource = create_resource(service_name)
+    _INFRA_KEYS = [
+        "deployment.environment",
+        "k8s.pod.name",
+        "k8s.namespace.name",
+        "host.name",
+        "container.id",
+    ]
+    resource_attributes = {
+        k: str(v)
+        for k, v in resource.attributes.items()
+        if k in _INFRA_KEYS
+    }
+    print(f"  - Resource attributes propagated to metrics: {resource_attributes}")
+
     # Create and start our custom event loop monitor
     event_loop_monitor = EventLoopMonitor(
         meter=meter,
         interval=0.1,  # Check every 100ms
         blocking_threshold=0.05,  # 50ms = blocking warning
         critical_threshold=0.5,  # 500ms = critical
-        service_name=service_name
+        service_name=service_name,
+        resource_attributes=resource_attributes
     )
     await event_loop_monitor.start()
 
@@ -155,7 +173,6 @@ async def otel_response_middleware(request: Request, response_obj):
     #   3. Here we check: did that blocking event fall between start and now?
     #   4. If yes → THIS handler caused the block (true positive)
     #   5. If no  → block happened before/after this request (not its fault)
-    print(f"[MIDDLEWARE] Processing response for {request.path}")
     if event_loop_monitor and hasattr(request.ctx, 'request_start_loop_time'):
         loop = asyncio.get_running_loop()
         request_end_loop_time = loop.time()
@@ -205,14 +222,6 @@ async def otel_response_middleware(request: Request, response_obj):
         span.set_attribute("asyncio.eventloop.request_blocked", was_blocked)
         span.set_attribute("asyncio.eventloop.active_tasks", stats["active_tasks"])
 
-        # Debug logging with forced flush
-        debug_msg = f"[DEBUG] was_blocked={was_blocked}, path={request.path}, stamped_block={stamped_block}, inflight_block={inflight_block}\n"
-        sys.stderr.write(debug_msg)
-        sys.stderr.flush()
-
-        with open("/tmp/blocking_debug.log", "a") as f:
-            f.write(debug_msg)
-
         if was_blocked:
             span.set_attribute("asyncio.eventloop.blocking_lag_ms", round(last_blocking_lag_ms, 2))
             severity = "critical" if last_blocking_lag_ms > stats["blocking_threshold_ms"] * 10 else "warning"
@@ -220,12 +229,6 @@ async def otel_response_middleware(request: Request, response_obj):
 
             # Report blocking operation with operation name for better observability
             operation_name = f"{request.method} {request.path}"
-            blocking_msg = f"[BLOCKING DETECTED] Operation: {operation_name}, Lag: {last_blocking_lag_ms}ms, Severity: {severity}\n"
-            sys.stderr.write(blocking_msg)
-            sys.stderr.flush()
-
-            with open("/tmp/blocking_debug.log", "a") as f:
-                f.write(blocking_msg)
 
             event_loop_monitor.report_blocking_operation(
                 operation_name=operation_name,
