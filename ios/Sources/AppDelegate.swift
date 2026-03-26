@@ -10,14 +10,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         // Initialize Last9 OpenTelemetry.
         //
-        // After this call:
-        //   - Every URLSession request is auto-traced (latency, status, URL)
-        //   - W3C traceparent is auto-injected (links to backend traces)
-        //   - Device, OS, app version are auto-attached to every span
-        //
-        // Uses a client monitoring token (write-only, safe for mobile apps).
-        // Create the token at https://app.last9.io/control-plane/ingestion-tokens
-        // with allowed origin: ios://com.yourcompany.yourapp
+        // After this call, automatically:
+        //   - Every URLSession request is traced (latency, status, URL)
+        //   - W3C traceparent is injected (links to backend traces)
+        //   - Device, OS, app version attached per OTel semantic conventions
+        //   - App lifecycle events emitted (active, inactive, background, foreground, terminate)
+        //   - NSException crashes captured with stack traces
+        //   - Flush on background + shutdown on terminate handled automatically
         Last9OTel.initialize(
             endpoint: ProcessInfo.processInfo.environment["LAST9_OTLP_ENDPOINT"]
                 ?? "<your-base-url>/v1/otlp/organizations/<your-org-slug>/telemetry/client_monitoring",
@@ -30,11 +29,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    func applicationDidEnterBackground(_ application: UIApplication) {
-        Last9OTel.shared?.flush()
-    }
-
-    func applicationWillTerminate(_ application: UIApplication) {
-        Last9OTel.shared?.shutdown()
-    }
+    // No need for applicationDidEnterBackground / applicationWillTerminate —
+    // Last9OTel handles lifecycle automatically via NotificationCenter observers.
 }
