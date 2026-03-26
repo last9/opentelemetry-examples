@@ -1,0 +1,26 @@
+# ADOT Lambda Collector configuration
+# Deployed to: /var/task/.chalice/collector-config.yaml
+# Note: Lambda ADOT does NOT support the batch processor.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+
+exporters:
+  otlp:
+    endpoint: <YOUR_OTLP_ENDPOINT>:443
+    headers:
+      authorization: Basic <YOUR_BASE64_CREDENTIALS>
+    tls:
+      insecure: false
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp]
+    metrics:
+      receivers: [otlp]
+      exporters: [otlp]
