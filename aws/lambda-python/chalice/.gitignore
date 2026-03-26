@@ -1,0 +1,7 @@
+.chalice/deployments/
+.chalice/deployed/
+__pycache__/
+*.pyc
+.env
+.venv/
+*.egg-info/

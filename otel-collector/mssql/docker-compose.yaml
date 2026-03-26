@@ -1,0 +1,66 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-test
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "MSSQLPassword123!"
+      MSSQL_PID: Developer
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P MSSQLPassword123! -C -Q 'SELECT 1' -b"
+      ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  mssql-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-init
+    depends_on:
+      mssql:
+        condition: service_healthy
+    volumes:
+      - ./init.sql:/scripts/init.sql:ro
+    entrypoint: [
+      "/opt/mssql-tools18/bin/sqlcmd",
+      "-S", "mssql", "-U", "sa", "-P", "MSSQLPassword123!", "-C",
+      "-i", "/scripts/init.sql"
+    ]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.147.0
+    container_name: mssql-otel-collector
+    user: "0:0"
+    command: ["--config=/etc/otel/config.yaml", "--feature-gates=transform.flatten.logs"]
+    depends_on:
+      mssql:
+        condition: service_healthy
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+      - mssql-data:/var/opt/mssql:ro
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION=${OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION}
+    ports:
+      - "13137:13133"
+
+  slow-query-generator:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-slow-query-generator
+    profiles: ["generate"]
+    depends_on:
+      mssql:
+        condition: service_healthy
+    volumes:
+      - ./generate-slow-queries.sh:/scripts/generate-slow-queries.sh:ro
+    entrypoint: ["bash", "/scripts/generate-slow-queries.sh"]
+
+volumes:
+  mssql-data:
