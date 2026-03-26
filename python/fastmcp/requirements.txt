@@ -1,0 +1,12 @@
+fastmcp>=2.0.0
+httpx>=0.27.0
+
+# OpenTelemetry auto-instrumentation
+opentelemetry-distro>=0.50b0
+opentelemetry-exporter-otlp>=1.29.0
+
+# Auto-instrumentation for httpx (discovered by opentelemetry-bootstrap)
+opentelemetry-instrumentation-httpx>=0.50b0
+
+# Logging instrumentation for trace-log correlation
+opentelemetry-instrumentation-logging>=0.50b0
