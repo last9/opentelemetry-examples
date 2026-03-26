@@ -60,13 +60,8 @@ final class Last9OTel {
         // 2. Synthetic origin — ios://com.your.bundleid
         let origin = "ios://\(bundleId)"
 
-        // 3. Device ID for client identification
-        let clientId: String
-        #if canImport(UIKit)
-        clientId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
-        #else
-        clientId = UUID().uuidString
-        #endif
+        // 3. Stable client ID (persisted across launches)
+        let clientId = Self.persistentClientId()
 
         // 4. OTLP HTTP exporter → Last9 client monitoring endpoint
         let otlpConfig = OtlpConfiguration(
@@ -318,5 +313,22 @@ final class Last9OTel {
             instrumentationName: name,
             instrumentationVersion: nil
         )
+    }
+
+    /// Returns a stable client ID. Uses identifierForVendor if available,
+    /// otherwise generates a UUID once and persists it in UserDefaults.
+    private static func persistentClientId() -> String {
+        #if canImport(UIKit)
+        if let vendorId = UIDevice.current.identifierForVendor?.uuidString {
+            return vendorId
+        }
+        #endif
+        let key = "io.last9.clientId"
+        if let stored = UserDefaults.standard.string(forKey: key) {
+            return stored
+        }
+        let generated = UUID().uuidString
+        UserDefaults.standard.set(generated, forKey: key)
+        return generated
     }
 }
