@@ -1,8 +1,6 @@
 module Api
   module V1
     class UsersController < ApplicationController
-      SERVICE_NAMESPACE = "users".freeze
-
       # GET /api/v1/users
       def index
         current_span.set_attribute("users.operation", "list")

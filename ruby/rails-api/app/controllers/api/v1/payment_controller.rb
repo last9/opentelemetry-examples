@@ -1,8 +1,6 @@
 module Api
   module V1
     class PaymentController < ApplicationController
-      SERVICE_NAMESPACE = "payment".freeze
-
       # GET /api/v1/payment/status
       def status
         # Check cache for gateway status

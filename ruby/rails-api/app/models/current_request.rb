@@ -1,5 +1,5 @@
 # Request-scoped storage for OpenTelemetry attributes
-# Automatically resets between requests - prevents namespace leakage
+# Automatically resets between requests - prevents leakage
 class CurrentRequest < ActiveSupport::CurrentAttributes
-  attribute :service_namespace
+  attribute :team
 end

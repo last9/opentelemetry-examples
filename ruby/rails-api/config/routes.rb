@@ -30,6 +30,9 @@ Rails.application.routes.draw do
         post 'jobs/trigger', to: 'internal#trigger_job'
       end
 
+      # Demo endpoint - exercises all models
+      get 'demo/complex_queries', to: 'demo#complex_queries'
+
       # Public endpoints - NO service.namespace attribute
       scope :public do
         get 'ping', to: 'public#ping'
