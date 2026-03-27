@@ -1,8 +1,6 @@
 module Api
   module V1
     class InternalController < ApplicationController
-      SERVICE_NAMESPACE = "internal".freeze
-
       # GET /api/v1/internal/health
       def health
         simulate_work(5..20)

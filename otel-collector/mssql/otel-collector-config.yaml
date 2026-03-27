@@ -1,0 +1,85 @@
+receivers:
+  filelog:
+    include: [/var/opt/mssql/log/errorlog*]
+    include_file_path: true
+    start_at: beginning
+    retry_on_failure:
+      enabled: true
+    multiline:
+      line_start_pattern: '^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}'
+
+  sqlserver:
+    server: mssql
+    port: 1433
+    username: otel_monitor
+    password: OtelPassword123!
+    collection_interval: 60s
+
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.logical.count:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+          system.memory.limit:
+            enabled: true
+      load:
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+      paging:
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+  transform/logs:
+    flatten_data: true
+    log_statements:
+      - context: log
+        statements:
+          - set(observed_time, Now())
+          - set(time_unix_nano, observed_time_unix_nano) where time_unix_nano == 0
+          - set(resource.attributes["service.name"], "mssql-server")
+          - set(resource.attributes["deployment.environment"], "dev")
+  transform/slow_queries:
+    log_statements:
+      - context: log
+        conditions:
+          - IsMatch(body, "(?i)(deadlock|timeout|error|killed)")
+        statements:
+          - set(attributes["db.system"], "mssql")
+          - set(attributes["slow_query"], true)
+          - set(severity_text, "WARN")
+
+exporters:
+  otlp/last9:
+    endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+    headers:
+      "Authorization": "${env:OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION}"
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch, resourcedetection/system, transform/logs]
+      exporters: [otlp/last9, debug]
+    metrics:
+      receivers: [sqlserver, hostmetrics]
+      processors: [batch, resourcedetection/system]
+      exporters: [otlp/last9, debug]

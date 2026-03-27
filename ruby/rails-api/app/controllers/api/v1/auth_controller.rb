@@ -1,8 +1,6 @@
 module Api
   module V1
     class AuthController < ApplicationController
-      SERVICE_NAMESPACE = "auth".freeze
-
       # POST /api/v1/auth/login
       def login
         email = params[:email] || "user#{rand(1000)}@example.com"
