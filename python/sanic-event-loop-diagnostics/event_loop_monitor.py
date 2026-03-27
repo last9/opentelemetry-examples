@@ -24,6 +24,8 @@ This module fills all those gaps.
 import asyncio
 import gc
 import time
+import traceback
+import sys
 from typing import Optional, Dict, Any, Callable, List
 from dataclasses import dataclass, field
 from opentelemetry.metrics import Meter, CallbackOptions, Observation
@@ -127,6 +129,10 @@ class EventLoopMonitor:
 
         # Track the operation that caused blocking (set by report_blocking_operation)
         self._last_blocking_operation: str = "unknown"
+
+        # Stack trace of the blocking operation (captured when lag > threshold)
+        # Helps pinpoint the exact code causing the block
+        self._last_blocking_stack_trace: str = ""
 
         # GC tracking — snapshot counts at last check to compute deltas
         self._last_gc_stats = self._snapshot_gc()
@@ -498,6 +504,30 @@ class EventLoopMonitor:
                     self._last_blocking_start = start
                     self._last_blocking_end = loop.time()
                     self._last_blocking_lag_ms = lag_ms
+
+                    # Capture stack traces of all active tasks to pinpoint blocking code
+                    # This helps identify the exact line causing the block
+                    stack_traces = []
+                    for task in active_tasks:
+                        try:
+                            coro = task.get_coro()
+                            coro_name = (
+                                getattr(coro, "__qualname__", None)
+                                or getattr(coro, "__name__", None)
+                                or "unknown"
+                            )
+                            # Get the coroutine frame for stack extraction
+                            frame = getattr(coro, "cr_frame", None) or getattr(coro, "gi_frame", None)
+                            if frame:
+                                # Extract stack trace from the frame
+                                stack = traceback.format_stack(frame, limit=5)
+                                stack_summary = ''.join(stack[-3:])  # Last 3 frames
+                                stack_traces.append(f"{coro_name}:\n{stack_summary}")
+                        except Exception:
+                            # Ignore errors in stack trace capture
+                            pass
+
+                    self._last_blocking_stack_trace = "\n---\n".join(stack_traces[:3])  # Top 3 tasks
 
                     # Record lag contribution per coroutine that was active
                     # during this blocking event. If no tasks are identified,

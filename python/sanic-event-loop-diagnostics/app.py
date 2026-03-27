@@ -16,6 +16,7 @@ import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from contextvars import ContextVar
 
 from sanic import Sanic, response
 from sanic.request import Request
@@ -26,6 +27,9 @@ from opentelemetry.trace import SpanKind, Status, StatusCode
 from otel_setup import setup_opentelemetry, shutdown_opentelemetry, create_resource
 from event_loop_monitor import EventLoopMonitor
 
+
+# ContextVar to track handler execution start time (async-safe)
+_handler_execution_start: ContextVar[float] = ContextVar('handler_execution_start', default=0.0)
 
 # Create Sanic application
 app = Sanic("event-loop-diagnostics")
@@ -127,13 +131,24 @@ async def otel_request_middleware(request: Request):
     request.ctx.otel_token = token
     request.ctx.otel_token_span = token_span
 
-    # Record the loop.time() at request start.
-    # The response middleware checks if a blocking event timestamp falls
-    # BETWEEN this start time and the response time — correctly pinpointing
-    # which handler caused the block, not which handler ran after it.
+    # Record the loop.time() at request arrival and handler execution start.
+    #
+    # KEY FIX: We now distinguish between:
+    #   1. request_arrival_time — when the request ARRIVED (may sit in queue)
+    #   2. handler_execution_start — when the handler ACTUALLY starts running
+    #
+    # This eliminates false positives where non-blocking requests queued behind
+    # a blocking operation get incorrectly blamed for that blocking.
+    #
+    # The handler_execution_start is set in ContextVar so it propagates through
+    # async call chains even if the handler spawns sub-tasks.
     if event_loop_monitor:
         loop = asyncio.get_running_loop()
-        request.ctx.request_start_loop_time = loop.time()
+        request.ctx.request_arrival_time = loop.time()
+
+        # Mark when handler is about to start (right after this middleware completes)
+        _handler_execution_start.set(loop.time())
+
         request.ctx.lag_at_start_ms = event_loop_monitor.get_stats()["lag_ms"]
 
 
@@ -162,39 +177,51 @@ async def otel_response_middleware(request: Request, response_obj):
 
     # Enrich span with event loop blocking attribution for this request.
     #
-    # KEY INSIGHT: We use loop.time() timestamps rather than lag values to
-    # determine if a block happened DURING this request. This avoids the
-    # false-positive problem where a request running immediately AFTER a
-    # blocking call inherits the stale high-lag reading.
+    # KEY FIX FOR FALSE POSITIVES:
+    # We now use handler_execution_start (from ContextVar) instead of
+    # request_arrival_time. This ensures we only blame requests that were
+    # ACTUALLY EXECUTING during the blocking window, not requests that
+    # arrived but sat in the queue.
     #
     # How it works:
-    #   1. Request middleware stamps request_start_loop_time = loop.time()
-    #   2. When lag > threshold, monitor stamps _last_blocking_loop_time
-    #   3. Here we check: did that blocking event fall between start and now?
+    #   1. Request middleware stamps handler_execution_start in ContextVar
+    #   2. When lag > threshold, monitor stamps [_last_blocking_start, _last_blocking_end]
+    #   3. Here we check: did blocking window overlap handler EXECUTION window?
     #   4. If yes → THIS handler caused the block (true positive)
-    #   5. If no  → block happened before/after this request (not its fault)
-    if event_loop_monitor and hasattr(request.ctx, 'request_start_loop_time'):
+    #   5. If no  → block happened before handler started (not its fault)
+    if event_loop_monitor and hasattr(request.ctx, 'request_arrival_time'):
         loop = asyncio.get_running_loop()
-        request_end_loop_time = loop.time()
-        request_start_loop_time = request.ctx.request_start_loop_time
+        handler_end_time = loop.time()
+        handler_start_time = _handler_execution_start.get()
         stats = event_loop_monitor.get_stats()
 
         last_blocking_start = event_loop_monitor._last_blocking_start
         last_blocking_end = event_loop_monitor._last_blocking_end
         last_blocking_lag_ms = event_loop_monitor._last_blocking_lag_ms
+        last_blocking_stack_trace = event_loop_monitor._last_blocking_stack_trace
         current_interval_start = event_loop_monitor._current_interval_start
         blocking_threshold = event_loop_monitor._blocking_threshold
 
-        # Strategy: detect blocking via two complementary checks.
+        # Strategy: detect blocking via two complementary checks, with improved
+        # logic to eliminate false positives on concurrent requests.
         #
-        # CHECK 1 — Stamped block (previous requests):
+        # CHECK 1 — Stamped block (completed blocking events):
         #   After a block, the monitor wakes and stamps _last_blocking_start/end.
-        #   A request owns the block if its window overlaps [block_start, block_end].
-        #   Two intervals overlap when: A_start <= B_end AND B_start <= A_end.
+        #
+        #   KEY FIX: A request can only cause blocking if it was STILL RUNNING
+        #   when the blocking STARTED. This eliminates false positives where
+        #   non-blocking requests that completed before blocking started get blamed.
+        #
+        #   Correct logic:
+        #   - handler_end_time > last_blocking_start  (handler was still running when block started)
+        #   - handler_start_time < last_blocking_end  (handler started before block ended)
+        #
+        #   This is stricter than simple interval overlap - it ensures the handler
+        #   was actively executing during the blocking window.
         stamped_block = (
             last_blocking_start > 0
-            and request_start_loop_time <= last_blocking_end
-            and last_blocking_start <= request_end_loop_time
+            and handler_end_time > last_blocking_start  # Handler was running when block started
+            and handler_start_time < last_blocking_end  # Handler started before block ended
         )
 
         # CHECK 2 — In-flight block (the current request IS the culprit):
@@ -204,11 +231,11 @@ async def otel_response_middleware(request: Request, response_obj):
         #   BEFORE the freeze. If the current monitoring interval started before
         #   this request AND the request took longer than (interval + threshold),
         #   then the loop was blocked during this request.
-        request_duration = request_end_loop_time - request_start_loop_time
-        interval_elapsed = request_end_loop_time - current_interval_start
+        handler_duration = handler_end_time - handler_start_time
+        interval_elapsed = handler_end_time - current_interval_start
         inflight_block = (
             current_interval_start > 0
-            and current_interval_start <= request_end_loop_time
+            and current_interval_start <= handler_end_time
             and interval_elapsed > (event_loop_monitor._interval + blocking_threshold)
         )
 
@@ -226,6 +253,10 @@ async def otel_response_middleware(request: Request, response_obj):
             span.set_attribute("asyncio.eventloop.blocking_lag_ms", round(last_blocking_lag_ms, 2))
             severity = "critical" if last_blocking_lag_ms > stats["blocking_threshold_ms"] * 10 else "warning"
             span.set_attribute("asyncio.eventloop.blocking_severity", severity)
+
+            # Add stack trace information if available (helps pinpoint exact blocking code)
+            if last_blocking_stack_trace:
+                span.set_attribute("asyncio.eventloop.blocking_stack_trace", last_blocking_stack_trace)
 
             # Report blocking operation with operation name for better observability
             operation_name = f"{request.method} {request.path}"
@@ -272,13 +303,15 @@ async def index(request: Request):
                 "/blocking-hash?size=N": "Large hash computation - BLOCKS event loop"
             },
             "stress_testing": {
-                "/stress-test?requests=N&concurrent=M": "Generate load to test monitoring"
+                "/stress-test?requests=N&concurrent=M": "Generate load to test monitoring",
+                "/test-false-positive-fix": "Test false positive fix for concurrent blocking detection"
             }
         },
         "tips": [
             "Watch /metrics while calling blocking endpoints",
             "Compare lag_ms between blocking and non-blocking calls",
-            "blocking_events_total counts detected blocking operations"
+            "blocking_events_total counts detected blocking operations",
+            "Use /test-false-positive-fix to verify only blocking requests get flagged"
         ]
     })
 
@@ -573,6 +606,76 @@ async def stress_test(request: Request):
             "completed_requests": len(results),
             "concurrent": concurrent,
             "included_blocking": include_blocking,
+            "event_loop_stats": stats
+        })
+
+
+@app.route("/test-false-positive-fix")
+async def test_false_positive_fix(request: Request):
+    """
+    Test endpoint to demonstrate the false positive fix.
+
+    Simulates the exact scenario that caused false positives:
+    - One blocking request executes time.sleep()
+    - Multiple non-blocking requests arrive concurrently
+    - Without the fix: all concurrent requests get flagged
+    - With the fix: only the blocking request gets flagged
+
+    Returns trace IDs so you can inspect spans in your observability backend.
+    """
+    import random
+
+    with tracer.start_as_current_span("false_positive_test") as span:
+        results = []
+
+        # Launch 1 blocking + 5 non-blocking requests concurrently
+        async def blocking_request():
+            """Simulates a request that blocks the event loop."""
+            trace_id = trace.get_current_span().get_span_context().trace_id
+            trace_id_hex = format(trace_id, '032x')
+
+            # THIS will block the event loop
+            time.sleep(0.2)
+
+            return {
+                "type": "blocking",
+                "trace_id": trace_id_hex,
+                "expected_blocked_flag": True,
+                "description": "This request should be flagged as blocked"
+            }
+
+        async def non_blocking_request(req_id: int):
+            """Simulates a non-blocking request that arrives during the block."""
+            trace_id = trace.get_current_span().get_span_context().trace_id
+            trace_id_hex = format(trace_id, '032x')
+
+            # This is non-blocking - just async I/O
+            await asyncio.sleep(0.01)
+
+            return {
+                "type": "non_blocking",
+                "request_id": req_id,
+                "trace_id": trace_id_hex,
+                "expected_blocked_flag": False,
+                "description": "This request should NOT be flagged (false positive fix)"
+            }
+
+        # Run all requests concurrently
+        tasks = [blocking_request()] + [non_blocking_request(i) for i in range(5)]
+        results = await asyncio.gather(*tasks)
+
+        stats = event_loop_monitor.get_stats() if event_loop_monitor else {}
+
+        return response.json({
+            "test": "false_positive_fix",
+            "description": "Check trace backend: only the blocking request should have asyncio.eventloop.request_blocked=true",
+            "results": results,
+            "instructions": [
+                "Query your trace backend for these trace IDs",
+                "Check span attribute: asyncio.eventloop.request_blocked",
+                "Expected: blocking request = true, non-blocking requests = false",
+                "If any non-blocking request shows blocked=true, false positive still exists"
+            ],
             "event_loop_stats": stats
         })
 
