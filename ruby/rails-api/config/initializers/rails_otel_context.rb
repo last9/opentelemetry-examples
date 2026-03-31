@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 RailsOtelContext.configure do |config|
+  # Flag any query slower than 100ms with db.slow: true
+  config.slow_query_threshold_ms = 100
+
   # Rename DB spans: scope > custom method > AR operation
   config.span_name_formatter = lambda { |original_name, ar_context|
     model = ar_context[:model_name]
