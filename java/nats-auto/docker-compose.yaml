@@ -1,0 +1,75 @@
+services:
+  nats:
+    image: nats:2.10-alpine
+    container_name: nats-auto-server
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js", "--http_port", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  prometheus-nats-exporter:
+    image: natsio/prometheus-nats-exporter:latest
+    container_name: nats-auto-exporter
+    command:
+      - "-varz"
+      - "-connz"
+      - "-routez"
+      - "-subz"
+      - "-jsz=all"
+      - "http://nats:8222"
+    ports:
+      - "7777:7777"
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: nats-auto-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    env_file:
+      - .env
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - prometheus-nats-exporter
+
+  # The demo app — pure NATS client, zero OTel imports.
+  # Traces come entirely from the agent extension loaded via -Dotel.javaagent.extensions.
+  app:
+    image: eclipse-temurin:17-jre
+    container_name: nats-auto-app
+    volumes:
+      # Extension JAR built from opentelemetry-nats-java
+      - ../../../opentelemetry-nats-java/build/libs/opentelemetry-nats-java-0.1.0.jar:/ext/nats-extension.jar
+      # OTel Java agent — download separately (see README)
+      - ./opentelemetry-javaagent.jar:/agent/otel-javaagent.jar
+      # App JAR built via mvn package
+      - ./target/nats-auto-demo-1.0.0.jar:/app/app.jar
+    environment:
+      NATS_URL: nats://nats:4222
+    command: >
+      java
+      -javaagent:/agent/otel-javaagent.jar
+      -Dotel.javaagent.extensions=/ext/nats-extension.jar
+      -Dotel.service.name=nats-auto-demo
+      -Dotel.exporter.otlp.endpoint=http://otel-collector:4318
+      -Dotel.exporter.otlp.protocol=http/protobuf
+      -Dotel.traces.sampler=always_on
+      -Dotel.resource.attributes=deployment.environment=local
+      -jar /app/app.jar
+    depends_on:
+      - otel-collector
+      - nats
+
+networks:
+  default:
+    name: nats-auto-demo
