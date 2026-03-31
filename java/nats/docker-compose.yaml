@@ -1,0 +1,53 @@
+services:
+  # NATS server with HTTP monitoring enabled
+  nats:
+    image: nats:2.10-alpine
+    container_name: nats-demo-server
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    volumes:
+      - ./nats-server.conf:/etc/nats/nats-server.conf
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Exposes NATS monitoring endpoints as Prometheus metrics
+  # The OTel Java agent does NOT instrument the NATS client — this covers server-side metrics
+  prometheus-nats-exporter:
+    image: natsio/prometheus-nats-exporter:latest
+    container_name: nats-prometheus-exporter
+    command:
+      - "-varz"
+      - "-connz"
+      - "-routez"
+      - "-subz"
+      - "-jsz=all"
+      - "http://nats:8222"
+    ports:
+      - "7777:7777"   # Prometheus metrics endpoint
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  # OTel Collector — receives OTLP from Java app + scrapes NATS Prometheus metrics
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: nats-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    env_file:
+      - .env
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - prometheus-nats-exporter
+
+networks:
+  default:
+    name: nats-otel-demo
