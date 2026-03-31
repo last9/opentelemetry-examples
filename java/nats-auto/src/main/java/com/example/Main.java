@@ -55,6 +55,10 @@ public class Main {
             Thread.sleep(2000); // let in-flight messages arrive
         }
 
+        // Give the OTel BatchSpanProcessor time to flush before JVM exits.
+        // The agent registers a shutdown hook, but the hook races with process exit —
+        // sleeping here ensures spans are exported before main() returns.
+        Thread.sleep(5000);
         System.out.println("Done.");
     }
 }

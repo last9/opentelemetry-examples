@@ -1,31 +1,30 @@
 # NATS Auto-Instrumentation Demo
 
-Zero-code OTel tracing for NATS — no `import io.opentelemetry` anywhere in the app.
+Zero OTel imports. Full distributed traces.
 
-Traces are produced by the [opentelemetry-nats-java](https://github.com/last9/opentelemetry-nats-java)
-agent extension loaded at JVM startup.
+This demo publishes and subscribes to NATS using the plain Java client. No `import io.opentelemetry` anywhere in the app. Traces come entirely from the [opentelemetry-nats-java](https://github.com/last9/opentelemetry-nats-java) agent extension.
 
 ## What you get
 
-- **PRODUCER span** for every `connection.publish()` call
-- **CONSUMER span** for every `MessageHandler.onMessage()` invocation
-- Spans linked across publish/subscribe via W3C `traceparent` header (auto-injected)
-- NATS server metrics via `prometheus-nats-exporter` → OTel Collector
+- PRODUCER span per `connection.publish()` call
+- CONSUMER span per message received — linked to its producer via W3C `traceparent`
+- Full OTel messaging semconv: `server.address`, `messaging.client.id`, `messaging.message.body.size`, and more
+- NATS server metrics via `prometheus-nats-exporter` → OTel Collector → Last9
 
 ## Prerequisites
 
 - Docker and Docker Compose
 - Java 17, Maven 3.8+
-- Last9 account
+- Last9 account (get credentials from the Integrations page)
 
 ## Quick Start
 
 ```bash
-# 1. Build the extension JAR (from the opentelemetry-nats-java repo)
+# 1. Build the extension JAR
 cd ../../../opentelemetry-nats-java
 ./gradlew assemble
 
-# 2. Download the OTel Java agent into this directory
+# 2. Download the OTel Java agent
 cd -
 wget -O opentelemetry-javaagent.jar \
   https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.10.0/opentelemetry-javaagent.jar
@@ -33,23 +32,29 @@ wget -O opentelemetry-javaagent.jar \
 # 3. Build the demo app
 mvn clean package -q
 
-# 4. Configure credentials
+# 4. Set credentials
 cp .env.example .env
-# Edit .env with your Last9 OTLP endpoint and auth header
+# Edit .env — set OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS, LAST9_OTLP_AUTH_HEADER
 
-# 5. Start everything
+# 5. Run
 docker compose up
 ```
 
-## What to observe in Last9
-
-After `docker compose up`, open [Grafana](https://app.last9.io/grafana):
-
-- **Traces**: search for service `nats-auto-demo` — each publish creates a PRODUCER span
-  linked to a CONSUMER span via the same trace ID
-- **Metrics**: `gnatsd_varz_in_msgs`, `gnatsd_connz_num_connections`, `gnatsd_routez_*`
+Open [app.last9.io](https://app.last9.io) → APM → Traces, search for service `nats-auto-demo`. Each publish creates a PRODUCER span linked to a CONSUMER span with the same trace ID.
 
 ## Running without Docker
+
+Export credentials first:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.last9.io"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <your-credentials>"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_TRACES_SAMPLER="always_on"
+export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=local"
+```
+
+Then:
 
 ```bash
 mvn clean package -q
@@ -57,12 +62,10 @@ java \
   -javaagent:opentelemetry-javaagent.jar \
   -Dotel.javaagent.extensions=../../../opentelemetry-nats-java/build/libs/opentelemetry-nats-java-0.1.0.jar \
   -Dotel.service.name=nats-auto-demo \
-  -Dotel.exporter.otlp.endpoint=http://localhost:4318 \
-  -Dotel.exporter.otlp.protocol=http/protobuf \
   -jar target/nats-auto-demo-1.0.0.jar
 ```
 
-## Disabling the instrumentation
+## Disabling
 
 ```bash
 -Dotel.instrumentation.nats.enabled=false
@@ -75,9 +78,12 @@ java -javaagent:opentelemetry-javaagent.jar
      -Dotel.javaagent.extensions=opentelemetry-nats-java-0.1.0.jar
      -jar nats-auto-demo.jar
 
-At class-load time, ByteBuddy intercepts:
-  NatsConnection.publishInternal()  →  PRODUCER span + injects traceparent header
-  MessageHandler.onMessage()        →  CONSUMER span + extracts traceparent header
+ByteBuddy intercepts at class-load time:
+  NatsConnection.publishInternal()     → PRODUCER span + injects traceparent into headers
+  NatsConnection.createDispatcher()    → wraps the MessageHandler in a TracingMessageHandler
 
-App code sees none of this — it just uses the NATS client normally.
+The app calls nats.publish() and receives messages normally.
+The agent handles everything else.
 ```
+
+The lambda handler in `Main.java` is a hidden class — ByteBuddy cannot intercept it directly. Instead, the extension intercepts `createDispatcher()` and wraps the handler before it's stored. Every `onMessage()` call then runs through `TracingMessageHandler`, which extracts trace context and creates the CONSUMER span.

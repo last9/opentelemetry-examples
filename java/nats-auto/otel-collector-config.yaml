@@ -33,7 +33,7 @@ exporters:
   debug:
     verbosity: detailed
   otlphttp/last9:
-    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
     headers:
       Authorization: ${env:LAST9_OTLP_AUTH_HEADER}
 
