@@ -31,6 +31,8 @@ final class Last9OTel {
     private var lifecycleLogger: Logger?
     private let sessionManager: SessionManager
     let viewManager: ViewManager
+    private let hangDetector: HangDetector
+    private let watchdogDetector: WatchdogTerminationDetector
 
     // MARK: - Initialization
 
@@ -39,6 +41,7 @@ final class Last9OTel {
     /// - Parameters:
     ///   - sessionInactivityTimeout: Session expires after this many seconds of inactivity (default: 15 minutes).
     ///   - enableAutoViewTracking: Swizzle UIViewController to auto-track views (default: true).
+    ///   - hangThreshold: Main thread block time to classify as a hang (default: 2 seconds). Set to `0` to disable.
     @discardableResult
     static func initialize(
         endpoint: String,
@@ -46,7 +49,8 @@ final class Last9OTel {
         serviceName: String,
         environment: String = "production",
         sessionInactivityTimeout: TimeInterval = 15 * 60,
-        enableAutoViewTracking: Bool = true
+        enableAutoViewTracking: Bool = true,
+        hangThreshold: TimeInterval = 2.0
     ) -> Last9OTel {
         // Idempotent — only the first call takes effect
         if let existing = shared { return existing }
@@ -57,7 +61,8 @@ final class Last9OTel {
             serviceName: serviceName,
             environment: environment,
             sessionInactivityTimeout: sessionInactivityTimeout,
-            enableAutoViewTracking: enableAutoViewTracking
+            enableAutoViewTracking: enableAutoViewTracking,
+            hangThreshold: hangThreshold
         )
         shared = instance
         instance.startLifecycleObserver()
@@ -70,7 +75,8 @@ final class Last9OTel {
         serviceName: String,
         environment: String,
         sessionInactivityTimeout: TimeInterval,
-        enableAutoViewTracking: Bool
+        enableAutoViewTracking: Bool,
+        hangThreshold: TimeInterval
     ) {
         let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
 
@@ -164,6 +170,19 @@ final class Last9OTel {
         self.viewManager = ViewManager(tracerProvider: self.tracerProvider)
         sessionManager.start()
         viewManager.setup(autoTrackViews: enableAutoViewTracking)
+
+        // 11. Watchdog termination detection — check previous session before starting hang detector
+        self.watchdogDetector = WatchdogTerminationDetector()
+        watchdogDetector.checkPreviousSession()
+        if let sessionId = SessionStore.shared.currentSessionId {
+            watchdogDetector.updateSessionId(sessionId)
+        }
+
+        // 12. Hang (ANR) detector — background thread monitors main thread responsiveness
+        self.hangDetector = HangDetector(hangThreshold: hangThreshold)
+        if hangThreshold > 0 {
+            hangDetector.start()
+        }
 
         print("[Last9] OTel initialized — \(serviceName) (\(environment)) origin=\(origin)")
     }
@@ -277,10 +296,14 @@ final class Last9OTel {
     }
 
     #if canImport(UIKit)
-    @objc private func appDidBecomeActive() { emitLifecycleEvent(state: "active") }
+    @objc private func appDidBecomeActive() {
+        emitLifecycleEvent(state: "active")
+        watchdogDetector.updateAppState("foreground")
+    }
     @objc private func appWillResignActive() { emitLifecycleEvent(state: "inactive") }
     @objc private func appDidEnterBackground() {
         emitLifecycleEvent(state: "background")
+        watchdogDetector.updateAppState("background")
         flush()
     }
     @objc private func appWillEnterForeground() { emitLifecycleEvent(state: "foreground") }
@@ -306,6 +329,9 @@ final class Last9OTel {
 
     private static func installCrashHandler() {
         NSSetUncaughtExceptionHandler { exception in
+            // Mark crash so watchdog detector doesn't double-report on next launch
+            Last9OTel.shared?.watchdogDetector.markCrashHandlerFired()
+
             let logger = OpenTelemetry.instance.loggerProvider
                 .loggerBuilder(instrumentationScopeName: "crash")
                 .build()
@@ -339,6 +365,8 @@ final class Last9OTel {
 
     /// Shutdown all providers. Call in `applicationWillTerminate`.
     func shutdown() {
+        hangDetector.stop()
+        watchdogDetector.markCleanShutdown()
         viewManager.shutdown()
         sessionManager.shutdown()
         #if canImport(UIKit)

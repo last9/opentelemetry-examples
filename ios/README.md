@@ -101,6 +101,8 @@ Every `URLSession` request is now automatically traced with:
 | W3C trace propagation | `traceparent` + `tracestate` headers injected into outgoing requests |
 | Sessions | Auto-managed with 15m inactivity / 4h max duration, persisted to disk |
 | Screen views (UIKit) | UIViewController swizzle — `view.id`, `view.name`, `view.time_spent` |
+| Hangs (ANR) | Background thread detects main thread blocks > 2s, captures stack trace |
+| Watchdog terminations | Detects abnormal previous termination (0x8badf00d) on next launch |
 | Resource attributes | `device.model.identifier`, `os.name`, `os.version`, `service.version` |
 | Network type | WiFi vs Cellular (iOS only) |
 
@@ -143,6 +145,7 @@ Last9OTel.endView()
 |-----------|---------|-------------|
 | `sessionInactivityTimeout` | `900` (15 min) | Seconds of inactivity before session expires |
 | `enableAutoViewTracking` | `true` | Swizzle UIViewController for auto view tracking |
+| `hangThreshold` | `2.0` (2 sec) | Main thread block time to report as a hang. `0` to disable |
 
 ```swift
 Last9OTel.initialize(
@@ -150,7 +153,8 @@ Last9OTel.initialize(
     clientToken: "...",
     serviceName: "my-ios-app",
     sessionInactivityTimeout: 10 * 60,  // 10 minutes
-    enableAutoViewTracking: false        // manual only
+    enableAutoViewTracking: false,       // manual only
+    hangThreshold: 3.0                   // 3-second hang threshold
 )
 ```
 
@@ -191,16 +195,18 @@ The token is safe to ship in your app binary.
 
 ```
 ios/
-├── Package.swift                  # SPM dependencies
+├── Package.swift                         # SPM dependencies
 ├── Sources/
-│   ├── Last9OTel.swift            # Core setup + public API (identify, startView, endView)
-│   ├── SessionManager.swift       # Session lifecycle, rollover, persistence restore
-│   ├── SessionStore.swift         # Thread-safe state store + file persistence
-│   ├── SessionSpanProcessor.swift # Injects session/view/user attrs into every span
-│   ├── ViewManager.swift          # UIKit auto-tracking + SwiftUI modifier
-│   ├── UserInfo.swift             # User identity model
-│   ├── AppDelegate.swift          # Example initialization
-│   └── ExampleUsage.swift         # Usage patterns (network, auth, views, identify)
-├── .env.example                   # Credential template
+│   ├── Last9OTel.swift                   # Core setup + public API
+│   ├── SessionManager.swift              # Session lifecycle, rollover, persistence
+│   ├── SessionStore.swift                # Thread-safe state store + file persistence
+│   ├── SessionSpanProcessor.swift        # Injects session/view/user attrs into all spans
+│   ├── ViewManager.swift                 # UIKit auto-tracking + SwiftUI modifier
+│   ├── UserInfo.swift                    # User identity model
+│   ├── HangDetector.swift                # ANR detection (main thread hang monitoring)
+│   ├── WatchdogTerminationDetector.swift # Detect abnormal previous termination
+│   ├── AppDelegate.swift                 # Example initialization
+│   └── ExampleUsage.swift                # Usage patterns
+├── .env.example                          # Credential template
 └── README.md
 ```
