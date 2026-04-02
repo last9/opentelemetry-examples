@@ -101,8 +101,14 @@ Every `URLSession` request is now automatically traced with:
 | W3C trace propagation | `traceparent` + `tracestate` headers injected into outgoing requests |
 | Sessions | Auto-managed with 15m inactivity / 4h max duration, persisted to disk |
 | Screen views (UIKit) | UIViewController swizzle — `view.id`, `view.name`, `view.time_spent` |
+| App launch time | Cold and warm start duration (process start → first viewDidAppear) |
+| Frame rate | Slow frames (>25ms) and frozen frames (>700ms) per view via CADisplayLink |
+| CPU / Memory | Per-view CPU usage and resident memory sampling via mach_task_basic_info |
+| User interactions | Tap tracking via UIApplication.sendEvent swizzle with target info |
+| Network timing | DNS, TLS, TTFB, transfer breakdown from URLSessionTaskMetrics |
 | Hangs (ANR) | Background thread detects main thread blocks > 2s, captures stack trace |
 | Watchdog terminations | Detects abnormal previous termination (0x8badf00d) on next launch |
+| Signal crashes | SIGSEGV, SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGTRAP with crash markers |
 | Resource attributes | `device.model.identifier`, `os.name`, `os.version`, `service.version` |
 | Network type | WiFi vs Cellular (iOS only) |
 
@@ -203,8 +209,13 @@ ios/
 │   ├── SessionSpanProcessor.swift        # Injects session/view/user attrs into all spans
 │   ├── ViewManager.swift                 # UIKit auto-tracking + SwiftUI modifier
 │   ├── UserInfo.swift                    # User identity model
+│   ├── AppLaunchTracker.swift            # Cold/warm app launch time
+│   ├── PerformanceMonitor.swift          # CPU, memory, frame rate per view
+│   ├── InteractionTracker.swift          # Tap tracking via sendEvent swizzle
+│   ├── NetworkTimingTracker.swift        # DNS/TLS/TTFB from URLSessionTaskMetrics
 │   ├── HangDetector.swift                # ANR detection (main thread hang monitoring)
 │   ├── WatchdogTerminationDetector.swift # Detect abnormal previous termination
+│   ├── SignalCrashHandler.swift          # POSIX signal crash handling
 │   ├── AppDelegate.swift                 # Example initialization
 │   └── ExampleUsage.swift                # Usage patterns
 ├── .env.example                          # Credential template

@@ -25,6 +25,12 @@ final class ViewManager {
     private let tracer: Tracer
     private var activeSpan: Span?
     private var sessionRolloverObserver: NSObjectProtocol?
+    private var viewStartSnapshot: PerformanceMonitor.ResourceSnapshot?
+    private var isFirstView = true
+
+    #if canImport(UIKit)
+    private let frameMonitor = PerformanceMonitor.FrameRateMonitor()
+    #endif
 
     init(tracerProvider: TracerProvider, store: SessionStore = .shared) {
         self.store = store
@@ -60,11 +66,25 @@ final class ViewManager {
         let viewId = UUID().uuidString
         store.beginView(id: viewId, name: name)
 
+        // Snapshot CPU/memory at view start
+        viewStartSnapshot = PerformanceMonitor.currentSnapshot()
+
         let span = tracer.spanBuilder(spanName: "View")
             .setAttribute(key: "view.id", value: viewId)
             .setAttribute(key: "view.name", value: name)
             .startSpan()
         activeSpan = span
+
+        // Start frame rate monitoring for this view
+        #if canImport(UIKit)
+        frameMonitor.start()
+        #endif
+
+        // Record first view appeared for app launch tracking
+        if isFirstView {
+            Last9OTel.shared?.appLaunchTracker.recordFirstViewAppeared()
+            isFirstView = false
+        }
     }
 
     func endCurrentView() {
@@ -73,6 +93,24 @@ final class ViewManager {
         if let timeSpent = store.endView() {
             span.setAttribute(key: "view.time_spent", value: timeSpent)
         }
+
+        // CPU/memory delta
+        if let startSnap = viewStartSnapshot {
+            let endSnap = PerformanceMonitor.currentSnapshot()
+            span.setAttribute(key: "view.cpu_usage", value: endSnap.cpuUsage)
+            span.setAttribute(key: "view.memory_bytes", value: Int(endSnap.memoryBytes))
+            span.setAttribute(key: "view.memory_delta_bytes", value: Int(Int64(endSnap.memoryBytes) - Int64(startSnap.memoryBytes)))
+        }
+        viewStartSnapshot = nil
+
+        // Frame rate stats
+        #if canImport(UIKit)
+        frameMonitor.stop()
+        span.setAttribute(key: "view.slow_frame_count", value: frameMonitor.slowFrameCount)
+        span.setAttribute(key: "view.frozen_frame_count", value: frameMonitor.frozenFrameCount)
+        span.setAttribute(key: "view.total_frame_count", value: frameMonitor.totalFrameCount)
+        #endif
+
         span.end()
         activeSpan = nil
     }

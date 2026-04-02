@@ -32,7 +32,10 @@ final class Last9OTel {
     private let sessionManager: SessionManager
     let viewManager: ViewManager
     private let hangDetector: HangDetector
-    private let watchdogDetector: WatchdogTerminationDetector
+    let watchdogDetector: WatchdogTerminationDetector
+    let appLaunchTracker: AppLaunchTracker
+    private let interactionTracker: InteractionTracker
+    let networkTimingTracker: NetworkTimingTracker
 
     // MARK: - Initialization
 
@@ -183,6 +186,24 @@ final class Last9OTel {
         if hangThreshold > 0 {
             hangDetector.start()
         }
+
+        // 13. Signal crash handler (SIGSEGV, SIGABRT, SIGBUS, etc.)
+        //     Check for previous signal crash first, then install handlers
+        SignalCrashHandler.checkAndReportPreviousCrash()
+        SignalCrashHandler.install()
+
+        // 14. App launch time tracking (cold/warm)
+        self.appLaunchTracker = AppLaunchTracker(tracerProvider: self.tracerProvider)
+        appLaunchTracker.start()
+
+        // 15. User interaction tracking (taps via UIApplication.sendEvent swizzle)
+        self.interactionTracker = InteractionTracker(tracerProvider: self.tracerProvider)
+        #if canImport(UIKit)
+        interactionTracker.install()
+        #endif
+
+        // 16. Network timing tracker (DNS/TLS/TTFB from URLSessionTaskMetrics)
+        self.networkTimingTracker = NetworkTimingTracker()
 
         print("[Last9] OTel initialized — \(serviceName) (\(environment)) origin=\(origin)")
     }
@@ -366,6 +387,7 @@ final class Last9OTel {
     /// Shutdown all providers. Call in `applicationWillTerminate`.
     func shutdown() {
         hangDetector.stop()
+        appLaunchTracker.shutdown()
         watchdogDetector.markCleanShutdown()
         viewManager.shutdown()
         sessionManager.shutdown()
