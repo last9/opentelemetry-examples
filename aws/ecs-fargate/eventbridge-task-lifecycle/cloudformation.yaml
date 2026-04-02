@@ -1,0 +1,242 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Forwards ECS task stop events to Last9 as searchable OTLP logs.
+  When any ECS task transitions to STOPPED, this captures the stop reason,
+  stop code, and per-container exit codes — stored as structured log records
+  in Last9 with aws.ecs.task.arn as the correlation key to your metrics.
+
+  Deployment: aws cloudformation deploy \
+    --template-file cloudformation.yaml \
+    --stack-name last9-ecs-lifecycle \
+    --parameter-overrides \
+        Last9OTLPEndpoint=https://otlp.last9.io/v1/logs \
+        Last9AuthToken=<base64-credentials> \
+    --capabilities CAPABILITY_NAMED_IAM
+
+Parameters:
+  Last9OTLPEndpoint:
+    Type: String
+    Description: >
+      Last9 OTLP HTTP logs endpoint.
+      Find this in Last9 → Integrations → Send Data → OTLP (HTTP endpoint for /v1/logs).
+    AllowedPattern: '^https://.*'
+    ConstraintDescription: Must be an HTTPS URL.
+
+  Last9AuthToken:
+    Type: String
+    NoEcho: true
+    Description: >
+      Last9 Basic auth token — Base64 encoded "username:password".
+      Find this in Last9 → Integrations → Send Data → copy the Authorization header value
+      (everything after "Basic ").
+
+  ECSClusterArn:
+    Type: String
+    Default: ''
+    Description: >
+      Optional: ARN of a specific ECS cluster to monitor.
+      Leave empty to capture stop events from ALL clusters in this account and region.
+      Example: arn:aws:ecs:us-east-1:123456789012:cluster/prod-cluster
+
+Conditions:
+  FilterByCluster: !Not [!Equals [!Ref ECSClusterArn, '']]
+
+Resources:
+
+  # ── IAM ──────────────────────────────────────────────────────────────────
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'last9-ecs-lifecycle-${AWS::StackName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # Allows writing Lambda logs to CloudWatch (for debugging the forwarder itself).
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # ── Lambda ───────────────────────────────────────────────────────────────
+
+  ForwarderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'last9-ecs-lifecycle-${AWS::StackName}'
+      Description: Transforms ECS EventBridge stop events into OTLP log records for Last9.
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          LAST9_OTLP_ENDPOINT: !Ref Last9OTLPEndpoint
+          LAST9_AUTH: !Ref Last9AuthToken
+      Code:
+        ZipFile: |
+          import json, os, time, urllib.request, urllib.error
+
+          ENDPOINT = os.environ['LAST9_OTLP_ENDPOINT']
+          AUTH     = os.environ['LAST9_AUTH']
+
+          def handler(event, context):
+              detail   = event.get('detail', {})
+              task_arn = detail.get('taskArn', '')
+              cluster  = detail.get('clusterArn', '').split('/')[-1]
+              service  = detail.get('group', '').replace('service:', '')
+
+              # task ID is the last segment of the ARN
+              task_id = task_arn.split('/')[-1] if task_arn else ''
+
+              # Collect exit codes from all containers that have one.
+              # ECS only populates exitCode once the container has stopped.
+              containers = detail.get('containers', [])
+              exit_codes = {
+                  c['name']: str(c.get('exitCode', ''))
+                  for c in containers
+                  if 'exitCode' in c
+              }
+              # Primary exit code: first non-zero wins (indicates the crash), else first available.
+              primary_exit = next(
+                  (v for v in exit_codes.values() if v and v != '0'),
+                  next(iter(exit_codes.values()), '')
+              )
+              is_error = primary_exit not in ('', '0')
+
+              # Use the ECS-reported stop time if available, otherwise now.
+              stopped_at_str = detail.get('stoppedAt', '')
+              try:
+                  from datetime import datetime, timezone
+                  dt = datetime.fromisoformat(stopped_at_str.replace('Z', '+00:00'))
+                  timestamp_ns = str(int(dt.timestamp() * 1e9))
+              except Exception:
+                  timestamp_ns = str(int(time.time() * 1e9))
+
+              payload = {
+                  'resourceLogs': [{
+                      'resource': {
+                          'attributes': [
+                              kv('aws.ecs.task.arn',     task_arn),
+                              kv('aws.ecs.task.id',      task_id),
+                              kv('aws.ecs.cluster.name', cluster),
+                              kv('service.name',         service),
+                          ]
+                      },
+                      'scopeLogs': [{
+                          'scope': {
+                              'name':    'ecs-eventbridge-forwarder',
+                              'version': '0.1.0',
+                          },
+                          'logRecords': [{
+                              'timeUnixNano':         timestamp_ns,
+                              'observedTimeUnixNano': str(int(time.time() * 1e9)),
+                              'severityNumber': 17 if is_error else 9,
+                              'severityText':   'ERROR' if is_error else 'INFO',
+                              # Full ECS event detail as the log body.
+                              # Searchable as JSON in Last9 logs explorer.
+                              'body': {'stringValue': json.dumps(detail)},
+                              'attributes': [
+                                  kv('event.name',
+                                     'ecs.task.stopped'),
+                                  kv('aws.ecs.task.stop_code',
+                                     detail.get('stopCode', '')),
+                                  kv('aws.ecs.task.stopped_reason',
+                                     detail.get('stoppedReason', '')),
+                                  # Per-container exit codes as JSON object for multi-container tasks.
+                                  kv('container.exit_codes',
+                                     json.dumps(exit_codes)),
+                                  # Primary exit code promoted to a top-level attribute for fast filtering.
+                                  kv('container.exit_code',
+                                     primary_exit),
+                              ]
+                          }]
+                      }]
+                  }]
+              }
+
+              data = json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  ENDPOINT,
+                  data=data,
+                  headers={
+                      'Content-Type':  'application/json',
+                      'Authorization': f'Basic {AUTH}',
+                  }
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=8) as r:
+                      print(json.dumps({
+                          'status':    r.status,
+                          'task_id':   task_id,
+                          'cluster':   cluster,
+                          'stop_code': detail.get('stopCode'),
+                          'exit_code': primary_exit,
+                      }))
+                      return r.status
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode()
+                  print(json.dumps({'error': e.code, 'task_id': task_id, 'body': body}))
+                  raise
+
+          def kv(key, val):
+              return {'key': key, 'value': {'stringValue': str(val)}}
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ForwarderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ECSTaskStopRule.Arn
+
+  # ── EventBridge Rule ─────────────────────────────────────────────────────
+
+  ECSTaskStopRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'last9-ecs-task-stopped-${AWS::StackName}'
+      Description: >
+        Captures ECS task state change events (lastStatus=STOPPED) and
+        forwards them to Last9 via the forwarder Lambda.
+      EventPattern:
+        source:
+          - aws.ecs
+        detail-type:
+          - ECS Task State Change
+        detail:
+          lastStatus:
+            - STOPPED
+        # When ECSClusterArn is provided, filter to that cluster only.
+        # The resources array in ECS events contains the task ARN, which includes the cluster.
+        resources: !If
+          - FilterByCluster
+          - - prefix: !Ref ECSClusterArn
+          - !Ref AWS::NoValue
+      State: ENABLED
+      Targets:
+        - Id: Last9ForwarderLambda
+          Arn: !GetAtt ForwarderFunction.Arn
+
+Outputs:
+  LambdaFunctionName:
+    Description: Lambda function that forwards ECS stop events to Last9
+    Value: !Ref ForwarderFunction
+
+  LambdaLogGroup:
+    Description: CloudWatch log group for forwarder Lambda (check here if events are missing)
+    Value: !Sub '/aws/lambda/last9-ecs-lifecycle-${AWS::StackName}'
+
+  EventBridgeRuleName:
+    Description: EventBridge rule name
+    Value: !Ref ECSTaskStopRule
+
+  CorrelationKey:
+    Description: >
+      Use this attribute to correlate ECS stop events with task metrics in Last9.
+      In Last9 logs: filter by  event.name = "ecs.task.stopped"
+      In Last9 metrics: the same value appears as label  aws_ecs_task_arn
+    Value: aws.ecs.task.arn
