@@ -1,6 +1,6 @@
 # iOS OpenTelemetry - Last9 Integration
 
-Send distributed traces from an iOS app to Last9 using OpenTelemetry Swift SDK. Auto-instruments URLSession network calls, tracks sessions and screen views, and injects W3C `traceparent` for backend correlation.
+Send distributed traces from an iOS app to Last9 using the [Last9 RUM SDK](https://github.com/last9/last9-ios-swift-sdk). Auto-instruments URLSession network calls, tracks sessions and screen views, and injects W3C `traceparent` for backend correlation.
 
 Uses **client monitoring tokens** (write-only, safe for mobile apps) with synthetic origins (`ios://com.yourcompany.yourapp`).
 
@@ -12,21 +12,28 @@ Uses **client monitoring tokens** (write-only, safe for mobile apps) with synthe
 
 ## Quick Start
 
-### 1. Add SPM Dependencies
+### 1. Add the Last9 RUM SDK via SPM
 
-In Xcode: **File → Add Package Dependencies**, add these two packages:
+In Xcode: **File → Add Package Dependencies**, enter:
 
 ```
-https://github.com/open-telemetry/opentelemetry-swift-core.git  (from: 2.3.0)
-https://github.com/open-telemetry/opentelemetry-swift.git       (from: 2.3.0)
+https://github.com/last9/last9-ios-swift-sdk
 ```
 
-Select these products for your target:
+Select **Last9RUM** as the product to add to your target.
 
-| Package | Product |
-|---------|---------|
-| opentelemetry-swift-core | `OpenTelemetryApi`, `OpenTelemetrySdk` |
-| opentelemetry-swift | `OpenTelemetryProtocolExporterHTTP`, `URLSessionInstrumentation`, `ResourceExtension`, `NetworkStatus` |
+Or add to your `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/last9/last9-ios-swift-sdk", from: "0.1.0"),
+],
+targets: [
+    .target(name: "YourApp", dependencies: [
+        .product(name: "Last9RUM", package: "last9-ios-swift-sdk"),
+    ]),
+]
+```
 
 ### 2. Create a Client Monitoring Token
 
@@ -35,23 +42,15 @@ Select these products for your target:
 3. Set allowed origin to `ios://com.yourcompany.yourapp` (your app's bundle ID)
 4. Copy the token and the endpoint URL
 
-### 3. Copy source files into your project
-
-Copy all files from `Sources/` into your Xcode project:
-- `Last9OTel.swift` — core setup and public API
-- `SessionManager.swift` — session lifecycle (15m inactivity / 4h max)
-- `SessionStore.swift` — thread-safe state and file persistence
-- `SessionSpanProcessor.swift` — injects session/view/user attributes into all spans
-- `ViewManager.swift` — automatic UIKit view tracking + SwiftUI modifier
-- `UserInfo.swift` — user identity model
-
-### 4. Initialize in AppDelegate
+### 3. Initialize in AppDelegate
 
 ```swift
+import Last9RUM
+
 func application(_ application: UIApplication,
                  didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
 
-    Last9OTel.initialize(
+    Last9RUM.initialize(
         endpoint: "<your-base-url>/v1/otlp/organizations/<your-org-slug>/telemetry/client_monitoring",
         clientToken: "<your-client-token>",
         serviceName: "my-ios-app"
@@ -64,10 +63,12 @@ func application(_ application: UIApplication,
 Or for SwiftUI:
 
 ```swift
+import Last9RUM
+
 @main
 struct YourApp: App {
     init() {
-        Last9OTel.initialize(
+        Last9RUM.initialize(
             endpoint: "<your-base-url>/v1/otlp/organizations/<your-org-slug>/telemetry/client_monitoring",
             clientToken: "<your-client-token>",
             serviceName: "my-ios-app"
@@ -79,7 +80,7 @@ struct YourApp: App {
 }
 ```
 
-### 5. That's it — network calls are auto-traced
+### 4. That's it — network calls are auto-traced
 
 Every `URLSession` request is now automatically traced with:
 - HTTP method, URL, status code, latency
@@ -119,13 +120,13 @@ Every span automatically includes `session.id`, `view.id`, `view.name`, and `use
 After login, identify the user so all subsequent spans carry user context:
 
 ```swift
-Last9OTel.identify(id: "u_123", name: "Alice", email: "alice@example.com")
+Last9RUM.identify(id: "u_123", name: "Alice", email: "alice@example.com")
 ```
 
 On logout:
 
 ```swift
-Last9OTel.clearUser()
+Last9RUM.clearUser()
 ```
 
 ## SwiftUI View Tracking
@@ -140,9 +141,9 @@ ContentView()
 Or use the manual API for custom navigation flows:
 
 ```swift
-Last9OTel.startView(name: "Onboarding Step 1")
+Last9RUM.startView(name: "Onboarding Step 1")
 // ... later ...
-Last9OTel.endView()
+Last9RUM.endView()
 ```
 
 ## Configuration Options
@@ -154,7 +155,7 @@ Last9OTel.endView()
 | `hangThreshold` | `2.0` (2 sec) | Main thread block time to report as a hang. `0` to disable |
 
 ```swift
-Last9OTel.initialize(
+Last9RUM.initialize(
     endpoint: "...",
     clientToken: "...",
     serviceName: "my-ios-app",
@@ -169,7 +170,7 @@ Last9OTel.initialize(
 Track business-specific events:
 
 ```swift
-let tracer = Last9OTel.tracer("auth")
+let tracer = Last9RUM.tracer("auth")
 let span = tracer.spanBuilder(spanName: "user.login")
     .setAttribute(key: "auth.method", value: "otp")
     .startSpan()
@@ -201,23 +202,12 @@ The token is safe to ship in your app binary.
 
 ```
 ios/
-├── Package.swift                         # SPM dependencies
+├── Package.swift              # SPM: imports last9/last9-ios-swift-sdk
 ├── Sources/
-│   ├── Last9OTel.swift                   # Core setup + public API
-│   ├── SessionManager.swift              # Session lifecycle, rollover, persistence
-│   ├── SessionStore.swift                # Thread-safe state store + file persistence
-│   ├── SessionSpanProcessor.swift        # Injects session/view/user attrs into all spans
-│   ├── ViewManager.swift                 # UIKit auto-tracking + SwiftUI modifier
-│   ├── UserInfo.swift                    # User identity model
-│   ├── AppLaunchTracker.swift            # Cold/warm app launch time
-│   ├── PerformanceMonitor.swift          # CPU, memory, frame rate per view
-│   ├── InteractionTracker.swift          # Tap tracking via sendEvent swizzle
-│   ├── NetworkTimingTracker.swift        # DNS/TLS/TTFB from URLSessionTaskMetrics
-│   ├── HangDetector.swift                # ANR detection (main thread hang monitoring)
-│   ├── WatchdogTerminationDetector.swift # Detect abnormal previous termination
-│   ├── SignalCrashHandler.swift          # POSIX signal crash handling
-│   ├── AppDelegate.swift                 # Example initialization
-│   └── ExampleUsage.swift                # Usage patterns
-├── .env.example                          # Credential template
+│   ├── AppDelegate.swift      # Example initialization
+│   └── ExampleUsage.swift     # Usage patterns
+├── .env.example               # Credential template
 └── README.md
 ```
+
+The SDK source lives in [last9/last9-ios-swift-sdk](https://github.com/last9/last9-ios-swift-sdk).

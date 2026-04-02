@@ -5,19 +5,16 @@ let package = Package(
     name: "Last9OTelExample",
     platforms: [.iOS(.v13)],
     dependencies: [
+        .package(url: "https://github.com/last9/last9-ios-swift-sdk", from: "0.1.0"),
+        // OpenTelemetryApi is needed directly for custom span creation in examples
         .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
-        .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
     ],
     targets: [
         .executableTarget(
             name: "Last9OTelExample",
             dependencies: [
+                .product(name: "Last9RUM", package: "last9-ios-swift-sdk"),
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-                .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-                .product(name: "OpenTelemetryProtocolExporterHTTP", package: "opentelemetry-swift"),
-                .product(name: "URLSessionInstrumentation", package: "opentelemetry-swift"),
-                .product(name: "ResourceExtension", package: "opentelemetry-swift"),
-                .product(name: "NetworkStatus", package: "opentelemetry-swift"),
             ],
             path: "Sources"
         )

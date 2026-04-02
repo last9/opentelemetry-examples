@@ -1,4 +1,5 @@
 import UIKit
+import Last9RUM
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -8,7 +9,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
 
-        // Initialize Last9 OpenTelemetry.
+        // Initialize Last9 RUM SDK.
         //
         // After this call, automatically:
         //   - Every URLSession request is traced (latency, status, URL)
@@ -17,7 +18,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         //   - App lifecycle events emitted (active, inactive, background, foreground, terminate)
         //   - NSException crashes captured with stack traces
         //   - Flush on background + shutdown on terminate handled automatically
-        Last9OTel.initialize(
+        Last9RUM.initialize(
             endpoint: ProcessInfo.processInfo.environment["LAST9_OTLP_ENDPOINT"]
                 ?? "<your-base-url>/v1/otlp/organizations/<your-org-slug>/telemetry/client_monitoring",
             clientToken: ProcessInfo.processInfo.environment["LAST9_CLIENT_TOKEN"]
@@ -30,5 +31,5 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     // No need for applicationDidEnterBackground / applicationWillTerminate —
-    // Last9OTel handles lifecycle automatically via NotificationCenter observers.
+    // Last9RUM handles lifecycle automatically via NotificationCenter observers.
 }

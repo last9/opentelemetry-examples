@@ -1,5 +1,6 @@
 import Foundation
 import OpenTelemetryApi
+import Last9RUM
 
 // MARK: - Example 1: Network calls are automatic
 
@@ -17,7 +18,7 @@ func fetchContent(id: String) async throws -> Data {
 
 /// Track a login flow as a single span with attributes.
 func handleLogin(phone: String, otp: String) async throws {
-    let tracer = Last9OTel.tracer("auth")
+    let tracer = Last9RUM.tracer("auth")
     let span = tracer.spanBuilder(spanName: "user.login")
         .setAttribute(key: "auth.method", value: "otp")
         .startSpan()
@@ -60,7 +61,7 @@ class HomeViewController: UIViewController {
 // MARK: - Example 4: Track video playback events
 
 func trackPlaybackStart(contentId: String, contentTitle: String) {
-    let tracer = Last9OTel.tracer("player")
+    let tracer = Last9RUM.tracer("player")
     let span = tracer.spanBuilder(spanName: "playback.start")
         .setAttribute(key: "content.id", value: contentId)
         .setAttribute(key: "content.title", value: contentTitle)
@@ -70,7 +71,7 @@ func trackPlaybackStart(contentId: String, contentTitle: String) {
 }
 
 func trackPlaybackError(contentId: String, error: Error, bufferDuration: Double) {
-    let tracer = Last9OTel.tracer("player")
+    let tracer = Last9RUM.tracer("player")
     let span = tracer.spanBuilder(spanName: "playback.error")
         .setAttribute(key: "content.id", value: contentId)
         .setAttribute(key: "error.message", value: error.localizedDescription)
@@ -85,7 +86,7 @@ func trackPlaybackError(contentId: String, error: Error, bufferDuration: Double)
 /// After login, identify the user so all subsequent spans carry user context.
 /// session.id, view.id, and user.* are injected into every span automatically.
 func onLoginComplete(userId: String, userName: String, email: String) {
-    Last9OTel.identify(
+    Last9RUM.identify(
         id: userId,
         name: userName,
         email: email
@@ -94,7 +95,7 @@ func onLoginComplete(userId: String, userName: String, email: String) {
 
 /// On logout, clear user identity.
 func onLogout() {
-    Last9OTel.clearUser()
+    Last9RUM.clearUser()
 }
 
 // MARK: - Example 6: Custom view name (UIKit)
@@ -130,9 +131,9 @@ struct CheckoutView: SwiftUI.View {
 /// For custom navigation flows that don't use UIViewController,
 /// call startView/endView directly.
 func showOnboardingStep(step: Int) {
-    Last9OTel.startView(name: "Onboarding Step \(step)")
+    Last9RUM.startView(name: "Onboarding Step \(step)")
 }
 
 func finishOnboarding() {
-    Last9OTel.endView()
+    Last9RUM.endView()
 }
