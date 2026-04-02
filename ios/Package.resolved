@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/last9/last9-ios-swift-sdk",
       "state" : {
-        "revision" : "f941e521312f8b748c1e4c4668aa267dbbb41730",
-        "version" : "0.1.1"
+        "revision" : "6661d03996f7da042df562d6b8d7ff0749601203",
+        "version" : "0.1.2"
       }
     },
     {

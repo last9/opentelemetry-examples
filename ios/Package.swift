@@ -3,9 +3,9 @@ import PackageDescription
 
 let package = Package(
     name: "Last9OTelExample",
-    platforms: [.iOS(.v13)],
+    platforms: [.iOS(.v13), .macOS(.v12)],
     dependencies: [
-        .package(url: "https://github.com/last9/last9-ios-swift-sdk", from: "0.1.0"),
+        .package(url: "https://github.com/last9/last9-ios-swift-sdk", from: "0.1.2"),
         // OpenTelemetryApi is needed directly for custom span creation in examples
         .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     ],
