@@ -10,6 +10,15 @@
       }
     },
     {
+      "identity" : "last9-ios-swift-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/last9/last9-ios-swift-sdk",
+      "state" : {
+        "revision" : "f941e521312f8b748c1e4c4668aa267dbbb41730",
+        "version" : "0.1.1"
+      }
+    },
+    {
       "identity" : "opentelemetry-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/open-telemetry/opentelemetry-swift.git",
