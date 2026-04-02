@@ -1,6 +1,6 @@
 # iOS OpenTelemetry - Last9 Integration
 
-Send distributed traces from an iOS app to Last9 using OpenTelemetry Swift SDK. Auto-instruments all URLSession network calls and injects W3C `traceparent` for backend correlation.
+Send distributed traces from an iOS app to Last9 using OpenTelemetry Swift SDK. Auto-instruments URLSession network calls, tracks sessions and screen views, and injects W3C `traceparent` for backend correlation.
 
 Uses **client monitoring tokens** (write-only, safe for mobile apps) with synthetic origins (`ios://com.yourcompany.yourapp`).
 
@@ -35,9 +35,15 @@ Select these products for your target:
 3. Set allowed origin to `ios://com.yourcompany.yourapp` (your app's bundle ID)
 4. Copy the token and the endpoint URL
 
-### 3. Copy `Last9OTel.swift` into your project
+### 3. Copy source files into your project
 
-Copy `Sources/Last9OTel.swift` into your Xcode project.
+Copy all files from `Sources/` into your Xcode project:
+- `Last9OTel.swift` — core setup and public API
+- `SessionManager.swift` — session lifecycle (15m inactivity / 4h max)
+- `SessionStore.swift` — thread-safe state and file persistence
+- `SessionSpanProcessor.swift` — injects session/view/user attributes into all spans
+- `ViewManager.swift` — automatic UIKit view tracking + SwiftUI modifier
+- `UserInfo.swift` — user identity model
 
 ### 4. Initialize in AppDelegate
 
@@ -93,8 +99,60 @@ Every `URLSession` request is now automatically traced with:
 |--------|---------|
 | URLSession requests | Every `dataTask`, `data(from:)`, `download` call — latency, status, URL |
 | W3C trace propagation | `traceparent` + `tracestate` headers injected into outgoing requests |
+| Sessions | Auto-managed with 15m inactivity / 4h max duration, persisted to disk |
+| Screen views (UIKit) | UIViewController swizzle — `view.id`, `view.name`, `view.time_spent` |
 | Resource attributes | `device.model.identifier`, `os.name`, `os.version`, `service.version` |
 | Network type | WiFi vs Cellular (iOS only) |
+
+Every span automatically includes `session.id`, `view.id`, `view.name`, and `user.*` attributes (if set).
+
+## User Identification
+
+After login, identify the user so all subsequent spans carry user context:
+
+```swift
+Last9OTel.identify(id: "u_123", name: "Alice", email: "alice@example.com")
+```
+
+On logout:
+
+```swift
+Last9OTel.clearUser()
+```
+
+## SwiftUI View Tracking
+
+UIKit views are tracked automatically. For SwiftUI, use the `.trackView(name:)` modifier:
+
+```swift
+ContentView()
+    .trackView(name: "Home")
+```
+
+Or use the manual API for custom navigation flows:
+
+```swift
+Last9OTel.startView(name: "Onboarding Step 1")
+// ... later ...
+Last9OTel.endView()
+```
+
+## Configuration Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `sessionInactivityTimeout` | `900` (15 min) | Seconds of inactivity before session expires |
+| `enableAutoViewTracking` | `true` | Swizzle UIViewController for auto view tracking |
+
+```swift
+Last9OTel.initialize(
+    endpoint: "...",
+    clientToken: "...",
+    serviceName: "my-ios-app",
+    sessionInactivityTimeout: 10 * 60,  // 10 minutes
+    enableAutoViewTracking: false        // manual only
+)
+```
 
 ## Custom Spans
 
@@ -133,11 +191,16 @@ The token is safe to ship in your app binary.
 
 ```
 ios/
-├── Package.swift              # SPM dependencies
+├── Package.swift                  # SPM dependencies
 ├── Sources/
-│   ├── Last9OTel.swift        # Core setup — copy this to your project
-│   ├── AppDelegate.swift      # Example initialization
-│   └── ExampleUsage.swift     # Custom span patterns
-├── .env.example               # Credential template
+│   ├── Last9OTel.swift            # Core setup + public API (identify, startView, endView)
+│   ├── SessionManager.swift       # Session lifecycle, rollover, persistence restore
+│   ├── SessionStore.swift         # Thread-safe state store + file persistence
+│   ├── SessionSpanProcessor.swift # Injects session/view/user attrs into every span
+│   ├── ViewManager.swift          # UIKit auto-tracking + SwiftUI modifier
+│   ├── UserInfo.swift             # User identity model
+│   ├── AppDelegate.swift          # Example initialization
+│   └── ExampleUsage.swift         # Usage patterns (network, auth, views, identify)
+├── .env.example                   # Credential template
 └── README.md
 ```

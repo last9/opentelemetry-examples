@@ -17,6 +17,11 @@ import UIKit
 ///
 /// Resource attributes follow OTel semantic conventions:
 /// - service.*, device.*, os.*, app.*, telemetry.sdk.*, host.*
+///
+/// Session, view, and user tracking:
+/// - Sessions: auto-managed with 15m inactivity / 4h max duration, persisted to disk
+/// - Views: auto-tracked via UIViewController swizzle, or manual `.trackView(name:)` for SwiftUI
+/// - Users: `Last9OTel.identify(...)` stamps `user.*` on every span
 final class Last9OTel {
     static var shared: Last9OTel?
 
@@ -24,22 +29,35 @@ final class Last9OTel {
     private let loggerProvider: LoggerProviderSdk?
     private let urlSessionInstrumentation: URLSessionInstrumentation
     private var lifecycleLogger: Logger?
+    private let sessionManager: SessionManager
+    let viewManager: ViewManager
 
     // MARK: - Initialization
 
     /// Call once in `application(_:didFinishLaunchingWithOptions:)` or SwiftUI `App.init()`.
+    ///
+    /// - Parameters:
+    ///   - sessionInactivityTimeout: Session expires after this many seconds of inactivity (default: 15 minutes).
+    ///   - enableAutoViewTracking: Swizzle UIViewController to auto-track views (default: true).
     @discardableResult
     static func initialize(
         endpoint: String,
         clientToken: String,
         serviceName: String,
-        environment: String = "production"
+        environment: String = "production",
+        sessionInactivityTimeout: TimeInterval = 15 * 60,
+        enableAutoViewTracking: Bool = true
     ) -> Last9OTel {
+        // Idempotent — only the first call takes effect
+        if let existing = shared { return existing }
+
         let instance = Last9OTel(
             endpoint: endpoint,
             clientToken: clientToken,
             serviceName: serviceName,
-            environment: environment
+            environment: environment,
+            sessionInactivityTimeout: sessionInactivityTimeout,
+            enableAutoViewTracking: enableAutoViewTracking
         )
         shared = instance
         instance.startLifecycleObserver()
@@ -50,7 +68,9 @@ final class Last9OTel {
         endpoint: String,
         clientToken: String,
         serviceName: String,
-        environment: String
+        environment: String,
+        sessionInactivityTimeout: TimeInterval,
+        enableAutoViewTracking: Bool
     ) {
         let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
 
@@ -93,8 +113,12 @@ final class Last9OTel {
         )
 
         // 6. Register tracer provider
+        //    SessionSpanProcessor is first — it stamps session.id, view.id, user.*
+        //    onto every span before BatchSpanProcessor queues it for export.
+        let sessionSpanProcessor = SessionSpanProcessor()
         self.tracerProvider = TracerProviderBuilder()
             .with(resource: resource)
+            .add(spanProcessor: sessionSpanProcessor)
             .add(spanProcessor: spanProcessor)
             .build()
         OpenTelemetry.registerTracerProvider(tracerProvider: self.tracerProvider)
@@ -131,6 +155,15 @@ final class Last9OTel {
 
         // 9. Install crash handler
         Self.installCrashHandler()
+
+        // 10. Session + View managers — must be after provider registration
+        self.sessionManager = SessionManager(
+            tracerProvider: self.tracerProvider,
+            inactivityTimeout: sessionInactivityTimeout
+        )
+        self.viewManager = ViewManager(tracerProvider: self.tracerProvider)
+        sessionManager.start()
+        viewManager.setup(autoTrackViews: enableAutoViewTracking)
 
         print("[Last9] OTel initialized — \(serviceName) (\(environment)) origin=\(origin)")
     }
@@ -306,6 +339,11 @@ final class Last9OTel {
 
     /// Shutdown all providers. Call in `applicationWillTerminate`.
     func shutdown() {
+        viewManager.shutdown()
+        sessionManager.shutdown()
+        #if canImport(UIKit)
+        NotificationCenter.default.removeObserver(self)
+        #endif
         tracerProvider.shutdown()
         loggerProvider?.shutdown()
     }
@@ -318,5 +356,41 @@ final class Last9OTel {
             instrumentationName: name,
             instrumentationVersion: nil
         )
+    }
+
+    // MARK: - User Identification
+
+    /// Set the current user. Attributes are injected into every subsequent span.
+    ///
+    ///     Last9OTel.identify(id: "u_123", name: "Alice", email: "alice@example.com")
+    static func identify(
+        id: String? = nil,
+        name: String? = nil,
+        fullName: String? = nil,
+        email: String? = nil,
+        extraInfo: [String: String] = [:]
+    ) {
+        let user = UserInfo(id: id, name: name, fullName: fullName, email: email, extraInfo: extraInfo)
+        SessionStore.shared.setUser(user)
+    }
+
+    /// Clear the current user identity.
+    static func clearUser() {
+        SessionStore.shared.setUser(nil)
+    }
+
+    // MARK: - Manual View Tracking
+
+    /// Manually start a new view (for SwiftUI or custom navigation).
+    /// Ends any currently active view first.
+    ///
+    ///     Last9OTel.startView(name: "Checkout")
+    static func startView(name: String) {
+        shared?.viewManager.startView(name: name)
+    }
+
+    /// End the current view manually.
+    static func endView() {
+        shared?.viewManager.endCurrentView()
     }
 }
