@@ -1,5 +1,6 @@
 import Foundation
 import OpenTelemetryApi
+import Last9RUM
 
 // MARK: - Example 1: Network calls are automatic
 
@@ -17,7 +18,7 @@ func fetchContent(id: String) async throws -> Data {
 
 /// Track a login flow as a single span with attributes.
 func handleLogin(phone: String, otp: String) async throws {
-    let tracer = Last9OTel.tracer("auth")
+    let tracer = Last9RUM.tracer("auth")
     let span = tracer.spanBuilder(spanName: "user.login")
         .setAttribute(key: "auth.method", value: "otp")
         .startSpan()
@@ -43,33 +44,24 @@ func handleLogin(phone: String, otp: String) async throws {
     }
 }
 
-// MARK: - Example 3: Track screen views (UIKit)
+// MARK: - Example 3: Screen views are automatic (UIKit)
 
 import UIKit
 
+/// UIKit views are auto-tracked — no code needed.
+/// Every UIViewController's viewDidAppear/viewDidDisappear is swizzled.
+/// The view name defaults to the class name (e.g., "HomeViewController").
+/// Attributes added automatically: view.id, view.name, view.time_spent.
 class HomeViewController: UIViewController {
-    private var screenSpan: Span?
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        let tracer = Last9OTel.tracer("navigation")
-        screenSpan = tracer.spanBuilder(spanName: "screen.view")
-            .setAttribute(key: "screen.name", value: "HomeScreen")
-            .setAttribute(key: "screen.class", value: String(describing: type(of: self)))
-            .startSpan()
-    }
-
-    override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        screenSpan?.end()
-        screenSpan = nil
-    }
+    // Nothing needed! This screen is tracked automatically.
+    // To customize the view name, set it in viewDidLoad:
+    //   self.last9ViewName = "Home"
 }
 
 // MARK: - Example 4: Track video playback events
 
 func trackPlaybackStart(contentId: String, contentTitle: String) {
-    let tracer = Last9OTel.tracer("player")
+    let tracer = Last9RUM.tracer("player")
     let span = tracer.spanBuilder(spanName: "playback.start")
         .setAttribute(key: "content.id", value: contentId)
         .setAttribute(key: "content.title", value: contentTitle)
@@ -79,7 +71,7 @@ func trackPlaybackStart(contentId: String, contentTitle: String) {
 }
 
 func trackPlaybackError(contentId: String, error: Error, bufferDuration: Double) {
-    let tracer = Last9OTel.tracer("player")
+    let tracer = Last9RUM.tracer("player")
     let span = tracer.spanBuilder(spanName: "playback.error")
         .setAttribute(key: "content.id", value: contentId)
         .setAttribute(key: "error.message", value: error.localizedDescription)
@@ -87,4 +79,61 @@ func trackPlaybackError(contentId: String, error: Error, bufferDuration: Double)
         .startSpan()
     span.setStatus(.error(description: error.localizedDescription))
     span.end()
+}
+
+// MARK: - Example 5: User identification
+
+/// After login, identify the user so all subsequent spans carry user context.
+/// session.id, view.id, and user.* are injected into every span automatically.
+func onLoginComplete(userId: String, userName: String, email: String) {
+    Last9RUM.identify(
+        id: userId,
+        name: userName,
+        email: email
+    )
+}
+
+/// On logout, clear user identity.
+func onLogout() {
+    Last9RUM.clearUser()
+}
+
+// MARK: - Example 6: Custom view name (UIKit)
+
+/// Override the auto-generated view name with a custom one.
+/// By default, the class name ("SettingsViewController") is used.
+class SettingsViewController: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Override the auto-detected name for this screen
+        self.last9ViewName = "Settings"
+    }
+}
+
+// MARK: - Example 7: SwiftUI view tracking
+
+import SwiftUI
+
+/// For SwiftUI views, use the .trackView(name:) modifier.
+/// UIKit views are tracked automatically via swizzling — no code needed.
+@available(iOS 13.0, *)
+struct CheckoutView: SwiftUI.View {
+    var body: some SwiftUI.View {
+        VStack {
+            Text("Checkout")
+        }
+        .trackView(name: "Checkout")
+    }
+}
+
+// MARK: - Example 8: Manual view tracking (custom navigation)
+
+/// For custom navigation flows that don't use UIViewController,
+/// call startView/endView directly.
+func showOnboardingStep(step: Int) {
+    Last9RUM.startView(name: "Onboarding Step \(step)")
+}
+
+func finishOnboarding() {
+    Last9RUM.endView()
 }
