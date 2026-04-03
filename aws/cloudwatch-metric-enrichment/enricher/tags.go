@@ -48,9 +48,25 @@ func NewTagCache(logger *slog.Logger, cacheDir string, cacheTTL time.Duration) *
 // file cache when available. The cache key combines namespace and accountID to
 // prevent cross-account cache collisions.
 func (tc *TagCache) GetResources(ctx context.Context, client TaggingClient, namespace, accountID, region string) ([]*model.TaggedResource, error) {
-	filePath, err := tc.safeCachePath(accountID, namespace)
+	// Sanitize the cache key: strip all characters except alphanumeric, hyphens, underscores.
+	// This prevents path traversal via malicious namespace/accountID values (e.g. "../../etc").
+	sanitized := safeCacheKeyChars.ReplaceAllString(
+		accountID+"-"+strings.ReplaceAll(namespace, "/", "-"), "_",
+	)
+	if strings.Contains(sanitized, "..") || strings.Contains(sanitized, "/") || strings.Contains(sanitized, "\\") {
+		return nil, fmt.Errorf("invalid cache key for %s/%s", accountID, namespace)
+	}
+
+	absCache, err := filepath.Abs(tc.cacheDir)
 	if err != nil {
-		return nil, fmt.Errorf("invalid cache key for %s/%s: %w", accountID, namespace, err)
+		return nil, fmt.Errorf("resolve cache dir: %w", err)
+	}
+	filePath, err := filepath.Abs(filepath.Join(tc.cacheDir, sanitized+".json"))
+	if err != nil {
+		return nil, fmt.Errorf("resolve cache path: %w", err)
+	}
+	if !strings.HasPrefix(filePath, absCache+string(filepath.Separator)) {
+		return nil, fmt.Errorf("cache path escapes directory for %s/%s", accountID, namespace)
 	}
 
 	// Try reading from cache
@@ -72,29 +88,6 @@ func (tc *TagCache) GetResources(ctx context.Context, client TaggingClient, name
 
 	tc.logger.Info("cached resources", "namespace", namespace, "count", len(resources))
 	return resources, nil
-}
-
-// safeCachePath constructs a sanitized file path for the cache entry.
-// It strips path separators and special characters from the namespace and
-// accountID to prevent path traversal attacks (e.g., namespace "../../etc/passwd").
-func (tc *TagCache) safeCachePath(accountID, namespace string) (string, error) {
-	sanitized := safeCacheKeyChars.ReplaceAllString(accountID+"-"+strings.ReplaceAll(namespace, "/", "-"), "_")
-	candidate := filepath.Join(tc.cacheDir, sanitized+".json")
-
-	// Verify the resolved path stays within the cache directory
-	absCache, err := filepath.Abs(tc.cacheDir)
-	if err != nil {
-		return "", fmt.Errorf("resolve cache dir: %w", err)
-	}
-	absCandidate, err := filepath.Abs(candidate)
-	if err != nil {
-		return "", fmt.Errorf("resolve cache path: %w", err)
-	}
-	if !strings.HasPrefix(absCandidate, absCache+string(filepath.Separator)) {
-		return "", fmt.Errorf("path %q escapes cache directory", candidate)
-	}
-
-	return candidate, nil
 }
 
 func (tc *TagCache) readCache(filePath string) ([]*model.TaggedResource, bool) {
