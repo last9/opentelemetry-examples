@@ -17,6 +17,7 @@ DerivedData/
 .build/
 .swiftpm/
 Packages/
+Package.resolved
 
 # IDE
 .idea/
