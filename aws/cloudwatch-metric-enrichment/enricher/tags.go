@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,6 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/prometheus-community/yet-another-cloudwatch-exporter/pkg/model"
 )
+
+// safeCacheKeyChars only allows alphanumeric characters, hyphens, and underscores.
+var safeCacheKeyChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
 // TaggingClient abstracts the AWS Resource Groups Tagging API for testability.
 type TaggingClient interface {
@@ -43,8 +48,10 @@ func NewTagCache(logger *slog.Logger, cacheDir string, cacheTTL time.Duration) *
 // file cache when available. The cache key combines namespace and accountID to
 // prevent cross-account cache collisions.
 func (tc *TagCache) GetResources(ctx context.Context, client TaggingClient, namespace, accountID, region string) ([]*model.TaggedResource, error) {
-	cacheKey := accountID + "-" + strings.ReplaceAll(namespace, "/", "-")
-	filePath := tc.cacheDir + "/" + cacheKey + ".json"
+	filePath, err := tc.safeCachePath(accountID, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cache key for %s/%s: %w", accountID, namespace, err)
+	}
 
 	// Try reading from cache
 	if resources, ok := tc.readCache(filePath); ok {
@@ -65,6 +72,29 @@ func (tc *TagCache) GetResources(ctx context.Context, client TaggingClient, name
 
 	tc.logger.Info("cached resources", "namespace", namespace, "count", len(resources))
 	return resources, nil
+}
+
+// safeCachePath constructs a sanitized file path for the cache entry.
+// It strips path separators and special characters from the namespace and
+// accountID to prevent path traversal attacks (e.g., namespace "../../etc/passwd").
+func (tc *TagCache) safeCachePath(accountID, namespace string) (string, error) {
+	sanitized := safeCacheKeyChars.ReplaceAllString(accountID+"-"+strings.ReplaceAll(namespace, "/", "-"), "_")
+	candidate := filepath.Join(tc.cacheDir, sanitized+".json")
+
+	// Verify the resolved path stays within the cache directory
+	absCache, err := filepath.Abs(tc.cacheDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve cache dir: %w", err)
+	}
+	absCandidate, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", fmt.Errorf("resolve cache path: %w", err)
+	}
+	if !strings.HasPrefix(absCandidate, absCache+string(filepath.Separator)) {
+		return "", fmt.Errorf("path %q escapes cache directory", candidate)
+	}
+
+	return candidate, nil
 }
 
 func (tc *TagCache) readCache(filePath string) ([]*model.TaggedResource, bool) {
