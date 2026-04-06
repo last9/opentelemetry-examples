@@ -1,0 +1,49 @@
+{
+  "version": "2.0",
+  "app_name": "lambda-dynamodb-otel",
+  "stages": {
+    "dev": {
+      "api_gateway_stage": "dev",
+      "lambda_timeout": 30,
+      "lambda_memory_size": 256,
+      "xray": true,
+      "layers": [
+        "arn:aws:lambda:ap-south-1:901920570463:layer:aws-otel-python-amd64-ver-1-25-0:1"
+      ],
+      "environment_variables": {
+        "AWS_LAMBDA_EXEC_WRAPPER": "/opt/otel-instrument",
+        "OPENTELEMETRY_COLLECTOR_CONFIG_FILE": "/var/task/.chalice/collector-config.yaml",
+        "OTEL_SERVICE_NAME": "lambda-dynamodb-otel",
+        "OTEL_PROPAGATORS": "tracecontext,xray",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+        "OTEL_TRACES_EXPORTER": "otlp",
+        "OTEL_TRACES_SAMPLER": "always_on",
+        "OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=dev",
+        "DYNAMODB_TABLE": "items"
+      },
+      "iam_policy_file": "dev-policy.json"
+    },
+    "prod": {
+      "api_gateway_stage": "prod",
+      "lambda_timeout": 30,
+      "lambda_memory_size": 512,
+      "xray": true,
+      "layers": [
+        "arn:aws:lambda:ap-south-1:901920570463:layer:aws-otel-python-amd64-ver-1-25-0:1"
+      ],
+      "environment_variables": {
+        "AWS_LAMBDA_EXEC_WRAPPER": "/opt/otel-instrument",
+        "OPENTELEMETRY_COLLECTOR_CONFIG_FILE": "/var/task/.chalice/collector-config.yaml",
+        "OTEL_SERVICE_NAME": "lambda-dynamodb-otel",
+        "OTEL_PROPAGATORS": "tracecontext,xray",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+        "OTEL_TRACES_EXPORTER": "otlp",
+        "OTEL_TRACES_SAMPLER": "traceidratio",
+        "OTEL_TRACES_SAMPLER_ARG": "0.1",
+        "OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=prod",
+        "DYNAMODB_TABLE": "items"
+      },
+      "iam_policy_file": "prod-policy.json"
+    }
+  }
+}
