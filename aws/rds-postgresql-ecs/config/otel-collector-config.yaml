@@ -106,12 +106,13 @@ processors:
     # Instance-wide metrics will have database="_instance_wide" for consistent filtering
 
   # Filter processor to drop noisy metrics if needed
-  filter/metrics:
-    metrics:
-      exclude:
-        match_type: regexp
-        metric_names:
-          - ".*_total$"  # Exclude if duplicating counters
+  # Uncomment and add to pipeline processors list to enable
+  # filter/metrics:
+  #   metrics:
+  #     exclude:
+  #       match_type: regexp
+  #       metric_names:
+  #         - ".*_total$"  # Exclude if duplicating counters
 
 exporters:
   # Last9 OTLP exporter
@@ -131,11 +132,12 @@ exporters:
       num_consumers: 10
       queue_size: 1000
 
-  # Debug exporter for troubleshooting (disable in production)
-  debug:
-    verbosity: detailed
-    sampling_initial: 2
-    sampling_thereafter: 2
+  # Debug exporter for troubleshooting (disabled in production)
+  # Uncomment and add to pipeline exporters list to enable
+  # debug:
+  #   verbosity: detailed
+  #   sampling_initial: 2
+  #   sampling_thereafter: 2
 
 extensions:
   # Health check endpoint for ECS health checks
@@ -157,7 +159,7 @@ service:
       # IMPORTANT: resource processor must run BEFORE transform/metrics
       # so that resource attributes exist when transform tries to read them
       processors: [memory_limiter, resource, transform/metrics, batch]
-      exporters: [otlp/last9, debug]
+      exporters: [otlp/last9]
 
   telemetry:
     logs:
