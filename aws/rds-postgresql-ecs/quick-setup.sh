@@ -184,7 +184,7 @@ collect_configuration() {
 
     # Environment
     if [ -z "$ENVIRONMENT" ]; then
-        echo -n "Environment [prod/staging/dev] [prod]: "
+        echo -n "Environment (e.g., prod, staging, dev, uat) [prod]: "
         read ENVIRONMENT
         ENVIRONMENT=${ENVIRONMENT:-prod}
     else

@@ -1,3 +1,22 @@
+# ⚠️  WARNING: This file is currently NOT IN USE ⚠️
+#
+# This file contains custom PostgreSQL queries in postgres_exporter format,
+# but there is no sqlquery receiver configured in otel-collector-config.yaml.
+#
+# These queries are NOT being collected. The metrics documented in README.md
+# come from:
+# 1. Built-in postgresql receiver (34 metrics)
+# 2. dbm-collector.py script (9 DBM metrics)
+# 3. cloudwatch-collector.py script (14 RDS metrics)
+#
+# To use these queries, you would need to:
+# 1. Add sqlquery receiver to otel-collector-config.yaml
+# 2. Convert queries to OTel sqlquery receiver format (different from postgres_exporter)
+# 3. Update the receiver pipeline to include sqlquery
+#
+# For now, this file is kept for reference but is NOT functional.
+#
+# Original header:
 # Custom PostgreSQL Queries for Enhanced Monitoring
 # These queries extend the built-in OTEL PostgreSQL receiver metrics
 

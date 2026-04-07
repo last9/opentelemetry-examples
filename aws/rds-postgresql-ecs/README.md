@@ -15,17 +15,56 @@ Choose your deployment method:
 
 ### Option 1: Quick Setup (Recommended - CloudFormation)
 
-**Automated deployment in 4 steps (~10 minutes):**
+**Automated deployment in 5 steps (~10 minutes):**
+
+#### Prerequisites
+- **IMPORTANT:** You must create the monitoring user in your database(s) **before** running the quick setup
+- The CloudFormation stack expects the `otel_monitor` user to already exist
+
+#### Quick Steps
+
+**Step 1: Create monitoring user in ALL databases**
 
 ```bash
-cd aws/rds-postgresql-ecs
+cd aws/rds-postgresql-ecs/scripts
+
+# 1. Set a secure password in the SQL script
+MONITOR_PASSWORD=$(openssl rand -base64 24)
+echo "Generated password: $MONITOR_PASSWORD"
+echo "SAVE THIS PASSWORD - you'll need it for .env file!"
+
+sed -i.bak "s|<SECURE_PASSWORD>|$MONITOR_PASSWORD|g" setup-db-user.sql
+
+# 2. Run setup on ALL databases (auto-detect)
+export PGPASSWORD='your-postgres-master-password'
+./setup-all-databases.sh -h your-rds-endpoint.rds.amazonaws.com -U postgres
+
+# DO NOT use -d flag - it will limit setup to only those databases!
+```
+
+**Step 2: Configure environment**
+
+```bash
+cd ..
 cp .env.example .env
-# Edit .env with your credentials
+nano .env  # Edit with your credentials
+```
+
+Add to `.env`:
+```bash
+PG_USERNAME=otel_monitor
+PG_PASSWORD=<password-from-step-1>
+# ... other credentials
+```
+
+**Step 3-5: Deploy**
+
+```bash
 ./build-and-push-images.sh
 ./quick-setup.sh
 ```
 
-👉 **[See Full Quick Setup Guide](QUICK_SETUP.md)** - Step-by-step instructions
+👉 **[See Full Quick Setup Guide](QUICK_SETUP.md)** - Detailed instructions with troubleshooting
 
 **What's automated:**
 - Auto-discovers RDS configuration
@@ -33,6 +72,9 @@ cp .env.example .env
 - Deploys CloudFormation stack with ECS Fargate
 - Configures security groups and networking
 - Sets up all 3 collectors
+
+**What's NOT automated (you must do manually):**
+- Creating the monitoring database user (Step 1 above)
 
 ---
 
@@ -66,7 +108,7 @@ RDS_INSTANCE_ID=your-rds-instance
 LAST9_OTLP_ENDPOINT=https://your-endpoint.last9.io
 LAST9_AUTH_HEADER=Basic <base64-encoded-user:pass>
 
-# Environment
+# Environment (any value: prod, dev, uat, etc.)
 ENVIRONMENT=prod
 ```
 
@@ -77,45 +119,72 @@ ENVIRONMENT=prod
 
 #### Step 2: Create Monitoring User
 
-**IMPORTANT: If you have multiple databases on your RDS instance, you must run the setup on EACH database.**
+**IMPORTANT: This step must be completed for ALL databases on your RDS instance.**
 
-**Option 1: Automated Setup (Recommended for multiple databases)**
+Follow these steps carefully:
 
-Run this helper script to automatically set up monitoring on all databases:
+**2.1: Set a Secure Password**
+
+First, generate a strong password and update the SQL script:
 
 ```bash
+# Generate a secure password
+MONITOR_PASSWORD=$(openssl rand -base64 24)
+echo "Generated password: $MONITOR_PASSWORD"
+echo "Save this password - you'll need it for the .env file!"
+
+# Update the SQL script with the password
 cd scripts
-export PGPASSWORD='your-master-password'
-./setup-all-databases.sh -h your-rds-endpoint -U postgres
+sed -i.bak "s|<SECURE_PASSWORD>|$MONITOR_PASSWORD|g" setup-db-user.sql
 ```
 
-**What it does:**
-- Auto-detects all databases on your RDS instance
-- Runs setup on each database automatically
-- Creates `otel_monitor` user (once)
-- Creates monitoring schema, views, and functions in each database
-- Shows progress and summary report
+Or manually edit `scripts/setup-db-user.sql` line 20 and replace `<SECURE_PASSWORD>` with your chosen password.
 
-**Option 2: Manual Setup (Single database)**
+**2.2: Run Setup on All Databases**
 
-If you only have one database or want to set up specific databases:
+**Option A: Automated Setup (Recommended - sets up ALL databases)**
 
 ```bash
+# Make sure you're in the scripts directory
+cd scripts
+
+# Set your PostgreSQL master password
+export PGPASSWORD='your-postgres-master-password'
+
+# Run setup - DO NOT use -d flag to auto-detect all databases
+./setup-all-databases.sh -h your-rds-endpoint.rds.amazonaws.com -U postgres
+```
+
+**IMPORTANT:**
+- Do NOT use the `-d` flag - this limits setup to specific databases only
+- The script will auto-detect all databases and run setup on each one
+- You should see "Total databases: X" where X is your actual database count
+
+**Option B: Manual Setup (Single database or specific databases)**
+
+If you want to run setup on specific databases only:
+
+```bash
+# For a single database
 psql -h your-rds-endpoint -U postgres -d your_database_name -f scripts/setup-db-user.sql
+
+# For specific databases (comma-separated)
+./setup-all-databases.sh -h your-rds-endpoint -U postgres -d "db1,db2,db3"
 ```
 
-**For multiple databases, repeat for each:**
+**What the setup does:**
+- Creates `otel_monitor` user with your secure password (once, on first run)
+- Grants `pg_monitor` role for read-only monitoring access
+- Creates monitoring schema, views, and functions in each database
+- Enables `pg_stat_statements` extension per database
+
+**2.3: Update .env with the Password**
+
 ```bash
-psql -h your-rds-endpoint -U postgres -d database1 -f scripts/setup-db-user.sql
-psql -h your-rds-endpoint -U postgres -d database2 -f scripts/setup-db-user.sql
-psql -h your-rds-endpoint -U postgres -d database3 -f scripts/setup-db-user.sql
+# Update your .env file with the monitoring credentials
+PG_USERNAME=otel_monitor
+PG_PASSWORD=your-generated-password-from-step-2.1
 ```
-
-**What it does:**
-- Creates `otel_monitor` user with read-only access (if not exists)
-- Grants `pg_monitor` role
-- Creates helper functions and views for monitoring
-- Enables `pg_stat_statements` extension
 
 #### Step 3: Build Docker Images
 
@@ -192,7 +261,7 @@ docker logs cloudwatch-collector
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `COLLECTION_INTERVAL` | `30` | Metrics collection interval (seconds) |
-| `ENVIRONMENT` | `prod` | Environment label for metrics |
+| `ENVIRONMENT` | `prod` | Environment label for metrics (any value accepted) |
 
 ---
 
