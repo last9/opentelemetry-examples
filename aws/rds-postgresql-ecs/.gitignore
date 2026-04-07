@@ -47,6 +47,7 @@ target/
 tmp/
 temp/
 *.tmp
+*.bak
 
 # Test coverage
 coverage/

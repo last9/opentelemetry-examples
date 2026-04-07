@@ -92,11 +92,14 @@ echo "Generated password: $MONITOR_PASSWORD"
 echo "⚠️  SAVE THIS PASSWORD - you'll need it for Step 1!"
 
 # Replace the placeholder in the SQL script
-sed -i.bak "s/<SECURE_PASSWORD>/$MONITOR_PASSWORD/g" setup-db-user.sql
+sed -i.bak "s|<SECURE_PASSWORD>|$MONITOR_PASSWORD|g" setup-db-user.sql
 
 # Verify the replacement worked
 grep "CREATE USER otel_monitor" setup-db-user.sql
 # Should show: CREATE USER otel_monitor WITH PASSWORD 'your-actual-password';
+
+# IMPORTANT: After running setup, restore the file to prevent accidental credential commits
+# You can do this later with: git checkout scripts/setup-db-user.sql
 ```
 
 **1.5.2: Run Setup on ALL Databases**
@@ -155,11 +158,16 @@ PG_PASSWORD=<the-password-you-generated-in-step-1.5.1>
 **1.5.4: Verify Setup**
 
 ```bash
-# Test connection with the new user
-psql -h your-rds-endpoint -U otel_monitor -d postgres -c "SELECT * FROM otel_monitor.pg_stat_statements() LIMIT 1;"
+# Test 1: Verify schema was created
+psql -h your-rds-endpoint -U otel_monitor -d postgres -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'otel_monitor';"
+
+# Test 2: Verify monitoring function exists and works
+psql -h your-rds-endpoint -U otel_monitor -d postgres -c "SELECT COUNT(*) FROM otel_monitor.pg_stat_statements();"
 ```
 
-**Expected output:** Should show query statistics (not an authentication error).
+**Expected output:**
+- Test 1: Should show `otel_monitor` schema exists
+- Test 2: Should show a count of query statistics (not an authentication error)
 
 ### Important Note on Multi-Database Monitoring
 

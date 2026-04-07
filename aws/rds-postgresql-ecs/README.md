@@ -33,7 +33,7 @@ MONITOR_PASSWORD=$(openssl rand -base64 24)
 echo "Generated password: $MONITOR_PASSWORD"
 echo "SAVE THIS PASSWORD - you'll need it for .env file!"
 
-sed -i.bak "s/<SECURE_PASSWORD>/$MONITOR_PASSWORD/g" setup-db-user.sql
+sed -i.bak "s|<SECURE_PASSWORD>|$MONITOR_PASSWORD|g" setup-db-user.sql
 
 # 2. Run setup on ALL databases (auto-detect)
 export PGPASSWORD='your-postgres-master-password'
@@ -135,7 +135,7 @@ echo "Save this password - you'll need it for the .env file!"
 
 # Update the SQL script with the password
 cd scripts
-sed -i.bak "s/<SECURE_PASSWORD>/$MONITOR_PASSWORD/g" setup-db-user.sql
+sed -i.bak "s|<SECURE_PASSWORD>|$MONITOR_PASSWORD|g" setup-db-user.sql
 ```
 
 Or manually edit `scripts/setup-db-user.sql` line 20 and replace `<SECURE_PASSWORD>` with your chosen password.
