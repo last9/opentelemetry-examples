@@ -581,8 +581,12 @@ def setup_otlp_exporter(config: Config) -> metrics.Meter:
     return metrics.get_meter("postgresql.dbm")
 
 
-def output_otlp(data: Dict[str, Any], meter: metrics.Meter, config: Config) -> None:
-    """Output data via OTLP to Last9."""
+def output_otlp(data: Dict[str, Any], meter: metrics.Meter, config: Config, last_statements: Dict[int, Dict]) -> None:
+    """Output data via OTLP to Last9.
+
+    Args:
+        last_statements: Dictionary to track previous pg_stat_statements values for delta computation
+    """
 
     # Create/get metric instruments (these are cached by name)
     query_calls = meter.create_counter(
@@ -658,7 +662,13 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter, config: Config) -> N
     )
 
     # Record query metrics from pg_stat_statements
+    # Compute deltas since pg_stat_statements values are cumulative
+    current_statements = {}
+
     for metric in data.get('query_metrics', []):
+        query_id = metric['query_id']
+        current_statements[query_id] = metric
+
         # Create a short, readable query preview (max 100 chars)
         query_text = metric['query'].strip()
         query_text_preview = query_text[:100]
@@ -673,14 +683,36 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter, config: Config) -> N
             "query_text_preview": query_text_preview,  # Add readable SQL preview
         }
 
-        # Record cumulative metrics
-        query_calls.add(metric['calls'], attributes)
-        query_total_time.add(metric['total_time_ms'], attributes)
-        query_rows.add(metric['rows'], attributes)
-        query_buffer_hits.add(metric['shared_blks_hit'], attributes)
-        query_buffer_reads.add(metric['shared_blks_read'], attributes)
-        query_io_read_time.add(metric['blk_read_time_ms'], attributes)
-        query_io_write_time.add(metric['blk_write_time_ms'], attributes)
+        # Compute deltas from last collection (pg_stat_statements is cumulative)
+        if query_id in last_statements:
+            prev = last_statements[query_id]
+            # Calculate delta values (current - previous)
+            delta_calls = max(0, metric['calls'] - prev['calls'])
+            delta_time = max(0, metric['total_time_ms'] - prev['total_time_ms'])
+            delta_rows = max(0, metric['rows'] - prev['rows'])
+            delta_buffer_hits = max(0, metric['shared_blks_hit'] - prev['shared_blks_hit'])
+            delta_buffer_reads = max(0, metric['shared_blks_read'] - prev['shared_blks_read'])
+            delta_io_read = max(0, metric['blk_read_time_ms'] - prev['blk_read_time_ms'])
+            delta_io_write = max(0, metric['blk_write_time_ms'] - prev['blk_write_time_ms'])
+        else:
+            # First time seeing this query, use current values as delta
+            delta_calls = metric['calls']
+            delta_time = metric['total_time_ms']
+            delta_rows = metric['rows']
+            delta_buffer_hits = metric['shared_blks_hit']
+            delta_buffer_reads = metric['shared_blks_read']
+            delta_io_read = metric['blk_read_time_ms']
+            delta_io_write = metric['blk_write_time_ms']
+
+        # Record delta metrics (not cumulative totals)
+        if delta_calls > 0:  # Only record if there were calls in this interval
+            query_calls.add(delta_calls, attributes)
+            query_total_time.add(delta_time, attributes)
+            query_rows.add(delta_rows, attributes)
+            query_buffer_hits.add(delta_buffer_hits, attributes)
+            query_buffer_reads.add(delta_buffer_reads, attributes)
+            query_io_read_time.add(delta_io_read, attributes)
+            query_io_write_time.add(delta_io_write, attributes)
 
         # Record query info (mapping signature to query text)
         # Truncate query to avoid label size limits (max 200 chars)
@@ -727,6 +759,10 @@ def output_otlp(data: Dict[str, Any], meter: metrics.Meter, config: Config) -> N
         }
     )
 
+    # Update last_statements for next delta computation
+    last_statements.clear()
+    last_statements.update(current_statements)
+
     logger.info(
         f"Exported to OTLP: "
         f"{len(data.get('query_metrics', []))} query metrics, "
@@ -765,7 +801,7 @@ def main():
                 if config.output_format == 'json':
                     output_json(data)
                 elif config.output_format == 'otlp':
-                    output_otlp(data, meter, config)
+                    output_otlp(data, meter, config, collector.last_statements)
 
                 # Summary log
                 logger.info(

@@ -154,7 +154,9 @@ service:
     # Metrics pipeline
     metrics:
       receivers: [postgresql, prometheus/self]
-      processors: [memory_limiter, transform/metrics, resource, batch]
+      # IMPORTANT: resource processor must run BEFORE transform/metrics
+      # so that resource attributes exist when transform tries to read them
+      processors: [memory_limiter, resource, transform/metrics, batch]
       exporters: [otlp/last9, debug]
 
   telemetry:
