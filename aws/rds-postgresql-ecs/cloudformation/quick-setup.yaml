@@ -88,8 +88,7 @@ Parameters:
   Environment:
     Type: String
     Default: prod
-    AllowedValues: [prod, staging, dev, uat]
-    Description: Environment name for tagging
+    Description: Environment name for tagging and labeling metrics (e.g., prod, staging, dev, uat, etc.)
 
   CreateMonitoringUser:
     Type: String

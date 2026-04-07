@@ -18,13 +18,8 @@ Parameters:
 
   Environment:
     Type: String
-    AllowedValues:
-      - prod
-      - staging
-      - dev
-      - uat
     Default: dev
-    Description: Deployment environment
+    Description: Environment name for tagging and labeling metrics (e.g., prod, staging, dev, uat, etc.)
 
   Last9OtlpEndpoint:
     Type: String

@@ -52,7 +52,7 @@ LAST9_OTLP_ENDPOINT=<your-endpoint>           # From Last9 dashboard
 LAST9_USERNAME=<your-username>                # From Last9 dashboard
 LAST9_PASSWORD=<your-password>                # From Last9 dashboard
 
-# Environment
+# Environment (any value: prod, dev, uat, staging, etc.)
 ENVIRONMENT=prod
 
 # Database user creation (RECOMMENDED: false for production)
@@ -63,72 +63,103 @@ PG_USERNAME=otel_monitor                       # Your monitoring username
 PG_PASSWORD=<your-monitoring-password>         # Your monitoring password
 ```
 
-**If `CREATE_MONITORING_USER=false`**, you must:
-1. **Manually create the monitoring user** in PostgreSQL first (see Database Setup section below)
-2. **Add `PG_USERNAME` and `PG_PASSWORD`** to your `.env` file
+**If `CREATE_MONITORING_USER=false` (RECOMMENDED)**, you must:
+1. **First complete Step 1.5 below** to create the monitoring user
+2. **Add `PG_USERNAME` and `PG_PASSWORD`** to your `.env` file (you'll do this in Step 1.5.3)
 
 **Save and close the file.**
 
+**⚠️  IMPORTANT: Before proceeding to Step 2, you MUST complete Step 1.5 below to create the database monitoring user!**
+
 ---
 
-## Step 1.5: Setup Database Monitoring (REQUIRED if CREATE_MONITORING_USER=false)
+## Step 1.5: Setup Database Monitoring (REQUIRED)
 
-**⚠️ IMPORTANT: This step is REQUIRED if you have multiple databases on your RDS instance!**
+**⚠️ CRITICAL: This step is REQUIRED for ALL databases on your RDS instance!**
 
 The monitoring setup must be run on **EACH** database you want to monitor. The setup creates monitoring views and functions that are database-specific.
 
-### Option A: Automated Setup (Recommended)
+### Step-by-Step Instructions
 
-Use the helper script to automatically set up all databases:
+**1.5.1: Generate and Set a Secure Password**
 
 ```bash
 cd scripts
-export PGPASSWORD='your-master-password'
+
+# Generate a secure password
+MONITOR_PASSWORD=$(openssl rand -base64 24)
+echo "Generated password: $MONITOR_PASSWORD"
+echo "⚠️  SAVE THIS PASSWORD - you'll need it for Step 1!"
+
+# Replace the placeholder in the SQL script
+sed -i.bak "s/<SECURE_PASSWORD>/$MONITOR_PASSWORD/g" setup-db-user.sql
+
+# Verify the replacement worked
+grep "CREATE USER otel_monitor" setup-db-user.sql
+# Should show: CREATE USER otel_monitor WITH PASSWORD 'your-actual-password';
+```
+
+**1.5.2: Run Setup on ALL Databases**
+
+**Option A: Automated Setup (Recommended - sets up ALL databases)**
+
+```bash
+# Set your PostgreSQL master password
+export PGPASSWORD='your-postgres-master-password'
+
+# Run setup WITHOUT -d flag to auto-detect all databases
 ./setup-all-databases.sh -h your-rds-endpoint.rds.amazonaws.com -U postgres
+
+# ⚠️  DO NOT use -d flag - it will limit setup to specific databases only!
 ```
 
-**What it does:**
-- Auto-detects all databases on your RDS instance
-- Creates `otel_monitor` user (once)
-- Sets up monitoring schema, views, and functions in each database
-- Shows progress with colored output
+**IMPORTANT:**
+- **DO NOT** add `-d postgres` or `-d database_name` - this limits the script to only those databases
+- The script will automatically discover all databases and run setup on each one
+- You should see "Total databases: X" where X matches your database count
 
-**Example output:**
+**Example output (correct):**
 ```
-[INFO] Found databases: app_db,analytics_db,postgres
-[INFO] Starting setup on 3 database(s)...
+[INFO] Auto-detecting databases...
+[SUCCESS] Found databases: app_db,analytics_db,reporting_db,postgres
+[INFO] Starting setup on 4 database(s)...
 [SUCCESS] ✓ Setup completed successfully for database: app_db
 [SUCCESS] ✓ Setup completed successfully for database: analytics_db
+[SUCCESS] ✓ Setup completed successfully for database: reporting_db
 [SUCCESS] ✓ Setup completed successfully for database: postgres
 [SUCCESS] All databases setup successfully!
 ```
 
-### Option B: Manual Setup
+**Option B: Manual Setup (Only if you want specific databases)**
 
-For a single database or specific databases only:
+If you only want to monitor specific databases:
 
 ```bash
 cd scripts
 export PGPASSWORD='your-master-password'
-psql -h your-rds-endpoint.rds.amazonaws.com -U postgres -d database_name -f setup-db-user.sql
+
+# For specific databases, use -d with comma-separated list
+./setup-all-databases.sh -h your-rds-endpoint -U postgres -d "app_db,analytics_db,postgres"
 ```
 
-**For multiple databases, repeat for each:**
-```bash
-psql -h your-rds-endpoint -U postgres -d app_db -f setup-db-user.sql
-psql -h your-rds-endpoint -U postgres -d analytics_db -f setup-db-user.sql
-psql -h your-rds-endpoint -U postgres -d reporting_db -f setup-db-user.sql
-```
+**1.5.3: Update Your .env File**
 
-### Verify Setup
-
-After running the setup, verify it worked:
+Go back and update your `.env` file from Step 1 with the monitoring credentials:
 
 ```bash
-psql -h your-rds-endpoint -U postgres -d your_database -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'otel_monitor';"
+# Add these lines to your .env file
+PG_USERNAME=otel_monitor
+PG_PASSWORD=<the-password-you-generated-in-step-1.5.1>
 ```
 
-**Expected output:** Should show `otel_monitor` schema exists.
+**1.5.4: Verify Setup**
+
+```bash
+# Test connection with the new user
+psql -h your-rds-endpoint -U otel_monitor -d postgres -c "SELECT * FROM otel_monitor.pg_stat_statements() LIMIT 1;"
+```
+
+**Expected output:** Should show query statistics (not an authentication error).
 
 ### Important Note on Multi-Database Monitoring
 
