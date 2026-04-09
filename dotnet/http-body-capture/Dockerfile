@@ -1,6 +1,5 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY src/Last9.OpenTelemetry.BodyCapture/Last9.OpenTelemetry.BodyCapture.csproj src/Last9.OpenTelemetry.BodyCapture/
 COPY example/ExampleApp.csproj example/
 RUN dotnet restore example/ExampleApp.csproj
 COPY . .
