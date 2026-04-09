@@ -32,7 +32,7 @@ app.MapGet("/api/patients/{id}", (string id) =>
     });
 });
 
-app.MapPost("/api/patients", async ([FromBody] object patient) =>
+app.MapPost("/api/patients", ([FromBody] object patient) =>
 {
     return Results.Json(new
     {

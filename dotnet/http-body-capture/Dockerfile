@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y unzip curl \
     && apt-get purge -y unzip curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Enable .NET CLR profiler for auto-instrumentation
+# Note: CORECLR_PROFILER_PATH is x64-specific. For ARM64, change linux-x64 to linux-arm64.
 ENV CORECLR_ENABLE_PROFILING=1
 ENV CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658571}
 ENV CORECLR_PROFILER_PATH=/otel-dotnet-auto/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so

@@ -1,10 +1,10 @@
+using System.Buffers;
 using System.Diagnostics;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Last9.OpenTelemetry;
@@ -25,16 +25,13 @@ internal class HttpBodyCaptureMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly BodyCaptureOptions _options;
-    private readonly ILogger<HttpBodyCaptureMiddleware> _logger;
 
     public HttpBodyCaptureMiddleware(
         RequestDelegate next,
-        IOptions<BodyCaptureOptions> options,
-        ILogger<HttpBodyCaptureMiddleware> logger)
+        IOptions<BodyCaptureOptions> options)
     {
         _next = next;
         _options = options.Value;
-        _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -54,6 +51,13 @@ internal class HttpBodyCaptureMiddleware
             context.Request.Body.Position = 0;
         }
 
+        if (!_options.CaptureResponseBody)
+        {
+            await _next(context);
+            SetSpanAttributes(requestBody, null, context.Response.StatusCode);
+            return;
+        }
+
         var originalResponseBody = context.Response.Body;
         using var responseBuffer = new MemoryStream();
         context.Response.Body = responseBuffer;
@@ -65,30 +69,33 @@ internal class HttpBodyCaptureMiddleware
         finally
         {
             string? responseBody = null;
-            if (_options.CaptureResponseBody && IsAllowedContentType(context.Response.ContentType))
+            if (IsAllowedContentType(context.Response.ContentType))
             {
                 responseBuffer.Position = 0;
                 responseBody = await ReadStreamAsync(responseBuffer);
             }
 
-            var activity = Activity.Current;
-            if (activity != null)
-            {
-                var shouldRecord = !_options.CaptureOnErrorOnly || context.Response.StatusCode >= 400;
-                if (shouldRecord)
-                {
-                    if (!string.IsNullOrEmpty(requestBody))
-                        activity.SetTag("http.request.body", requestBody);
-                    if (!string.IsNullOrEmpty(responseBody))
-                        activity.SetTag("http.response.body", responseBody);
-                    activity.SetTag("http.response.status_code", context.Response.StatusCode);
-                }
-            }
+            SetSpanAttributes(requestBody, responseBody, context.Response.StatusCode);
 
             responseBuffer.Position = 0;
             await responseBuffer.CopyToAsync(originalResponseBody);
             context.Response.Body = originalResponseBody;
         }
+    }
+
+    private void SetSpanAttributes(string? requestBody, string? responseBody, int statusCode)
+    {
+        var activity = Activity.Current;
+        if (activity == null) return;
+
+        var shouldRecord = !_options.CaptureOnErrorOnly || statusCode >= 400;
+        if (!shouldRecord) return;
+
+        if (!string.IsNullOrEmpty(requestBody))
+            activity.SetTag("http.request.body", requestBody);
+        if (!string.IsNullOrEmpty(responseBody))
+            activity.SetTag("http.response.body", responseBody);
+        activity.SetTag("http.response.status_code", statusCode);
     }
 
     private bool ShouldCapture(PathString path)
@@ -117,13 +124,21 @@ internal class HttpBodyCaptureMiddleware
 
     private async Task<string?> ReadStreamAsync(Stream stream)
     {
-        using var reader = new StreamReader(stream, leaveOpen: true);
-        var buffer = new char[_options.MaxBodySizeBytes];
-        var charsRead = await reader.ReadAsync(buffer, 0, buffer.Length);
-        if (charsRead == 0) return null;
-        var body = new string(buffer, 0, charsRead);
-        if (charsRead >= _options.MaxBodySizeBytes) body += "...[TRUNCATED]";
-        return body;
+        var maxChars = _options.MaxBodySizeBytes;
+        var buffer = ArrayPool<char>.Shared.Rent(maxChars);
+        try
+        {
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            var charsRead = await reader.ReadAsync(buffer, 0, maxChars);
+            if (charsRead == 0) return null;
+            var body = new string(buffer, 0, charsRead);
+            if (charsRead == maxChars) body += "...[TRUNCATED]";
+            return body;
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
     }
 }
 
@@ -146,7 +161,7 @@ public static class BodyCaptureServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.Configure<BodyCaptureOptions>(configuration.GetSection("BodyCapture"));
-        services.AddTransient<IStartupFilter, BodyCaptureStartupFilter>();
+        services.AddSingleton<IStartupFilter, BodyCaptureStartupFilter>();
         return services;
     }
 }
