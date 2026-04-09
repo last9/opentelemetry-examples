@@ -1,0 +1,76 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+  # HIPAA PHI redaction — masks sensitive patterns in span attributes
+  # This runs centrally in the gateway collector so individual apps
+  # don't need to implement their own redaction logic.
+  transform/redact-phi:
+    trace_statements:
+      - context: span
+        statements:
+          # SSN (xxx-xx-xxxx)
+          - replace_pattern(attributes["http.request.body"], "\\b\\d{3}-\\d{2}-\\d{4}\\b", "***-**-****")
+          - replace_pattern(attributes["http.response.body"], "\\b\\d{3}-\\d{2}-\\d{4}\\b", "***-**-****")
+
+          # Email addresses
+          - replace_pattern(attributes["http.request.body"], "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}", "****@****.***")
+          - replace_pattern(attributes["http.response.body"], "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}", "****@****.***")
+
+          # US phone numbers
+          - replace_pattern(attributes["http.request.body"], "\\b\\d{3}[\\-.]\\d{3}[\\-.]\\d{4}\\b", "***-***-****")
+          - replace_pattern(attributes["http.response.body"], "\\b\\d{3}[\\-.]\\d{3}[\\-.]\\d{4}\\b", "***-***-****")
+
+          # Date of birth (YYYY-MM-DD)
+          - replace_pattern(attributes["http.request.body"], "\\b(19|20)\\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])\\b", "****-**-**")
+          - replace_pattern(attributes["http.response.body"], "\\b(19|20)\\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])\\b", "****-**-**")
+
+          # Date of birth (MM/DD/YYYY)
+          - replace_pattern(attributes["http.request.body"], "\\b(0[1-9]|1[0-2])/(0[1-9]|[12]\\d|3[01])/(19|20)\\d{2}\\b", "**/**/****")
+          - replace_pattern(attributes["http.response.body"], "\\b(0[1-9]|1[0-2])/(0[1-9]|[12]\\d|3[01])/(19|20)\\d{2}\\b", "**/**/****")
+
+          # US ZIP codes (5 or 9 digit)
+          - replace_pattern(attributes["http.request.body"], "\\b\\d{5}-\\d{4}\\b", "*****-****")
+          - replace_pattern(attributes["http.response.body"], "\\b\\d{5}-\\d{4}\\b", "*****-****")
+
+          # Credit/debit card numbers
+          - replace_pattern(attributes["http.request.body"], "\\b\\d{4}[\\- ]?\\d{4}[\\- ]?\\d{4}[\\- ]?\\d{4}\\b", "****-****-****-****")
+          - replace_pattern(attributes["http.response.body"], "\\b\\d{4}[\\- ]?\\d{4}[\\- ]?\\d{4}[\\- ]?\\d{4}\\b", "****-****-****-****")
+
+exporters:
+  otlp_http:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "Basic ${LAST9_OTLP_AUTH}"
+
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/redact-phi, batch]
+      exporters: [otlp_http]
+    # Uncomment for local debugging — shows redacted spans in collector logs
+    # traces/debug:
+    #   receivers: [otlp]
+    #   processors: [transform/redact-phi]
+    #   exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
