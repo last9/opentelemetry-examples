@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ExampleApp</RootNamespace>
+  </PropertyGroup>
+
+  <!-- In your real app, replace this with: dotnet add package Last9.OpenTelemetry.BodyCapture -->
+  <ItemGroup>
+    <ProjectReference Include="..\src\Last9.OpenTelemetry.BodyCapture\Last9.OpenTelemetry.BodyCapture.csproj" />
+  </ItemGroup>
+</Project>

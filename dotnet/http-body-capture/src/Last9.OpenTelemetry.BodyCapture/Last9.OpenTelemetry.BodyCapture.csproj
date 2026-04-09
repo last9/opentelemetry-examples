@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Last9.OpenTelemetry</RootNamespace>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Last9.OpenTelemetry.BodyCapture</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Last9</Authors>
+    <Description>Capture HTTP request/response bodies as OpenTelemetry trace span attributes. Works with .NET auto-instrumentation. Configurable path filtering, size limits, and error-only capture.</Description>
+    <PackageTags>opentelemetry;otel;tracing;http;body;capture;observability;last9</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

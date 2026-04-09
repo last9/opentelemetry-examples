@@ -1,9 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY *.csproj .
-RUN dotnet restore
+COPY src/Last9.OpenTelemetry.BodyCapture/Last9.OpenTelemetry.BodyCapture.csproj src/Last9.OpenTelemetry.BodyCapture/
+COPY example/ExampleApp.csproj example/
+RUN dotnet restore example/ExampleApp.csproj
 COPY . .
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish example/ExampleApp.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
@@ -27,4 +28,4 @@ ENV DOTNET_SHARED_STORE=/otel-dotnet-auto/store
 ENV DOTNET_STARTUP_HOOKS=/otel-dotnet-auto/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
 
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "HttpBodyCapture.dll"]
+ENTRYPOINT ["dotnet", "ExampleApp.dll"]
