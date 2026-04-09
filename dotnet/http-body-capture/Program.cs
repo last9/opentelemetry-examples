@@ -1,17 +1,12 @@
-using HttpBodyCapture.Configuration;
-using HttpBodyCapture.Middleware;
+using Last9.OpenTelemetry;
 using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure body capture options from appsettings.json
-builder.Services.Configure<BodyCaptureOptions>(
-    builder.Configuration.GetSection("BodyCapture"));
+// One-line body capture setup — configure options in appsettings.json
+builder.Services.AddHttpBodyCapture(builder.Configuration);
 
 var app = builder.Build();
-
-// Register body capture middleware — enriches auto-instrumented spans with request/response bodies
-app.UseMiddleware<HttpBodyCaptureMiddleware>();
 
 // Sample patient API with PHI data (for testing PII redaction)
 app.MapGet("/api/patients/{id}", (string id) =>

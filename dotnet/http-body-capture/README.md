@@ -106,20 +106,17 @@ Add custom patterns to `otel-collector-config.yaml` under `transform/redact-phi`
 
 ## Adding to Your App
 
-The only code change needed in your existing .NET app:
+**Step 1:** Copy `BodyCapture.cs` into your project.
+
+**Step 2:** Add one line to `Program.cs`:
 
 ```csharp
-// Program.cs — add these two blocks
-
-// 1. Register options
-builder.Services.Configure<BodyCaptureOptions>(
-    builder.Configuration.GetSection("BodyCapture"));
-
-// 2. Register middleware (before other middleware)
-app.UseMiddleware<HttpBodyCaptureMiddleware>();
+builder.Services.AddHttpBodyCapture(builder.Configuration);
 ```
 
-Copy `Configuration/BodyCaptureOptions.cs` and `Middleware/HttpBodyCaptureMiddleware.cs` into your project, add the `BodyCapture` section to your `appsettings.json`, and set up auto-instrumentation in your Dockerfile.
+**Step 3:** Add the `BodyCapture` section to your `appsettings.json`.
+
+That's it. The middleware auto-registers via `IStartupFilter` — no `app.UseMiddleware<...>()` needed. Set up auto-instrumentation in your Dockerfile and the OTel Collector handles PII redaction centrally.
 
 ## Verification
 

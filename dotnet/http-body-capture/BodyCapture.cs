@@ -1,12 +1,26 @@
+// Single-file HTTP body capture for OpenTelemetry .NET auto-instrumentation.
+// Copy this file into your project and call: builder.Services.AddHttpBodyCapture(builder.Configuration);
+
 using System.Diagnostics;
-using HttpBodyCapture.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace HttpBodyCapture.Middleware;
+namespace Last9.OpenTelemetry;
 
-public class HttpBodyCaptureMiddleware
+public class BodyCaptureOptions
+{
+    public bool Enabled { get; set; } = true;
+    public bool CaptureRequestBody { get; set; } = true;
+    public bool CaptureResponseBody { get; set; } = true;
+    public int MaxBodySizeBytes { get; set; } = 8192;
+    public bool CaptureOnErrorOnly { get; set; }
+    public List<string> ContentTypes { get; set; } = new() { "application/json", "application/xml", "text/plain" };
+    public List<string> IncludePaths { get; set; } = new();
+    public List<string> ExcludePaths { get; set; } = new() { "/health", "/ready", "/metrics" };
+}
+
+internal class HttpBodyCaptureMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly BodyCaptureOptions _options;
@@ -32,7 +46,6 @@ public class HttpBodyCaptureMiddleware
 
         context.Request.EnableBuffering();
 
-        // Read request body
         string? requestBody = null;
         if (_options.CaptureRequestBody && IsAllowedContentType(context.Request.ContentType))
         {
@@ -40,7 +53,6 @@ public class HttpBodyCaptureMiddleware
             context.Request.Body.Position = 0;
         }
 
-        // Wrap response stream to capture response body
         var originalResponseBody = context.Response.Body;
         using var responseBuffer = new MemoryStream();
         context.Response.Body = responseBuffer;
@@ -51,7 +63,6 @@ public class HttpBodyCaptureMiddleware
         }
         finally
         {
-            // Read response body
             string? responseBody = null;
             if (_options.CaptureResponseBody && IsAllowedContentType(context.Response.ContentType))
             {
@@ -59,25 +70,20 @@ public class HttpBodyCaptureMiddleware
                 responseBody = await ReadStreamAsync(responseBuffer);
             }
 
-            // Add bodies as span attributes on the current Activity (created by auto-instrumentation)
             var activity = Activity.Current;
             if (activity != null)
             {
                 var shouldRecord = !_options.CaptureOnErrorOnly || context.Response.StatusCode >= 400;
-
                 if (shouldRecord)
                 {
                     if (!string.IsNullOrEmpty(requestBody))
                         activity.SetTag("http.request.body", requestBody);
-
                     if (!string.IsNullOrEmpty(responseBody))
                         activity.SetTag("http.response.body", responseBody);
-
                     activity.SetTag("http.response.status_code", context.Response.StatusCode);
                 }
             }
 
-            // Copy buffered response back to the original stream
             responseBuffer.Position = 0;
             await responseBuffer.CopyToAsync(originalResponseBody);
             context.Response.Body = originalResponseBody;
@@ -87,39 +93,24 @@ public class HttpBodyCaptureMiddleware
     private bool ShouldCapture(PathString path)
     {
         var pathValue = path.Value ?? "";
-
         foreach (var exclude in _options.ExcludePaths)
-        {
             if (pathValue.StartsWith(exclude, StringComparison.OrdinalIgnoreCase))
                 return false;
-        }
-
         if (_options.IncludePaths.Count == 0)
             return true;
-
         foreach (var include in _options.IncludePaths)
-        {
             if (pathValue.StartsWith(include, StringComparison.OrdinalIgnoreCase))
                 return true;
-        }
-
         return false;
     }
 
     private bool IsAllowedContentType(string? contentType)
     {
-        if (string.IsNullOrEmpty(contentType))
-            return false;
-
-        if (_options.ContentTypes.Count == 0)
-            return true;
-
+        if (string.IsNullOrEmpty(contentType)) return false;
+        if (_options.ContentTypes.Count == 0) return true;
         foreach (var allowed in _options.ContentTypes)
-        {
             if (contentType.Contains(allowed, StringComparison.OrdinalIgnoreCase))
                 return true;
-        }
-
         return false;
     }
 
@@ -128,15 +119,33 @@ public class HttpBodyCaptureMiddleware
         using var reader = new StreamReader(stream, leaveOpen: true);
         var buffer = new char[_options.MaxBodySizeBytes];
         var charsRead = await reader.ReadAsync(buffer, 0, buffer.Length);
-
-        if (charsRead == 0)
-            return null;
-
+        if (charsRead == 0) return null;
         var body = new string(buffer, 0, charsRead);
-
-        if (charsRead >= _options.MaxBodySizeBytes)
-            body += "...[TRUNCATED]";
-
+        if (charsRead >= _options.MaxBodySizeBytes) body += "...[TRUNCATED]";
         return body;
+    }
+}
+
+internal class BodyCaptureStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        return builder =>
+        {
+            builder.UseMiddleware<HttpBodyCaptureMiddleware>();
+            next(builder);
+        };
+    }
+}
+
+public static class BodyCaptureServiceCollectionExtensions
+{
+    public static IServiceCollection AddHttpBodyCapture(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<BodyCaptureOptions>(configuration.GetSection("BodyCapture"));
+        services.AddTransient<IStartupFilter, BodyCaptureStartupFilter>();
+        return services;
     }
 }
