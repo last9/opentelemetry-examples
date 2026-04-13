@@ -1,0 +1,129 @@
+# OTel Collector config snippet — IIS + .NET CLR metrics
+#
+# Equivalent of Datadog's DD_RUNTIME_METRICS_ENABLED=true, but explicit.
+# Drop this file into your collector's conf.d directory and restart the collector.
+#
+# Usage with setup-otel.ps1:
+#   .\setup-otel.ps1 -AppPoolName ... -ServiceName ... -OtlpEndpoint ... -DeployCollectorConfig
+#
+# Or manually:
+#   Copy to C:\otelcol\conf.d\dotnet-iis.yaml and restart the OTel Collector service.
+
+receivers:
+  # IIS site and application pool metrics
+  # Docs: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/iisreceiver
+  iis:
+    collection_interval: 60s
+
+  # Windows Performance Counter metrics for .NET CLR and ASP.NET
+  windowsperfcounters/dotnet:
+    collection_interval: 60s
+    perfcounters:
+
+      # ASP.NET application request metrics (all sites aggregated)
+      - object: "ASP.NET Applications"
+        instances: ["_Total"]
+        counters:
+          - name: "Requests/Sec"
+            metric: aspnet.requests.per_second
+          - name: "Requests Executing"
+            metric: aspnet.requests.executing
+          - name: "Requests In Application Queue"
+            metric: aspnet.requests.queued
+          - name: "Errors Total/Sec"
+            metric: aspnet.errors.per_second
+          - name: "Request Execution Time"
+            metric: aspnet.request.execution_time_ms
+
+      # .NET CLR memory / garbage collection
+      - object: ".NET CLR Memory"
+        instances: ["_Global_"]
+        counters:
+          - name: "# Bytes in all Heaps"
+            metric: dotnet.clr.heap_bytes
+          - name: "% Time in GC"
+            metric: dotnet.clr.gc.time_percent
+          - name: "# Gen 0 Collections"
+            metric: dotnet.clr.gc.gen0_collections
+          - name: "# Gen 1 Collections"
+            metric: dotnet.clr.gc.gen1_collections
+          - name: "# Gen 2 Collections"
+            metric: dotnet.clr.gc.gen2_collections
+          - name: "Large Object Heap size"
+            metric: dotnet.clr.gc.loh_bytes
+
+      # .NET CLR exceptions
+      - object: ".NET CLR Exceptions"
+        instances: ["_Global_"]
+        counters:
+          - name: "# of Exceps Thrown / sec"
+            metric: dotnet.clr.exceptions.per_second
+
+      # .NET CLR thread contention
+      - object: ".NET CLR LocksAndThreads"
+        instances: ["_Global_"]
+        counters:
+          - name: "# of current logical Threads"
+            metric: dotnet.clr.threads.logical
+          - name: "# of current physical Threads"
+            metric: dotnet.clr.threads.physical
+          - name: "Contention Rate / sec"
+            metric: dotnet.clr.locks.contention_per_second
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+
+  memory_limiter:
+    limit_mib: 256
+    check_interval: 5s
+
+  resourcedetection:
+    detectors: [system]
+    timeout: 5s
+
+  # PII / PHI redaction — strip SQL query text before forwarding.
+  # db.statement (old semconv) and db.query.text (new semconv, SDK ≥1.6) both
+  # carry raw CommandText, which may contain patient identifiers or other PHI.
+  # On .NET Framework, OTEL_DOTNET_AUTO_SQLCLIENT_NETFX_ILREWRITE_ENABLED
+  # defaults to false so db.statement is not emitted unless explicitly enabled.
+  # On .NET Core, db.query.text is captured by default — this processor is the
+  # defence-in-depth layer that removes it before the span leaves this host.
+  transform/redact_pii:
+    trace_statements:
+      - context: span
+        statements:
+          - delete_key(attributes, "db.statement")
+          - delete_key(attributes, "db.query.text")
+
+  # OTLP receiver — accepts traces (and optionally metrics) pushed by the app
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+exporters:
+  otlp:
+    endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+    tls:
+      insecure: true
+    # If sending directly to Last9 (no gateway), uncomment and set headers:
+    # headers:
+    #   Authorization: "Basic <your-base64-token>"
+
+service:
+  pipelines:
+    # Receive traces from the IIS app pool, redact PII, forward to gateway/Last9
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, transform/redact_pii, batch]
+      exporters:  [otlp]
+
+    # Scrape IIS site metrics + .NET CLR perf counters
+    metrics/dotnet_iis:
+      receivers:  [iis, windowsperfcounters/dotnet]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters:  [otlp]

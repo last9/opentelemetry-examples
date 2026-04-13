@@ -1,0 +1,106 @@
+# OTel Collector config snippet — IIS + .NET CLR metrics (ASP.NET Core)
+#
+# Same as aspnet-framework version. Works for both IIS-hosted and Kestrel
+# (Kestrel doesn't expose IIS counters, but CLR counters still apply).
+#
+# Usage with setup-otel.ps1:
+#   .\setup-otel.ps1 -AppPoolName ... -ServiceName ... -OtlpEndpoint ... -DeployCollectorConfig
+
+receivers:
+  iis:
+    collection_interval: 60s
+
+  windowsperfcounters/dotnet:
+    collection_interval: 60s
+    perfcounters:
+
+      - object: "ASP.NET Applications"
+        instances: ["_Total"]
+        counters:
+          - name: "Requests/Sec"
+            metric: aspnet.requests.per_second
+          - name: "Requests Executing"
+            metric: aspnet.requests.executing
+          - name: "Requests In Application Queue"
+            metric: aspnet.requests.queued
+          - name: "Errors Total/Sec"
+            metric: aspnet.errors.per_second
+
+      - object: ".NET CLR Memory"
+        instances: ["_Global_"]
+        counters:
+          - name: "# Bytes in all Heaps"
+            metric: dotnet.clr.heap_bytes
+          - name: "% Time in GC"
+            metric: dotnet.clr.gc.time_percent
+          - name: "# Gen 0 Collections"
+            metric: dotnet.clr.gc.gen0_collections
+          - name: "# Gen 1 Collections"
+            metric: dotnet.clr.gc.gen1_collections
+          - name: "# Gen 2 Collections"
+            metric: dotnet.clr.gc.gen2_collections
+
+      - object: ".NET CLR Exceptions"
+        instances: ["_Global_"]
+        counters:
+          - name: "# of Exceps Thrown / sec"
+            metric: dotnet.clr.exceptions.per_second
+
+      - object: ".NET CLR LocksAndThreads"
+        instances: ["_Global_"]
+        counters:
+          - name: "# of current logical Threads"
+            metric: dotnet.clr.threads.logical
+          - name: "Contention Rate / sec"
+            metric: dotnet.clr.locks.contention_per_second
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+  memory_limiter:
+    limit_mib: 256
+    check_interval: 5s
+  resourcedetection:
+    detectors: [system]
+
+  # PII / PHI redaction — strip SQL query text before forwarding.
+  # On .NET Core, db.query.text (new semconv) is captured by default by the
+  # CLR profiler. db.statement (old semconv) may also be present on older SDK
+  # versions. Both are removed here as defence-in-depth before the span is
+  # forwarded. The OTTL delete_key is a no-op when the key is absent, so this
+  # processor is safe to leave in place regardless of SDK version.
+  transform/redact_pii:
+    trace_statements:
+      - context: span
+        statements:
+          - delete_key(attributes, "db.statement")
+          - delete_key(attributes, "db.query.text")
+
+  # OTLP receiver — accepts traces (and optionally metrics) pushed by the app
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+exporters:
+  otlp:
+    endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    # Receive traces from the app, redact PII, forward to gateway/Last9
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, transform/redact_pii, batch]
+      exporters:  [otlp]
+
+    # Scrape CLR perf counters (+ IIS counters when running in IIS mode)
+    metrics/dotnet_iis:
+      receivers:  [iis, windowsperfcounters/dotnet]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters:  [otlp]
