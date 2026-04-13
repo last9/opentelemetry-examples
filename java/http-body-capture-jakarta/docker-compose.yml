@@ -1,0 +1,12 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    container_name: body-capture-jakarta-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4319:4317"   # OTLP gRPC (mapped to 4319 to avoid conflicts)
+      - "4320:4318"   # OTLP HTTP (mapped to 4320 to avoid conflicts)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

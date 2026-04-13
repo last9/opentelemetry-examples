@@ -1,0 +1,40 @@
+services:
+  redis:
+    image: redis:7.4
+    container_name: redis-local
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: redis-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION=${OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION}
+      - REDIS_ENDPOINT=${REDIS_ENDPOINT:-redis:6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    ports:
+      - "13137:13133"
+
+  load-generator:
+    image: redis:7.4
+    container_name: redis-load-generator
+    profiles: ["generate"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./generate-load.sh:/scripts/generate-load.sh:ro
+    entrypoint: ["bash", "/scripts/generate-load.sh"]

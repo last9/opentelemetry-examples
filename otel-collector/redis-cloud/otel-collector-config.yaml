@@ -1,0 +1,76 @@
+receivers:
+  redis:
+    endpoint: "${env:REDIS_ENDPOINT}"
+    collection_interval: 10s
+    password: "${env:REDIS_PASSWORD}"
+    # Local dev (no TLS): insecure: true
+    # Redis Cloud (TLS): set insecure: false, insecure_skip_verify: true
+    tls:
+      insecure: true
+    metrics:
+      # Enable maxmemory to track configured memory limit vs actual usage
+      redis.maxmemory:
+        enabled: true
+      # Enable role to distinguish primary from replicas
+      redis.role:
+        enabled: true
+
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.logical.count:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+          system.memory.limit:
+            enabled: true
+      load:
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+      paging:
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+
+  resource/redis:
+    attributes:
+      - key: service.name
+        value: redis
+        action: insert
+      - key: db.system
+        value: redis
+        action: insert
+      - key: deployment.environment
+        value: dev
+        action: insert
+
+exporters:
+  otlp_grpc/last9:
+    endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+    headers:
+      "Authorization": "${env:OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION}"
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [redis, hostmetrics]
+      processors: [batch, resourcedetection/system, resource/redis]
+      exporters: [otlp_grpc/last9, debug]
