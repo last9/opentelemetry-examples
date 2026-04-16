@@ -1,23 +1,48 @@
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.103.0
+    image: otel/opentelemetry-collector-contrib:0.144.0
     container_name: otel-collector
     ports:
-      - "4317:4317"   # for OTLP/gRPC
-      - "4318:4318"   # for OTLP/HTTP
+      - "4318:4318"
     volumes:
-      - ./otel-config.yaml:/etc/otel-collector/config.yaml
+      - ./otel-config.yaml:/etc/otel-collector/config.yaml:ro
+    env_file:
+      - .env
     command: ["--config", "/etc/otel-collector/config.yaml"]
     restart: unless-stopped
 
   fluent-bit:
-    image: fluent/fluent-bit:3.1.4
+    image: fluent/fluent-bit:2.2
     container_name: fluent-bit
+    ports:
+      - "24224:24224"
     volumes:
-      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
-    environment:
-      - FLUENT_OTLP_HOST=otel-collector
-      - FLUENT_OTLP_PORT=4318
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
     depends_on:
       - otel-collector
+    healthcheck:
+      test: ["CMD", "/fluent-bit/bin/fluent-bit", "-h"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+      start_period: 3s
     restart: unless-stopped
+
+  app:
+    image: busybox
+    container_name: log-generator
+    depends_on:
+      fluent-bit:
+        condition: service_healthy
+    command: >
+      sh -c 'i=0; while true; do
+        echo "{\"message\":\"order processed\",\"level\":\"info\",\"order_id\":$$i,\"user_id\":\"u-1234\",\"latency_ms\":$$((RANDOM % 500))}";
+        i=$$((i+1));
+        sleep 1;
+      done'
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: "host.docker.internal:24224"
+        tag: "app.logs"
+        fluentd-async: "true"

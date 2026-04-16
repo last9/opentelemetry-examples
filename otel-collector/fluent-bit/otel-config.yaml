@@ -1,32 +1,34 @@
 receivers:
   otlp:
     protocols:
-      grpc:
-        include_metadata: true
       http:
-        include_metadata: true
+        endpoint: "0.0.0.0:4318"
 
 processors:
-  # keep it as first processor
   memory_limiter:
     check_interval: 5s
     limit_percentage: 85
     spike_limit_percentage: 15
+  resource:
+    attributes:
+      - key: service.name
+        value: "fluent-bit-example"
+        action: upsert
+      - key: deployment.environment
+        value: "dev"
+        action: upsert
+      - key: k8s.cluster.name
+        value: "local-test"
+        action: upsert
   batch:
     timeout: 5s
     send_batch_size: 100000
-  resource:
-    attributes:
-    - key: host
-      from_context: X-Logging-Host
-      action: insert
-    - key: service.name
-      from_context: X-Logging-Name
-      action: insert
-    - key: deployment.environment
-      from_context: X-Logging-Env
-      action: insert
+
 exporters:
+  otlphttp:
+    endpoint: "https://${env:LAST9_HOST}"
+    headers:
+      Authorization: "Basic ${env:LAST9_AUTH}"
   debug:
     verbosity: detailed
 
@@ -35,4 +37,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [debug]
+      exporters: [otlphttp, debug]

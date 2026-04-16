@@ -1,161 +1,83 @@
-# Fluent Bit to OpenTelemetry Collector Integration
+# Fluent Bit 2.x to Last9 via OpenTelemetry Collector
 
-This project demonstrates how to configure Fluent Bit to send log data to an OpenTelemetry Collector using Docker Compose.
+Send logs from Fluent Bit 2.x to Last9 using an OTel Collector. The collector adds OTLP resource attributes (`service.name`, `deployment.environment`) that Fluent Bit 2.x cannot set for logs on its own.
 
-## Project Structure
+## Prerequisites
 
-- `otel-collector/fluent-bit/fluent-bit.conf`: Configuration file for Fluent Bit
-- `otel-collector/fluent-bit/otel-config.yaml`: Configuration file for OpenTelemetry Collector
-- `otel-collector/fluent-bit/docker-compose.yaml`: Docker Compose file for running the services
+- Docker and Docker Compose
+- Last9 account with OTLP endpoint credentials
 
-## Fluent Bit Configuration
+## Quick Start
 
-The Fluent Bit configuration (`fluent-bit.conf`) is set up to:
+1. Copy the environment template and fill in your Last9 credentials:
 
-- Flush logs every 5 seconds
-- Run in the foreground
-- Use INFO log level
-- Enable HTTP server on port 2020
-- Generate dummy log messages
-- Output logs to OpenTelemetry Collector
-
-Key components:
-
-```ini
-[SERVICE]
-    Flush        5
-    Daemon       Off
-    Log_Level    info
-    HTTP_Server  On
-    HTTP_Listen  0.0.0.0
-    HTTP_Port    2020
-
-[INPUT]
-    Name            dummy
-    Dummy           {"message": "custom dummy"}
-    Tag             dummy.log    
-    Rate            1
-
-[OUTPUT]
-    Name        opentelemetry
-    Match       *
-    Host        ${FLUENT_OTLP_HOST}
-    Port        ${FLUENT_OTLP_PORT}
-    Logs_uri    /v1/logs
-    logs_body_key_attributes true
-    Header     X-Logging-Host last9.local
-    Header     X-Logging-Name local-app
-    Header     X-Logging-Env staging
+```bash
+cp .env.example .env
+# Edit .env with your Last9 host and base64-encoded credentials
 ```
 
-## OpenTelemetry Collector Configuration
+To generate the base64 auth value:
 
-The OpenTelemetry Collector configuration (`otel-config.yaml`) is set up to:
-
-- Receive OTLP data via gRPC and HTTP
-- Process data using memory limiter, batch, and resource processors
-- Export data using the debug exporter
-
-Key components:
-
-```yaml
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        include_metadata: true
-      http:
-        include_metadata: true
-
-processors:
-  memory_limiter:
-    check_interval: 5s
-    limit_percentage: 85
-    spike_limit_percentage: 15
-  batch:
-    timeout: 5s
-    send_batch_size: 100000
-  resource:
-    attributes:
-    - key: host
-      from_context: X-Logging-Host
-      action: insert
-    - key: service.name
-      from_context: X-Logging-Name
-      action: insert
-    - key: deployment.environment
-      from_context: X-Logging-Env
-      action: insert
-
-exporters:
-  debug:
-    verbosity: detailed
-
-service:
-  pipelines:
-    logs:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
-      exporters: [debug]
+```bash
+echo -n "username:password" | base64
 ```
 
-## Docker Compose Setup
+2. Start the stack:
 
-The `docker-compose.yaml` file defines two services:
-
-1. OpenTelemetry Collector
-2. Fluent Bit
-
-### OpenTelemetry Collector Service
-
-```yaml
-otel-collector:
-  image: otel/opentelemetry-collector-contrib:0.103.0
-  container_name: otel-collector
-  ports:
-    - "4317:4317"   # for OTLP/gRPC
-    - "4318:4318"   # for OTLP/HTTP
-  volumes:
-    - ./otel-config.yaml:/etc/otel-collector/config.yaml
-  command: ["--config", "/etc/otel-collector/config.yaml"]
-  restart: unless-stopped
+```bash
+docker compose up
 ```
 
-### Fluent Bit Service
+This starts three containers:
+- **app** — generates JSON log lines every second
+- **fluent-bit** — collects logs via Docker fluentd driver, forwards to collector
+- **otel-collector** — adds resource attributes, exports to Last9
 
-```yaml
-fluent-bit:
-  image: fluent/fluent-bit:3.1.4
-  container_name: fluent-bit
-  volumes:
-    - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+## Configuration
+
+| File | Purpose |
+|------|---------|
+| `fluent-bit.conf` | Forward input, JSON parser filter, record modifier, OTel output to collector |
+| `otel-config.yaml` | OTLP receiver, resource processor (service.name etc.), otlphttp exporter to Last9 |
+| `.env` | `LAST9_HOST` and `LAST9_AUTH` for the collector's exporter |
+
+### Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `LAST9_HOST` | Last9 OTLP ingest hostname | `otlp.example.last9.io` |
+| `LAST9_AUTH` | Base64 of `username:password` | `dXNlcjpwYXNz` |
+
+## Verification
+
+Check the OTel Collector debug output for resource attributes:
+
+```bash
+docker logs otel-collector 2>&1 | grep -A3 "Resource attributes"
 ```
 
-## Setup and Running
+Expected output:
 
-1. Install Fluent Bit and OpenTelemetry Collector on your system.
+```
+Resource attributes:
+     -> service.name: Str(fluent-bit-example)
+     -> deployment.environment: Str(dev)
+     -> k8s.cluster.name: Str(local-test)
+```
 
-2. Set the following environment variables:
-   ```bash
-   export FLUENT_OTLP_HOST=<otel-collector-host>
-   export FLUENT_OTLP_PORT=<otel-collector-port>
-   ```
+Check Fluent Bit stdout for parsed log records:
 
-3. Start the OpenTelemetry Collector and Fluent Bit using Docker Compose:
-   ```bash
-   docker compose up -d
-   ```
+```bash
+docker logs fluent-bit 2>&1 | grep "message"
+```
 
-## Verifying the Setup
+Then verify logs appear in [Last9 Logs Explorer](https://app.last9.io/logs) with the correct service name.
 
-1. Check the Fluent Bit logs to ensure it's generating dummy logs and sending them to the OpenTelemetry Collector.
+<details>
+<summary>Why OTel Collector is required for Fluent Bit 2.x</summary>
 
-2. Examine the OpenTelemetry Collector's debug output to verify that it's receiving and processing the logs from Fluent Bit.
+Fluent Bit 2.x's `add_label` directive in the OpenTelemetry output only sets resource attributes for **metrics**, not logs. The `record_modifier` filter adds fields to the log record body, but not to the OTLP Resource level where Last9 reads `service.name`.
 
-3. The debug exporter in the OpenTelemetry Collector configuration will print detailed information about the received logs.
+The OTel Collector's `resource` processor properly sets OTLP Resource attributes for all signal types. Fluent Bit 3.x+ supports `logs_body_key_attributes` which can handle this directly without a collector.
 
-## Customization
-
-- Modify the `[INPUT]` section in `fluent-bit.conf` to collect logs from your desired sources instead of using dummy data.
-- Adjust the `[OUTPUT]` section to change the headers or other parameters as needed for your specific use case.
-- Update the `processors` and `exporters` in `otel-config.yaml` to transform the data or send it to your preferred destination such as [Last9](https://last9.io).
+</details>
