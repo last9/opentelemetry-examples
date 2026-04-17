@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AspNetCore</RootNamespace>
+    <AssemblyName>AspNetCore</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    No OTel SDK packages — instrumentation is injected by the CLR profiler at runtime.
+    The profiler instruments ASP.NET Core, HttpClient, ADO.NET, and more automatically
+    based on the OTEL_* environment variables set by setup-otel.ps1.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="6.0.36" />
+  </ItemGroup>
+
+</Project>

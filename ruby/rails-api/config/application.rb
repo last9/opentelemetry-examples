@@ -28,5 +28,7 @@ module WithRails
     if Rails.env.development? || Rails.env.test?
       Dotenv::Railtie.load
     end
+
+    config.middleware.use RailsOtelContext::BodyCapture
   end
 end

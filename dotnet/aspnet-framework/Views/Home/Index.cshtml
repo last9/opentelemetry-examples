@@ -1,0 +1,25 @@
+@model IEnumerable<AspNetFramework.Models.Todo>
+@{
+    ViewBag.Title = "Todos";
+}
+
+<h1>Todos</h1>
+<p>MVC view — OTel auto-instrumentation captures this request as a span with no code changes.</p>
+
+<table>
+    <thead>
+        <tr><th>ID</th><th>Title</th><th>Done</th></tr>
+    </thead>
+    <tbody>
+        @foreach (var todo in Model)
+        {
+            <tr>
+                <td>@todo.Id</td>
+                <td>@todo.Title</td>
+                <td>@(todo.Done ? "✓" : "—")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<p><a href="/home/upstream">Trigger outbound HTTP call →</a></p>

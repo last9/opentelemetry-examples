@@ -16,6 +16,6 @@ OpenTelemetry::SDK.configure do |c|
       ENV.fetch('OTEL_DEPLOYMENT_ENVIRONMENT', Rails.env.to_s)
   })
 
-  c.use_all()
+  c.use_all('OpenTelemetry::Instrumentation::Rack' => { use_rack_events: false })
 end
 # RailsOtelContext is configured in config/initializers/rails_otel_context.rb
