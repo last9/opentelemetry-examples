@@ -12,10 +12,10 @@ gem "sqlite3", "~> 1.4"
 gem "trilogy"
 
 # Rails OTel context enrichment (source location, slow query tracking)
-gem "rails-otel-context", "~> 0.8.5", require: "rails_otel_context"
+gem "rails-otel-context", github: "last9/rails-otel-context", branch: "fix/clickhouse-kwargs-reduce-patch-surface", require: "rails_otel_context"
 
 # Use the Puma web server [https://github.com/puma/puma]
-gem "puma", ">= 5.0"
+gem "puma", "~> 8.0"
 
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 # gem "jbuilder"
@@ -63,3 +63,6 @@ gem 'dotenv-rails', groups: [:development, :test]
 # For rich traces with child spans
 gem 'redis', '~> 5.0'
 gem 'faraday', '~> 2.0'
+
+# ClickHouse client — instrumented by rails-otel-context ClickHouse adapter
+gem 'click_house', '~> 2.0'

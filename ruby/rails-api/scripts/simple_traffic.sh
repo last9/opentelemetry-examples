@@ -50,8 +50,22 @@ while [[ $(date +%s) -lt $end_time ]]; do
             4) curl -s -o /dev/null -X POST "${BASE_URL}/api/v1/internal/jobs/trigger" \
                    -H "Content-Type: application/json" -d '{"job_type": "cleanup"}' ;;
         esac
+    elif [[ $r -lt 93 ]]; then
+        # ClickHouse endpoints (8%) — exercises all adapter methods
+        case $((RANDOM % 10)) in
+            0) curl -s -o /dev/null "${BASE_URL}/api/v1/clickhouse/tables" ;;
+            1) curl -s -o /dev/null "${BASE_URL}/api/v1/clickhouse/one" ;;
+            2) curl -s -o /dev/null "${BASE_URL}/api/v1/clickhouse/execute" ;;
+            3) curl -s -o /dev/null -X POST "${BASE_URL}/api/v1/clickhouse/insert" ;;
+            4) curl -s -o /dev/null -X POST "${BASE_URL}/api/v1/clickhouse/insert_rows" ;;
+            5) curl -s -o /dev/null -X POST "${BASE_URL}/api/v1/clickhouse/insert_compact" ;;
+            6) curl -s -o /dev/null "${BASE_URL}/api/v1/clickhouse/svc/tables" ;;
+            7) curl -s -o /dev/null "${BASE_URL}/api/v1/clickhouse/svc/one" ;;
+            8) curl -s -o /dev/null -X POST "${BASE_URL}/api/v1/clickhouse/svc/insert_rows" ;;
+            9) curl -s -o /dev/null -X POST "${BASE_URL}/api/v1/clickhouse/svc/insert_compact" ;;
+        esac
     else
-        # Public endpoints (15%) - NO service.namespace
+        # Public endpoints (7%) - NO service.namespace
         case $((RANDOM % 3)) in
             0) curl -s -o /dev/null "${BASE_URL}/api/v1/public/ping" ;;
             1) curl -s -o /dev/null "${BASE_URL}/api/v1/public/version" ;;
