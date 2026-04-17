@@ -14,29 +14,25 @@ import (
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
+	agent "github.com/last9/go-agent"
+	fasthttpagent "github.com/last9/go-agent/instrumentation/fasthttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"fasthttp_example/last9"
-
 )
 
 func main() {
-	i := last9.NewInstrumentation()
-
-	defer func() {
-		if err := i.TracerProvider.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
-		}
-	}()
+	agent.Start()
+	defer agent.Shutdown()
 
 	// Initialize Redis client
 	redisClient := initRedis()
 
 	// Initialize the controller with Redis client
 	c := users.NewUsersController(redisClient)
-	h := users.NewUsersHandler(c, i.Tracer)
+	h := users.NewUsersHandler(c, otel.GetTracerProvider().Tracer("fasthttp-server"))
 
 	r := router.New()
 
@@ -47,21 +43,18 @@ func main() {
 	r.PUT("/users/{id}", h.UpdateUser)
 	r.DELETE("/users/{id}", h.DeleteUser)
 	r.GET("/joke", func(ctx *fasthttp.RequestCtx) {
-		getRandomJoke(ctx, i)
+		getRandomJoke(ctx)
 	})
 
-	handler := last9.OtelMiddleware("fasthttp-server")
-
 	log.Println("Server is running on http://localhost:8080")
-	log.Fatal(fasthttp.ListenAndServe(":8080", handler(r.Handler)))
+	log.Fatal(fasthttp.ListenAndServe(":8080", fasthttpagent.Middleware(r.Handler)))
 }
 
 func initRedis() *redis.Client {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379", // Update this with your Redis server address
+		Addr: "localhost:6379",
 	})
 
-	// Setup traces for redis instrumentation
 	if err := redisotel.InstrumentTracing(rdb); err != nil {
 		log.Fatalf("failed to instrument traces for Redis client: %v", err)
 		return nil
@@ -69,21 +62,17 @@ func initRedis() *redis.Client {
 	return rdb
 }
 
-func getRandomJoke(ctx *fasthttp.RequestCtx, i *last9.Instrumentation) {
-	// Start a new span for the external API call
-	_, span := i.Tracer.Start(ctx, "get-random-joke")
+func getRandomJoke(ctx *fasthttp.RequestCtx) {
+	otelCtx := fasthttpagent.ContextFromRequest(ctx)
+	_, span := otel.GetTracerProvider().Tracer("fasthttp-server").Start(otelCtx, "get-random-joke")
 	defer span.End()
 
-	// Create an HTTP client with OpenTelemetry instrumentation
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport,
-		// By setting the otelhttptrace client in this transport, it can be
-		// injected into the context after the span is started, which makes the
-		// httptrace spans children of the transport one.
 		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
 			return otelhttptrace.NewClientTrace(ctx)
 		}))}
-	// Make a request to the external API
-	req, _ := http.NewRequestWithContext(ctx, "GET", "https://official-joke-api.appspot.com/random_joke", nil)
+
+	req, _ := http.NewRequestWithContext(otelCtx, "GET", "https://official-joke-api.appspot.com/random_joke", nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		span.RecordError(err)
@@ -94,7 +83,6 @@ func getRandomJoke(ctx *fasthttp.RequestCtx, i *last9.Instrumentation) {
 	}
 	defer resp.Body.Close()
 
-	// Read and parse the response
 	body, _ := io.ReadAll(resp.Body)
 
 	var joke struct {
@@ -103,7 +91,6 @@ func getRandomJoke(ctx *fasthttp.RequestCtx, i *last9.Instrumentation) {
 	}
 	json.Unmarshal(body, &joke)
 
-	// Add attributes to the external API call span
 	span.SetAttributes(
 		attribute.String("joke.setup", joke.Setup),
 		attribute.String("joke.punchline", joke.Punchline),
