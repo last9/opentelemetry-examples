@@ -9,38 +9,32 @@ import (
 	"net/http"
 	"net/http/httptrace"
 
-	"iris_example/last9"
 	"iris_example/users"
 
 	"github.com/kataras/iris/v12"
+	agent "github.com/last9/go-agent"
+	irisagent "github.com/last9/go-agent/instrumentation/iris"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 func main() {
-	i := last9.NewInstrumentation()
-
-	defer func() {
-		if err := i.TracerProvider.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
-		}
-	}()
+	agent.Start()
+	defer agent.Shutdown()
 
 	// Initialize Redis client
 	redisClient := initRedis()
 
 	// Initialize the controller with Redis client
 	c := users.NewUsersController(redisClient)
-	h := users.NewUsersHandler(c, i.Tracer)
+	h := users.NewUsersHandler(c, otel.GetTracerProvider().Tracer("iris-server"))
 
-	app := iris.New()
-
-	// Use the OtelMiddleware
-	app.Use(last9.OtelMiddleware("iris-server"))
+	app := irisagent.New()
 
 	// Routes
 	app.Get("/users", h.GetUsers)
@@ -49,7 +43,7 @@ func main() {
 	app.Put("/users/{id}", h.UpdateUser)
 	app.Delete("/users/{id}", h.DeleteUser)
 	app.Get("/joke", func(ctx iris.Context) {
-		getRandomJoke(ctx, i)
+		getRandomJoke(ctx)
 	})
 
 	log.Println("Server is running on http://localhost:8080")
@@ -58,10 +52,9 @@ func main() {
 
 func initRedis() *redis.Client {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379", // Update this with your Redis server address
+		Addr: "localhost:6379",
 	})
 
-	// Setup traces for redis instrumentation
 	if err := redisotel.InstrumentTracing(rdb); err != nil {
 		log.Fatalf("failed to instrument traces for Redis client: %v", err)
 		return nil
@@ -69,20 +62,18 @@ func initRedis() *redis.Client {
 	return rdb
 }
 
-func getRandomJoke(ctx iris.Context, i *last9.Instrumentation) {
-	// Start a new span for the external API call
-	_, span := i.Tracer.Start(ctx.Request().Context(), "get-random-joke")
+func getRandomJoke(ctx iris.Context) {
+	parentCtx := ctx.Request().Context()
+	_, span := otel.GetTracerProvider().Tracer("iris-server").Start(parentCtx, "get-random-joke")
 	defer span.End()
 
-	// Create an HTTP client with OpenTelemetry instrumentation
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport,
 		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
 			return otelhttptrace.NewClientTrace(ctx)
 		}),
 	)}
 
-	// Make a request to the external API
-	req, _ := http.NewRequestWithContext(ctx.Request().Context(), "GET", "https://official-joke-api.appspot.com/random_joke", nil)
+	req, _ := http.NewRequestWithContext(parentCtx, "GET", "https://official-joke-api.appspot.com/random_joke", nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		span.RecordError(err)
@@ -93,7 +84,6 @@ func getRandomJoke(ctx iris.Context, i *last9.Instrumentation) {
 	}
 	defer resp.Body.Close()
 
-	// Read and parse the response
 	body, _ := io.ReadAll(resp.Body)
 
 	var joke struct {
@@ -102,7 +92,6 @@ func getRandomJoke(ctx iris.Context, i *last9.Instrumentation) {
 	}
 	json.Unmarshal(body, &joke)
 
-	// Add attributes to the external API call span
 	span.SetAttributes(
 		attribute.String("joke.setup", joke.Setup),
 		attribute.String("joke.punchline", joke.Punchline),

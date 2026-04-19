@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/last9/go-agent"
-	"github.com/last9/go-agent/instrumentation/grpcgateway"
+	agent "github.com/last9/go-agent"
+	grpcagent "github.com/last9/go-agent/instrumentation/grpc"
 	pb "grpc-example/proto"
 
 	"google.golang.org/grpc"
@@ -23,9 +23,9 @@ func main() {
 
 	// Connect to gRPC server with go-agent (automatic client instrumentation)
 	conn, err := grpc.NewClient(
-		"localhost:50051",
+		"localhost:" + func() string { if p := os.Getenv("GRPC_PORT"); p != "" { return p }; return "50051" }(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpcgateway.NewDialOption(), // Automatic OTel client tracing
+		grpcagent.NewClientDialOption(), // Automatic OTel client tracing
 	)
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)

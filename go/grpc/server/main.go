@@ -4,9 +4,10 @@ import (
 	"context"
 	"log"
 	"net"
+	"os"
 
-	"github.com/last9/go-agent"
-	"github.com/last9/go-agent/instrumentation/grpcgateway"
+	agent "github.com/last9/go-agent"
+	grpcagent "github.com/last9/go-agent/instrumentation/grpc"
 	pb "grpc-example/proto"
 )
 
@@ -25,13 +26,17 @@ func main() {
 
 	log.Println("✓ go-agent initialized")
 
-	lis, err := net.Listen("tcp", ":50051")
+	port := ":50051"
+	if p := os.Getenv("GRPC_PORT"); p != "" {
+		port = ":" + p
+	}
+	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	// Create gRPC server with go-agent (automatic instrumentation)
-	s := grpcgateway.NewGrpcServer()
+	s := grpcagent.NewServer()
 
 	pb.RegisterGreeterServer(s, &server{})
 	log.Printf("✓ gRPC server listening at %v (instrumented by go-agent)", lis.Addr())
