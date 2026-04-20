@@ -1,0 +1,7 @@
+.env
+.env.local
+Gemfile.lock
+/vendor/
+.bundle/
+.DS_Store
+*.log
