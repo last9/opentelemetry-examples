@@ -1,0 +1,73 @@
+# Standalone OTel Collector config for l9gpu-collector.
+# Use when you can't run Helm (bare-metal, Slurm-only, static VMs).
+#
+# Run:
+#   l9gpu-collector --config=collector-config.yaml
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+  # Upstream OTel contrib processor — adds k8s.pod.*, k8s.namespace.name,
+  # k8s.deployment.name from the K8s API.
+  k8sattributes:
+    auth_type: serviceAccount
+    passthrough: false
+    filter:
+      node_from_env_var: KUBE_NODE_NAME
+    extract:
+      metadata:
+        - k8s.pod.name
+        - k8s.namespace.name
+        - k8s.node.name
+        - k8s.deployment.name
+
+  # Last9's custom processor — maps each GPU metric's `gpu.uuid` to the pod
+  # that owns the GPU by reading pod resource requests (nvidia.com/gpu,
+  # amd.com/gpu, habana.ai/gaudi).
+  k8s:
+    cache_duration: 60
+
+exporters:
+  otlp:
+    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      authorization: ${env:OTEL_EXPORTER_OTLP_HEADERS}
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, k8s, batch]
+      exporters: [otlp]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, k8s, batch]
+      exporters: [otlp]
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133

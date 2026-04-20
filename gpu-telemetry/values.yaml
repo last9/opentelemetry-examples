@@ -1,0 +1,53 @@
+# Production Helm values for l9gpu targeting Last9 OTLP.
+#
+# Usage:
+#   kubectl create secret generic l9gpu-otlp -n l9gpu \
+#     --from-literal=OTEL_EXPORTER_OTLP_ENDPOINT="otlp.last9.io:443" \
+#     --from-literal=OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <auth>"
+#
+#   helm install l9gpu l9gpu/l9gpu -n l9gpu --create-namespace -f values.yaml
+
+# Enable the collectors matching your fleet. Leave the others false to avoid
+# wasting pods on nodes without that vendor.
+collectors:
+  nvidia: true
+  amd: false
+  gaudi: false
+
+# Name of the Kubernetes Secret holding the Last9 OTLP credentials.
+otlpSecretName: l9gpu-otlp
+
+monitoring:
+  enabled: true
+  sink: otel
+  cluster: prod-gpu-us-east
+  interval: 30
+  # Pure K8s cluster — disable Slurm probes.
+  slurmEnabled: false
+
+  # Schedule only on GPU nodes. Adjust the label to match your node labels
+  # (e.g. nvidia.com/gpu.product, amd.com/gpu, habana.ai/gaudi).
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Health checks CronJob (XID errors, ECC trends, NCCL).
+healthChecks:
+  enabled: true
+  schedule: "*/5 * * * *"
+
+# RBAC for listing pods on the node (needed for pod attribution).
+rbac:
+  create: true
