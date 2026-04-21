@@ -11,7 +11,7 @@ Point exporter at: http://localhost:4319/v1/traces
 import socket
 import threading
 
-HOST, PORT = "0.0.0.0", 4319
+HOST, PORT = "127.0.0.1", 4319
 counter = {"n": 0}
 lock = threading.Lock()
 
