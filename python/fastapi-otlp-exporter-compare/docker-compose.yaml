@@ -1,0 +1,24 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: otel-collector-repro
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    expose:
+      - "4318"
+      - "4317"
+
+  # nginx in front of collector with aggressive idle timeout.
+  # Closes idle keep-alive TCP after 5s → forces RemoteDisconnected
+  # on stale sockets from long-lived requests.Session in HTTP exporter.
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx-repro
+    depends_on:
+      - otel-collector
+    ports:
+      - "4318:4318"   # OTLP HTTP (via nginx → collector)
+      - "4317:4317"   # OTLP gRPC (via nginx stream → collector)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
