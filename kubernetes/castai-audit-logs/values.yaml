@@ -37,10 +37,10 @@ config:
 
   exporters:
     otlphttp/last9:
-      endpoint: https://otlp-aps1.last9.io:443
+      endpoint: "<your-last9-otlp-endpoint>"
       encoding: json
       headers:
-        Authorization: "Basic <your-last9-otlp-basic-auth>"
+        Authorization: "<your-last9-otlp-basic-auth>"
 
   extensions:
     health_check:

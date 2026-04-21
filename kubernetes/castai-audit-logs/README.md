@@ -20,6 +20,7 @@ helm install audit-logs castai-helm/castai-audit-logs-receiver \
   --namespace castai-logs --create-namespace \
   --set castai.apiKey="$CASTAI_API_KEY" \
   --set castai.clusterID="$CASTAI_CLUSTER_ID" \
+  --set-string "config.exporters.otlphttp/last9.endpoint=$LAST9_OTLP_ENDPOINT" \
   --set-string "config.exporters.otlphttp/last9.headers.Authorization=$LAST9_OTLP_AUTH" \
   --values values.yaml
 ```
