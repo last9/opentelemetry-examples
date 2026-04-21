@@ -1,0 +1,5 @@
+.env
+.env.local
+.env.*.local
+values.local.yaml
+*.log

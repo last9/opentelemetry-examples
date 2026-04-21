@@ -1,0 +1,58 @@
+castai:
+  apiKey: ""
+  clusterID: ""
+  apiURL: "https://api.cast.ai"
+
+config:
+  receivers:
+    castai_audit_logs:
+      api:
+        url: ${env:CASTAI_API_URL}
+        key: ${env:CASTAI_API_KEY}
+      poll_interval_sec: 30
+      page_limit: 100
+      storage:
+        type: "persistent"
+        filename: "/var/lib/otelcol/file_storage/audit_logs_poll_data.json"
+      filters:
+        cluster_id: ${env:CASTAI_CLUSTER_ID}
+
+  processors:
+    transform:
+      error_mode: ignore
+      log_statements:
+        - context: log
+          statements:
+            - set(body, String(attributes["event"])) where IsMap(attributes["event"])
+            - delete_key(attributes, "event") where IsMap(attributes)
+            - set(time, observed_time)
+    resource:
+      attributes:
+        - key: service.name
+          value: castai-audit-logs
+          action: upsert
+    batch:
+      timeout: 5s
+      send_batch_size: 100
+
+  exporters:
+    otlphttp/last9:
+      endpoint: https://otlp-aps1.last9.io:443
+      encoding: json
+      headers:
+        Authorization: "Basic <your-last9-otlp-basic-auth>"
+
+  extensions:
+    health_check:
+      endpoint: "0.0.0.0:13133"
+
+  service:
+    extensions: [health_check]
+    telemetry:
+      logs:
+        level: info
+    pipelines:
+      logs:
+        receivers: [castai_audit_logs]
+        processors: [transform, resource, batch]
+        exporters: [otlphttp/last9]
