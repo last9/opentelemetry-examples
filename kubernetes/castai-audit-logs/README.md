@@ -34,7 +34,7 @@ The CAST AI receiver emits each audit event as an OTel `LogRecord` with all fiel
 |-----|-----|
 | `set(body, String(attributes["event"]))` | Receiver leaves body empty. Last9 needs body populated for indexing. |
 | `delete_key(attributes, "event")` | Avoid duplicating the event payload in both body and attributes. |
-| `set(time, observed_time)` | Receiver sets `Timestamp` to the audit event's original time, which may fall outside recent-time query windows in Last9. Override to ingestion time. |
+| `set(time, observed_time)` | Receiver ends up emitting `LogRecord.Timestamp` as `0` (Unix epoch) for audit events, so records fall outside every recent-time query window in Last9. Override to the observed (ingestion) timestamp. |
 | `service.name` upsert on resource | Receiver does not set `service.name`. Without this, records are unindexed by service. |
 | `encoding: json` on exporter | OTLP/HTTP defaults to protobuf; JSON encoding is used here to match the payload shape confirmed working against Last9. |
 
