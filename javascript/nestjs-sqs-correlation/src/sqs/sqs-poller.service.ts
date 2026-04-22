@@ -183,19 +183,52 @@ export class SqsPollerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private extractProducerContext(message: Message): SpanContext | null {
-    if (!message.MessageAttributes) return null;
+    // Path 1: direct app → SQS (or SNS→SQS with rawMessageDelivery=true)
+    // AwsInstrumentation injects traceparent into MessageAttributes automatically.
+    const fromAttrs = this.extractFromMessageAttributes(message);
+    if (fromAttrs) return fromAttrs;
 
-    // Build a carrier from MessageAttributes for W3C propagation extraction.
-    // AwsInstrumentation on the producer injects 'traceparent' here automatically.
+    // Path 2: SNS→SQS with rawMessageDelivery=false (default SNS subscription).
+    // SNS wraps the message in a JSON envelope; MessageAttributes are embedded
+    // inside the body under body.MessageAttributes[key].Value.
+    //
+    // Preferred fix: enable rawMessageDelivery on the SNS→SQS subscription so
+    // MessageAttributes pass through to SQS (Path 1 works for both).
+    // Use this fallback only when you cannot change the SNS subscription config.
+    return this.extractFromSnsEnvelope(message);
+  }
+
+  private extractFromMessageAttributes(message: Message): SpanContext | null {
+    if (!message.MessageAttributes) return null;
     const carrier: Record<string, string> = {};
     for (const [key, attr] of Object.entries(message.MessageAttributes)) {
       const val = attr as { StringValue?: string };
       if (val.StringValue) carrier[key.toLowerCase()] = val.StringValue;
     }
+    return this.spanContextFrom(carrier);
+  }
 
+  private extractFromSnsEnvelope(message: Message): SpanContext | null {
+    if (!message.Body) return null;
+    try {
+      const envelope = JSON.parse(message.Body) as {
+        Type?: string;
+        MessageAttributes?: Record<string, { Type: string; Value: string }>;
+      };
+      if (envelope.Type !== "Notification" || !envelope.MessageAttributes) return null;
+      const carrier: Record<string, string> = {};
+      for (const [key, attr] of Object.entries(envelope.MessageAttributes)) {
+        if (attr.Type === "String") carrier[key.toLowerCase()] = attr.Value;
+      }
+      return this.spanContextFrom(carrier);
+    } catch {
+      return null;
+    }
+  }
+
+  private spanContextFrom(carrier: Record<string, string>): SpanContext | null {
     const extractedCtx = propagation.extract(context.active(), carrier);
-    const spanCtx = trace.getSpanContext(extractedCtx);
-    return spanCtx ?? null;
+    return trace.getSpanContext(extractedCtx) ?? null;
   }
 
   private async deleteMessage(message: Message) {
