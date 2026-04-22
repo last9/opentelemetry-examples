@@ -1,0 +1,32 @@
+services:
+  localstack:
+    image: localstack/localstack:3
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: sqs
+      DEFAULT_REGION: us-east-1
+    volumes:
+      - ./scripts/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      AWS_REGION: us-east-1
+      SQS_ENDPOINT: http://localstack:4566
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/demo-queue
+      SQS_QUEUE_NAME: demo-queue
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    depends_on:
+      - localstack
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    command: ["--config=/etc/otel-config.yaml"]
+    volumes:
+      - ./otel-config.yaml:/etc/otel-config.yaml
+    ports:
+      - "4318:4318"
