@@ -1,0 +1,97 @@
+---
+# AnalysisTemplate: Last9 HTTP Error Rate Check
+# Queries Last9's Prometheus-compatible endpoint to evaluate canary health.
+# Argo Rollouts will auto-promote if error rate stays below 5%,
+# and auto-rollback after 3 consecutive failures above 10%.
+#
+# Auth: The Prometheus provider passes credentials via an arg that sources
+# a pre-encoded "Basic <base64(username:password)>" value from a K8s Secret:
+#
+#   kubectl create secret generic last9-prometheus-auth \
+#     --namespace <your-app-namespace> \
+#     --from-literal=authorization="Basic $(printf '<username>:<password>' | base64 | tr -d '\n')"
+#
+# Note: use printf + tr -d '\n' to avoid newlines in the base64 output,
+# which would cause "invalid header field value" errors at runtime.
+#
+# Get the read endpoint, username, and password from:
+# https://app.last9.io/integrations (Prometheus section)
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: last9-http-error-rate
+spec:
+  args:
+    - name: service-name
+    - name: namespace
+    - name: last9-auth
+      valueFrom:
+        secretKeyRef:
+          name: last9-prometheus-auth
+          key: authorization
+  metrics:
+    - name: http-error-rate
+      interval: 2m
+      # Promote if error rate is below 5%
+      successCondition: result[0] < 0.05
+      # Rollback if error rate is at or above 10%
+      failureCondition: result[0] >= 0.10
+      # Allow up to 3 consecutive failures before rolling back
+      failureLimit: 3
+      provider:
+        prometheus:
+          # Last9 Prometheus-compatible read endpoint.
+          # Get the full URL from https://app.last9.io/integrations (Prometheus section).
+          # Argo Rollouts appends /api/v1/query to this base URL automatically.
+          address: <your-last9-prometheus-read-endpoint>
+          headers:
+            - key: Authorization
+              value: "{{args.last9-auth}}"
+          query: |
+            sum(rate(http_requests_total{
+              namespace="{{args.namespace}}",
+              service="{{args.service-name}}",
+              status=~"5.."
+            }[5m]))
+            /
+            sum(rate(http_requests_total{
+              namespace="{{args.namespace}}",
+              service="{{args.service-name}}"
+            }[5m]))
+---
+# AnalysisTemplate: Last9 P99 Latency Check
+# Rolls back if the canary's p99 response time exceeds 500ms.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: last9-latency-p99
+spec:
+  args:
+    - name: service-name
+    - name: namespace
+    - name: last9-auth
+      valueFrom:
+        secretKeyRef:
+          name: last9-prometheus-auth
+          key: authorization
+  metrics:
+    - name: p99-latency
+      interval: 2m
+      # Promote if p99 latency is below 500ms
+      successCondition: result[0] < 0.5
+      # Rollback if p99 latency exceeds 1s
+      failureCondition: result[0] >= 1.0
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: <your-last9-prometheus-read-endpoint>
+          headers:
+            - key: Authorization
+              value: "{{args.last9-auth}}"
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{
+                namespace="{{args.namespace}}",
+                service="{{args.service-name}}"
+              }[5m])) by (le)
+            )
