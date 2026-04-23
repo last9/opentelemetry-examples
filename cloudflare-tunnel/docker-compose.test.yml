@@ -1,0 +1,13 @@
+services:
+  # Single container runs journald + cloudflared + otelcol together.
+  # This avoids cross-container boot ID mismatches when journalctl reads the journal.
+  all-in-one:
+    build:
+      context: .
+      dockerfile: test/Dockerfile.allInOne
+    privileged: true
+    volumes:
+      - ./test/otel-collector-test-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    environment:
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_AUTH_HEADER=${LAST9_AUTH_HEADER}

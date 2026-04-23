@@ -1,0 +1,20 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    systemd \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# cloudflared — arch-aware download
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH}" \
+    -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared
+
+# otelcol-contrib binary — copy from official image
+COPY --from=otel/opentelemetry-collector-contrib:0.120.0 /otelcol-contrib /usr/local/bin/otelcol-contrib
+
+COPY test/run-all.sh /run-all.sh
+RUN chmod +x /run-all.sh
+
+CMD ["/run-all.sh"]
