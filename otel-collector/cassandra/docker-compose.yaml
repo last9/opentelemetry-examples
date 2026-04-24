@@ -30,6 +30,24 @@ services:
       otel-collector:
         condition: service_started
 
+  # Nodetool exporter: exposes cluster topology, thread pool, and compaction metrics
+  # not available via JMX — scrapes nodetool commands and serves Prometheus format
+  nodetool-exporter:
+    image: cassandra:4
+    container_name: cassandra-nodetool-exporter
+    command: ["python3", "/opt/nodetool-exporter.py"]
+    environment:
+      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_JMX_PORT=7199
+      - EXPORTER_PORT=9500
+    volumes:
+      - ./nodetool-exporter.py:/opt/nodetool-exporter.py:ro
+    ports:
+      - "9500:9500"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.144.0
     container_name: cassandra-otel-collector

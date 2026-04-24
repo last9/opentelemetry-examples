@@ -6,6 +6,15 @@ receivers:
       grpc:
         endpoint: 0.0.0.0:4317
 
+  # Scrapes nodetool-exporter for cluster topology, thread pool, and compaction metrics
+  prometheus/nodetool:
+    config:
+      scrape_configs:
+        - job_name: cassandra_nodetool
+          scrape_interval: 60s
+          static_configs:
+            - targets: ["${env:CASSANDRA_HOST:-nodetool-exporter}:9500"]
+
   hostmetrics:
     collection_interval: 60s
     scrapers:
@@ -56,6 +65,10 @@ service:
   pipelines:
     metrics/jmx:
       receivers: [otlp]
+      processors: [batch, transform/add_db_system]
+      exporters: [otlp/last9, debug]
+    metrics/nodetool:
+      receivers: [prometheus/nodetool]
       processors: [batch, transform/add_db_system]
       exporters: [otlp/last9, debug]
     metrics/host:
