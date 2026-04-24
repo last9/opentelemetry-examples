@@ -1,0 +1,237 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Forwards ECS lifecycle events to Last9 via EventBridge API Destination.
+  No Lambda required — EventBridge posts event JSON straight to Last9's
+  HTTP log ingestion endpoint.
+
+  Captures three event types (each independently toggleable):
+    - ECS Task State Change: full task lifecycle (PROVISIONING → RUNNING → STOPPED)
+    - ECS Service Action: deployments, scaling, steady-state changes
+    - ECS Deployment State Change: deployment progress and outcomes
+
+  Deployment: aws cloudformation deploy \
+    --template-file cloudformation-no-lambda.yaml \
+    --stack-name last9-ecs-lifecycle \
+    --parameter-overrides \
+        Last9Host=<your-host>.last9.io \
+        Last9Username=<username> \
+        Last9Password=<password> \
+    --capabilities CAPABILITY_NAMED_IAM
+
+Parameters:
+  Last9Host:
+    Type: String
+    Description: >
+      Last9 log ingestion hostname (without scheme).
+      Find this in Last9 → Integrations → Send Data → the host part of your write URL.
+    AllowedPattern: '^[a-zA-Z0-9._-]+$'
+
+  Last9Username:
+    Type: String
+    Description: Last9 write username (from Integrations → Send Data).
+
+  Last9Password:
+    Type: String
+    NoEcho: true
+    Description: Last9 write password (from Integrations → Send Data).
+
+  ServiceName:
+    Type: String
+    Default: ecs-lifecycle
+    Description: >
+      service_name tag applied to all lifecycle log entries in Last9.
+      Use this to find events in the Logs Explorer.
+
+  ECSClusterArn:
+    Type: String
+    Default: ''
+    Description: >
+      Optional: ARN of a specific ECS cluster to monitor.
+      Leave empty to capture events from ALL clusters in this region.
+
+  EnableTaskStateEvents:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Capture ECS Task State Change events (task lifecycle: PROVISIONING,
+      PENDING, RUNNING, DEPROVISIONING, STOPPED).
+
+  EnableServiceActionEvents:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Capture ECS Service Action events (deployments, scaling, steady-state,
+      circuit breaker triggers).
+
+  EnableDeploymentEvents:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Capture ECS Deployment State Change events (deployment progress:
+      IN_PROGRESS, COMPLETED, FAILED).
+
+Conditions:
+  FilterByCluster: !Not [!Equals [!Ref ECSClusterArn, '']]
+  CaptureTaskStateEvents: !Equals [!Ref EnableTaskStateEvents, 'true']
+  CaptureServiceActionEvents: !Equals [!Ref EnableServiceActionEvents, 'true']
+  CaptureDeploymentEvents: !Equals [!Ref EnableDeploymentEvents, 'true']
+
+Resources:
+
+  # ── EventBridge API Destination ───────────────────────────────────────────
+  #
+  # API Destinations let EventBridge POST directly to an HTTP endpoint.
+  # The Connection holds credentials; the Destination holds the URL + method.
+  # All rules share a single Connection and Destination.
+
+  Last9Connection:
+    Type: AWS::Events::Connection
+    Properties:
+      Name: !Sub 'last9-log-ingest-${AWS::StackName}'
+      Description: Basic auth connection to Last9 log ingestion endpoint
+      AuthorizationType: BASIC
+      AuthParameters:
+        BasicAuthParameters:
+          Username: !Ref Last9Username
+          Password: !Ref Last9Password
+
+  Last9Destination:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      Name: !Sub 'last9-ecs-lifecycle-${AWS::StackName}'
+      Description: Posts ECS lifecycle events to Last9 HTTP log ingestion endpoint.
+      ConnectionArn: !GetAtt Last9Connection.Arn
+      InvocationEndpoint: !Sub 'https://${Last9Host}/json/v2?service_name=${ServiceName}'
+      HttpMethod: POST
+      InvocationRateLimitPerSecond: 300
+
+  # IAM role that allows EventBridge to invoke the API destination.
+  EventBridgeInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'last9-eventbridge-invoke-${AWS::StackName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeApiDestination
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: events:InvokeApiDestination
+                Resource: !GetAtt Last9Destination.Arn
+
+  # ── EventBridge Rules ───────────────────────────────────────────────────
+  #
+  # Each ECS event type gets its own rule because EventBridge requires
+  # exact detail-type matching — a single rule can't OR across detail-types.
+
+  # Rule 1: ECS Task State Change
+  # Captures the full task lifecycle: PROVISIONING → PENDING → ACTIVATING →
+  # RUNNING → DEPROVISIONING → STOPPED.
+  # The detail payload includes: taskArn, clusterArn, lastStatus, desiredStatus,
+  # stopCode, stoppedReason, containers[].exitCode, startedAt, stoppedAt, etc.
+  ECSTaskStateRule:
+    Type: AWS::Events::Rule
+    Condition: CaptureTaskStateEvents
+    Properties:
+      Name: !Sub 'last9-ecs-task-state-${AWS::StackName}'
+      Description: Captures all ECS task state changes and posts them to Last9.
+      EventPattern: !If
+        - FilterByCluster
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Task State Change
+          detail:
+            clusterArn:
+              - !Ref ECSClusterArn
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Task State Change
+      State: ENABLED
+      Targets:
+        - Id: Last9LogIngestion
+          Arn: !GetAtt Last9Destination.Arn
+          RoleArn: !GetAtt EventBridgeInvokeRole.Arn
+
+  # Rule 2: ECS Service Action
+  # Captures service-level events: deployments starting/completing, scaling
+  # activities, steady-state reached, circuit breaker triggered.
+  # The detail payload includes: eventType, eventName, clusterArn, capacityProviderArns, etc.
+  ECSServiceActionRule:
+    Type: AWS::Events::Rule
+    Condition: CaptureServiceActionEvents
+    Properties:
+      Name: !Sub 'last9-ecs-service-action-${AWS::StackName}'
+      Description: Captures ECS service action events (deployments, scaling) and posts them to Last9.
+      EventPattern: !If
+        - FilterByCluster
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Service Action
+          detail:
+            clusterArn:
+              - !Ref ECSClusterArn
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Service Action
+      State: ENABLED
+      Targets:
+        - Id: Last9LogIngestion
+          Arn: !GetAtt Last9Destination.Arn
+          RoleArn: !GetAtt EventBridgeInvokeRole.Arn
+
+  # Rule 3: ECS Deployment State Change
+  # Captures deployment-level lifecycle: IN_PROGRESS → COMPLETED or FAILED.
+  # The detail payload includes: deploymentId, eventType, eventName, reason, etc.
+  ECSDeploymentStateRule:
+    Type: AWS::Events::Rule
+    Condition: CaptureDeploymentEvents
+    Properties:
+      Name: !Sub 'last9-ecs-deployment-${AWS::StackName}'
+      Description: Captures ECS deployment state changes and posts them to Last9.
+      EventPattern: !If
+        - FilterByCluster
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Deployment State Change
+          detail:
+            clusterArn:
+              - !Ref ECSClusterArn
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Deployment State Change
+      State: ENABLED
+      Targets:
+        - Id: Last9LogIngestion
+          Arn: !GetAtt Last9Destination.Arn
+          RoleArn: !GetAtt EventBridgeInvokeRole.Arn
+
+Outputs:
+  ApiDestinationArn:
+    Description: EventBridge API Destination ARN
+    Value: !GetAtt Last9Destination.Arn
+
+  LogsExplorerFilter:
+    Description: Filter to use in Last9 Logs Explorer to find ECS lifecycle events
+    Value: !Sub 'service_name = "${ServiceName}"'
+
+  CorrelationKey:
+    Description: >
+      The taskArn field in log body correlates to aws_ecs_task_arn label in ECS metrics.
+      In Last9 Logs search for a specific task: taskArn = "arn:aws:ecs:..."
+    Value: taskArn (log body field) = aws_ecs_task_arn (metric label)
