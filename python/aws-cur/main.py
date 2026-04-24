@@ -6,12 +6,17 @@ and exports as OTLP gauge metrics to Last9.
 
 Metrics exported:
   aws.cost.unblended  (USD) — daily unblended cost per service/account/region
+  aws.cost.amortized  (USD) — daily amortized cost (includes RI/SP effective cost)
   aws.usage.quantity        — daily usage amount per service/account/region/usage_type
+
+Cost allocation tags from CUR (resource_tags_user_*) are forwarded as aws.tag.*
+metric attributes. Configure which tags to include via COST_ALLOCATION_TAGS.
 
 CUR setup required:
   1. Enable Cost and Usage Reports in AWS Billing → Cost & Usage Reports
   2. Format: Parquet, Time granularity: Daily, S3 destination configured
-  3. Set CUR_S3_BUCKET, CUR_S3_PREFIX, CUR_REPORT_NAME env vars
+  3. Enable cost allocation tags you want in AWS Billing → Cost allocation tags
+  4. Set CUR_S3_BUCKET, CUR_S3_PREFIX, CUR_REPORT_NAME env vars
 
 Historical timestamps are written directly via OTLP/HTTP JSON so each data
 point carries the actual billing date, not the current time.
@@ -57,6 +62,15 @@ INCLUDE_LINE_ITEM_TYPES = frozenset(
         "Usage,SavingsPlanCoveredUsage,DiscountedUsage,SavingsPlanNegation,BundledDiscount",
     ).split(",")
 )
+
+# Cost allocation tag keys to include as metric dimensions (aws.tag.<key>).
+# Must match tags enabled in AWS Billing → Cost allocation tags.
+# Example: COST_ALLOCATION_TAGS=team,environment,project
+COST_ALLOCATION_TAGS: list[str] = [
+    t.strip()
+    for t in os.environ.get("COST_ALLOCATION_TAGS", "").split(",")
+    if t.strip()
+]
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -158,13 +172,36 @@ _REQUIRED_COLS = {
     "line_item_usage_type",
 }
 
+# Per-type column that holds the true effective cost for amortized calculation.
+# SavingsPlanCoveredUsage → SP effective cost; DiscountedUsage → RI effective cost.
+_AMORTIZED_COL_BY_TYPE: dict[str, str] = {
+    "SavingsPlanCoveredUsage": "savings_plan_savings_plan_effective_cost",
+    "DiscountedUsage": "reservation_effective_cost",
+}
+
+
+def _compute_amortized(df: pd.DataFrame) -> pd.Series:
+    """Return per-row amortized cost using SP/RI effective cost where applicable."""
+    result = df["line_item_unblended_cost"].copy()
+    for item_type, col in _AMORTIZED_COL_BY_TYPE.items():
+        if col in df.columns:
+            mask = df["line_item_line_item_type"] == item_type
+            result.loc[mask] = pd.to_numeric(df.loc[mask, col], errors="coerce").fillna(0.0)
+    return result
+
+
+def _tag_col(tag_key: str) -> str:
+    """Map a cost allocation tag key to its CUR parquet column name."""
+    return f"resource_tags_user_{tag_key.lower().replace('-', '_').replace(' ', '_')}"
+
 
 def aggregate_costs(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Group by date/service/account/region/usage_type and sum costs.
+    Group by date/service/account/region/usage_type (+ configured tags) and sum costs.
     Returns DataFrame with columns:
       date, service, account_id, region, usage_type,
-      unblended_cost, usage_quantity
+      unblended_cost, amortized_cost, usage_quantity,
+      [aws_tag_<key> for each COST_ALLOCATION_TAGS entry]
     """
     df = _normalize_columns(df)
 
@@ -183,15 +220,34 @@ def aggregate_costs(df: pd.DataFrame) -> pd.DataFrame:
     df["line_item_usage_amount"] = (
         pd.to_numeric(df["line_item_usage_amount"], errors="coerce").fillna(0.0)
     )
+    df["amortized_cost"] = _compute_amortized(df)
+
+    # Resolve which tag columns exist in this CUR file
+    tag_cols: list[str] = []
+    tag_col_map: dict[str, str] = {}  # cur_col → output_col
+    for tag_key in COST_ALLOCATION_TAGS:
+        cur_col = _tag_col(tag_key)
+        if cur_col in df.columns:
+            out_col = f"aws_tag_{tag_key.lower().replace('-', '_')}"
+            tag_cols.append(cur_col)
+            tag_col_map[cur_col] = out_col
+        else:
+            log.warning("Cost allocation tag column not found in CUR: %s (tag: %s)", cur_col, tag_key)
+
+    group_cols = [
+        "date",
+        "line_item_product_code",
+        "line_item_usage_account_id",
+        "product_region",
+        "line_item_usage_type",
+        *tag_cols,
+    ]
 
     agg = (
-        df.groupby(
-            ["date", "line_item_product_code", "line_item_usage_account_id",
-             "product_region", "line_item_usage_type"],
-            dropna=False,
-        )
+        df.groupby(group_cols, dropna=False)
         .agg(
             unblended_cost=("line_item_unblended_cost", "sum"),
+            amortized_cost=("amortized_cost", "sum"),
             usage_quantity=("line_item_usage_amount", "sum"),
         )
         .reset_index()
@@ -200,6 +256,7 @@ def aggregate_costs(df: pd.DataFrame) -> pd.DataFrame:
             "line_item_usage_account_id": "account_id",
             "product_region": "region",
             "line_item_usage_type": "usage_type",
+            **tag_col_map,
         })
     )
     return agg
@@ -208,16 +265,21 @@ def aggregate_costs(df: pd.DataFrame) -> pd.DataFrame:
 # ── OTLP export ────────────────────────────────────────────────────────────────
 
 
-def _row_attrs(service: str, account_id: str, region: str, usage_type: str) -> list[dict]:
+def _row_attrs(row: dict) -> list[dict]:
     attrs = []
     for key, val in [
-        ("aws.service", service),
-        ("aws.account.id", account_id),
-        ("aws.region", region),
-        ("aws.usage.type", usage_type),
+        ("aws.service", row.get("service", "")),
+        ("aws.account.id", row.get("account_id", "")),
+        ("aws.region", row.get("region", "")),
+        ("aws.usage.type", row.get("usage_type", "")),
     ]:
         if val and str(val) not in ("", "nan", "None"):
             attrs.append({"key": key, "value": {"stringValue": str(val)}})
+    # Forward cost allocation tags as aws.tag.<key>
+    for col, val in row.items():
+        if col.startswith("aws_tag_") and val and str(val) not in ("", "nan", "None"):
+            attr_key = "aws.tag." + col[len("aws_tag_"):]
+            attrs.append({"key": attr_key, "value": {"stringValue": str(val)}})
     return attrs
 
 
@@ -227,20 +289,19 @@ def send_otlp_metrics(agg: pd.DataFrame) -> None:
         return
 
     cost_dps: list[dict] = []
+    amortized_dps: list[dict] = []
     usage_dps: list[dict] = []
 
     for _, row in agg.iterrows():
         time_ns = _date_to_ns(row["date"])
-        attrs = _row_attrs(
-            str(row.get("service", "")),
-            str(row.get("account_id", "")),
-            str(row.get("region", "")),
-            str(row.get("usage_type", "")),
-        )
-        cost = float(row["unblended_cost"])
+        attrs = _row_attrs(row.to_dict())
+        unblended = float(row["unblended_cost"])
+        amortized = float(row["amortized_cost"])
         qty = float(row["usage_quantity"])
-        if cost != 0.0:
-            cost_dps.append({"attributes": attrs, "timeUnixNano": time_ns, "asDouble": cost})
+        if unblended != 0.0:
+            cost_dps.append({"attributes": attrs, "timeUnixNano": time_ns, "asDouble": unblended})
+        if amortized != 0.0:
+            amortized_dps.append({"attributes": attrs, "timeUnixNano": time_ns, "asDouble": amortized})
         if qty != 0.0:
             usage_dps.append({"attributes": attrs, "timeUnixNano": time_ns, "asDouble": qty})
 
@@ -251,6 +312,13 @@ def send_otlp_metrics(agg: pd.DataFrame) -> None:
             "unit": "USD",
             "description": "Daily unblended AWS cost by service, account, and region",
             "gauge": {"dataPoints": cost_dps},
+        })
+    if amortized_dps:
+        metrics.append({
+            "name": "aws.cost.amortized",
+            "unit": "USD",
+            "description": "Daily amortized AWS cost including RI and Savings Plan effective rates",
+            "gauge": {"dataPoints": amortized_dps},
         })
     if usage_dps:
         metrics.append({
@@ -289,8 +357,8 @@ def send_otlp_metrics(agg: pd.DataFrame) -> None:
     if resp.status_code not in (200, 204):
         log.warning("OTLP export failed: HTTP %s — %s", resp.status_code, resp.text[:200])
     else:
-        log.info("Exported %d cost + %d usage data points to Last9",
-                 len(cost_dps), len(usage_dps))
+        log.info("Exported %d unblended + %d amortized + %d usage data points to Last9",
+                 len(cost_dps), len(amortized_dps), len(usage_dps))
 
 
 # ── Poll loop ──────────────────────────────────────────────────────────────────

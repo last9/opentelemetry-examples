@@ -39,6 +39,7 @@ Exports AWS billing data from Cost and Usage Reports (CUR) to Last9 as OpenTelem
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region |
 | `MONTHS_BACK` | No | `3` | Billing periods to process per run |
 | `POLL_INTERVAL_SECONDS` | No | `3600` | Re-poll interval (CUR updates ~daily) |
+| `COST_ALLOCATION_TAGS` | No | `""` | Comma-separated tag keys to include as `aws.tag.*` dimensions |
 | `OTLP_ENDPOINT` | No | `https://otlp.last9.io` | Last9 OTLP endpoint |
 | `OTLP_HEADERS` | Yes | — | Last9 auth header from the dashboard |
 | `OTEL_SERVICE_NAME` | No | `aws-cost-reporter` | Service name in Last9 |
@@ -49,8 +50,11 @@ Exports AWS billing data from Cost and Usage Reports (CUR) to Last9 as OpenTelem
 
 | Metric | Unit | Dimensions |
 |---|---|---|
-| `aws.cost.unblended` | USD | `aws.service`, `aws.account.id`, `aws.region`, `aws.usage.type` |
-| `aws.usage.quantity` | 1 | `aws.service`, `aws.account.id`, `aws.region`, `aws.usage.type` |
+| `aws.cost.unblended` | USD | `aws.service`, `aws.account.id`, `aws.region`, `aws.usage.type`, `aws.tag.*` |
+| `aws.cost.amortized` | USD | same — includes RI and Savings Plan effective rates |
+| `aws.usage.quantity` | 1 | `aws.service`, `aws.account.id`, `aws.region`, `aws.usage.type`, `aws.tag.*` |
+
+`aws.tag.*` dimensions are only present when `COST_ALLOCATION_TAGS` is configured and those tags are activated in AWS Billing.
 
 Each data point carries the actual billing date as its timestamp, enabling historical cost queries in Last9.
 
