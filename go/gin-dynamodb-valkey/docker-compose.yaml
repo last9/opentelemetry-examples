@@ -1,0 +1,13 @@
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: gin-ddb-valkey-dynamodb
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    ports:
+      - "8000:8000"
+
+  valkey:
+    image: valkey/valkey:7-alpine
+    container_name: gin-ddb-valkey-valkey
+    ports:
+      - "6379:6379"

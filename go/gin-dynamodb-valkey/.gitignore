@@ -1,0 +1,24 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+/dist/
+/build/
+gin-dynamodb-valkey
