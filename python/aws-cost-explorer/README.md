@@ -5,30 +5,33 @@ Sends AWS cost metrics to Last9 using the Cost Explorer API. No S3 bucket or CUR
 ## Prerequisites
 
 - AWS account with billing access
-- AWS CLI configured (`aws configure`)
 - [Last9 OTLP credentials](https://app.last9.io/integrations)
 
-## Deploy as Lambda (recommended)
+## Deploy with CloudFormation (recommended)
 
-Runs daily in your AWS account via EventBridge. No servers to manage, no stored credentials.
+No CLI or local setup needed — deploy directly from the AWS console.
+
+1. Open [CloudFormation → Create stack](https://console.aws.amazon.com/cloudformation/home#/stacks/create)
+2. Upload `cloudformation.yaml`
+3. Fill in `OtlpHeaders` with your Last9 auth header
+4. Click **Create stack**
+
+CloudFormation creates the IAM role, Lambda function, and EventBridge daily schedule automatically.
+
+Test after deploy:
+```bash
+aws lambda invoke --function-name aws-cost-reporter /tmp/out.json && cat /tmp/out.json
+```
+
+## Deploy with AWS CLI
+
+Requires AWS CLI configured locally:
 
 ```bash
 OTLP_HEADERS="Authorization=Basic <your-last9-token>" ./deploy.sh
 ```
 
-`deploy.sh` creates:
-- IAM role with `ce:GetCostAndUsage` permission
-- Lambda function (Python 3.13, 256 MB, 5 min timeout)
-- EventBridge rule on `rate(1 day)` schedule
-
-Test immediately after deploy:
-```bash
-aws lambda invoke --function-name aws-cost-reporter /tmp/out.json && cat /tmp/out.json
-```
-
-## Run with Docker (alternative)
-
-For local testing or non-AWS environments:
+## Run with Docker (local testing)
 
 ```bash
 cp .env.example .env

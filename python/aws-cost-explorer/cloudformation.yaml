@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS Cost Explorer → Last9 via OpenTelemetry metrics.
+  Deploys a Lambda function triggered daily by EventBridge that fetches
+  AWS cost data and exports it to Last9 as OTel gauge metrics.
+
+Parameters:
+  OtlpHeaders:
+    Type: String
+    Description: "Last9 OTLP auth header — get from Last9 dashboard → Integrations → OTLP (e.g. Authorization=Basic xxxx)"
+    NoEcho: true
+
+  OtlpEndpoint:
+    Type: String
+    Default: https://otlp.last9.io
+    Description: Last9 OTLP endpoint
+
+  DaysBack:
+    Type: Number
+    Default: 30
+    Description: Days of cost history to fetch on each run
+
+  Schedule:
+    Type: String
+    Default: rate(1 day)
+    Description: EventBridge schedule expression (e.g. rate(1 day) or cron(0 6 * * ? *))
+
+  ServiceName:
+    Type: String
+    Default: aws-cost-reporter
+    Description: Service name shown in Last9 and used as the Lambda function name
+
+Resources:
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ServiceName}-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CostExplorerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ce:GetCostAndUsage
+                Resource: "*"
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref ServiceName
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt ExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          OTLP_ENDPOINT: !Ref OtlpEndpoint
+          OTLP_HEADERS: !Ref OtlpHeaders
+          OTEL_SERVICE_NAME: !Ref ServiceName
+          DAYS_BACK: !Ref DaysBack
+      Code:
+        ZipFile: |
+          import json, os, urllib.request
+          from datetime import date, timedelta, timezone, datetime
+          import boto3
+
+          OTLP = os.environ.get('OTLP_ENDPOINT', 'https://otlp.last9.io')
+          HDRS = os.environ.get('OTLP_HEADERS', '')
+          SVC  = os.environ.get('OTEL_SERVICE_NAME', 'aws-cost-reporter')
+          DAYS = int(os.environ.get('DAYS_BACK', '30'))
+
+          def _parse_headers():
+              h = {}
+              for p in HDRS.split(','):
+                  if '=' in p:
+                      k, v = p.split('=', 1)
+                      h[k.strip()] = v.strip()
+              return h
+
+          def _to_ns(d):
+              dt = datetime.strptime(d, '%Y-%m-%d').replace(hour=12, tzinfo=timezone.utc)
+              return str(int(dt.timestamp() * 1_000_000_000))
+
+          def fetch_costs():
+              ce = boto3.client('ce', region_name='us-east-1')
+              end = date.today()
+              start = end - timedelta(days=DAYS)
+              rows = []
+              tok = None
+              while True:
+                  kw = dict(
+                      TimePeriod={'Start': str(start), 'End': str(end)},
+                      Granularity='DAILY',
+                      Metrics=['UnblendedCost', 'AmortizedCost'],
+                      GroupBy=[
+                          {'Type': 'DIMENSION', 'Key': 'SERVICE'},
+                          {'Type': 'DIMENSION', 'Key': 'LINKED_ACCOUNT'},
+                          {'Type': 'DIMENSION', 'Key': 'REGION'},
+                      ],
+                  )
+                  if tok:
+                      kw['NextPageToken'] = tok
+                  r = ce.get_cost_and_usage(**kw)
+                  for res in r.get('ResultsByTime', []):
+                      day = res['TimePeriod']['Start']
+                      for g in res.get('Groups', []):
+                          svc, acct, region = g['Keys']
+                          u = float(g['Metrics']['UnblendedCost']['Amount'])
+                          am = float(g['Metrics']['AmortizedCost']['Amount'])
+                          if u or am:
+                              rows.append((day, svc, acct, region, u, am))
+                  tok = r.get('NextPageToken')
+                  if not tok:
+                      break
+              return rows
+
+          def send_metrics(rows):
+              u_dps, am_dps = [], []
+              for day, svc, acct, region, u, am in rows:
+                  ns = _to_ns(day)
+                  attrs = [
+                      {'key': 'aws.service',    'value': {'stringValue': svc}},
+                      {'key': 'aws.account.id', 'value': {'stringValue': acct}},
+                      {'key': 'aws.region',     'value': {'stringValue': region}},
+                  ]
+                  dp = {'attributes': attrs, 'timeUnixNano': ns}
+                  if u:  u_dps.append({**dp,  'asDouble': u})
+                  if am: am_dps.append({**dp, 'asDouble': am})
+
+              metrics = []
+              if u_dps:
+                  metrics.append({'name': 'aws.cost.unblended', 'unit': 'USD',
+                                   'description': 'Daily unblended AWS cost',
+                                   'gauge': {'dataPoints': u_dps}})
+              if am_dps:
+                  metrics.append({'name': 'aws.cost.amortized', 'unit': 'USD',
+                                   'description': 'Daily amortized AWS cost (RI/SP effective rates)',
+                                   'gauge': {'dataPoints': am_dps}})
+              if not metrics:
+                  return
+
+              payload = json.dumps({'resourceMetrics': [{'resource': {'attributes': [
+                  {'key': 'service.name', 'value': {'stringValue': SVC}},
+                  {'key': 'cloud.provider', 'value': {'stringValue': 'aws'}},
+              ]}, 'scopeMetrics': [{'scope': {'name': 'aws.cost_explorer'},
+                                    'metrics': metrics}]}]}).encode()
+
+              req = urllib.request.Request(
+                  f"{OTLP.rstrip('/')}/v1/metrics",
+                  data=payload,
+                  headers={**_parse_headers(), 'Content-Type': 'application/json'},
+              )
+              urllib.request.urlopen(req, timeout=30)
+
+          def handler(event, context):
+              rows = fetch_costs()
+              send_metrics(rows)
+              return {'statusCode': 200, 'exported': len(rows)}
+
+  ScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${ServiceName}-schedule"
+      ScheduleExpression: !Ref Schedule
+      State: ENABLED
+      Targets:
+        - Id: CostReporterTarget
+          Arn: !GetAtt Function.Arn
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduleRule.Arn
+
+Outputs:
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt Function.Arn
+
+  ScheduleArn:
+    Description: EventBridge schedule rule ARN
+    Value: !GetAtt ScheduleRule.Arn
+
+  TestCommand:
+    Description: Run this to test immediately after deploy
+    Value: !Sub "aws lambda invoke --function-name ${ServiceName} --region ${AWS::Region} /tmp/out.json && cat /tmp/out.json"
