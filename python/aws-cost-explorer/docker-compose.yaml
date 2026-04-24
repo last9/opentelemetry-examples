@@ -1,0 +1,6 @@
+services:
+  aws-cost-explorer-collector:
+    build: .
+    env_file:
+      - .env
+    restart: unless-stopped
