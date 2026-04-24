@@ -1,0 +1,6 @@
+services:
+  aws-cur-collector:
+    build: .
+    env_file:
+      - .env
+    restart: unless-stopped
