@@ -1,0 +1,5 @@
+.env
+vendor/
+.bundle/
+function.zip
+response.json
