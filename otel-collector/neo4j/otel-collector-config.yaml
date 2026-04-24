@@ -1,0 +1,62 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: neo4j
+          scrape_interval: 60s
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["${env:NEO4J_HOST:-localhost}:2004"]
+
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.logical.count:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+          system.memory.limit:
+            enabled: true
+      load:
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+      paging:
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+  transform/hostmetrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["host.name"], resource.attributes["host.name"])
+          - set(attributes["db.system"], "neo4j")
+
+exporters:
+  otlp/last9:
+    endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+    headers:
+      "Authorization": "${env:OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION}"
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus, hostmetrics]
+      processors: [batch, resourcedetection/system, transform/hostmetrics]
+      exporters: [otlp/last9, debug]
