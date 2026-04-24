@@ -1,0 +1,20 @@
+services:
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      # Journald log directories — collector reads cloudflared logs from host
+      - /run/log/journal:/run/log/journal:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    environment:
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_AUTH_HEADER=${LAST9_AUTH_HEADER}
+      - CLOUDFLARE_CONNECTOR_ID=${CLOUDFLARE_CONNECTOR_ID}
+      - CLOUDFLARE_TUNNEL_NAME=${CLOUDFLARE_TUNNEL_NAME}
+      - SERVICE_NAMESPACE=${SERVICE_NAMESPACE:-production}
+    restart: unless-stopped
+    # Required to access journald socket on the host
+    group_add:
+      - "systemd-journal"

@@ -1,0 +1,64 @@
+receivers:
+  journald:
+    # In production, use: units: [cloudflared]  (matches _SYSTEMD_UNIT=cloudflared.service)
+    # In this test, cloudflared runs via systemd-cat which sets SYSLOG_IDENTIFIER, not
+    # _SYSTEMD_UNIT — so we skip the units filter and rely on the regex operator to only
+    # process lines that match the cloudflared timestamp+level format.
+    priority: debug
+    operators:
+      - type: add
+        field: attributes["connector.id"]
+        value: "test-connector-001"
+      - type: add
+        field: attributes["tunnel.name"]
+        value: "hello-world-test"
+
+      # cloudflared sets PRIORITY=6 for all journal entries regardless of actual severity.
+      # Extract the real level from the message body level token (INF/WRN/ERR/DBG/FTL).
+      - type: regex_parser
+        parse_from: body["MESSAGE"]
+        regex: '^\d{4}-\d{2}-\d{2}T[\d:Z]+ (?P<log_level>[A-Z]{2,4})'
+        on_error: send
+      - type: severity_parser
+        parse_from: attributes.log_level
+        mapping:
+          debug: DBG
+          info:  INF
+          warn:  WRN
+          error: ERR
+          fatal: FTL
+
+processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: "cloudflare-tunnel-test"
+        action: upsert
+      - key: service.namespace
+        value: "test"
+        action: upsert
+      - key: deployment.environment
+        value: "local"
+        action: upsert
+  batch:
+    timeout: 5s
+    send_batch_size: 200
+
+exporters:
+  # Prints each log record to stdout so we can verify locally before checking Last9
+  debug:
+    verbosity: detailed
+  otlphttp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${LAST9_AUTH_HEADER}"
+
+service:
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    logs:
+      receivers: [journald]
+      processors: [resource, batch]
+      exporters: [debug, otlphttp/last9]

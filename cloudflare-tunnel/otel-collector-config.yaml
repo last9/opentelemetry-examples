@@ -1,0 +1,57 @@
+receivers:
+  journald:
+    directory: /var/log/journal
+    units:
+      - cloudflared
+    priority: info
+    operators:
+      # Tag logs with tunnel identity (replace with your values)
+      - type: add
+        field: attributes["connector.id"]
+        value: "${CLOUDFLARE_CONNECTOR_ID}"
+      - type: add
+        field: attributes["tunnel.name"]
+        value: "${CLOUDFLARE_TUNNEL_NAME}"
+
+      # cloudflared emits PRIORITY=6 for all levels regardless of actual severity.
+      # Parse the level token from the MESSAGE body instead (INF/WRN/ERR/DBG/FTL).
+      - type: regex_parser
+        parse_from: body["MESSAGE"]
+        regex: '^\d{4}-\d{2}-\d{2}T[\d:Z]+ (?P<log_level>[A-Z]{2,4})'
+        on_error: send
+      - type: severity_parser
+        parse_from: attributes.log_level
+        mapping:
+          debug: DBG
+          info:  INF
+          warn:  WRN
+          error: ERR
+          fatal: FTL
+
+processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: "cloudflare-tunnel"
+        action: upsert
+      - key: service.namespace
+        value: "${SERVICE_NAMESPACE}"
+        action: upsert
+  batch:
+    timeout: 5s
+    send_batch_size: 200
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlphttp/last9:
+    endpoint: "${LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${LAST9_AUTH_HEADER}"
+
+service:
+  pipelines:
+    logs:
+      receivers: [journald]
+      processors: [resource, batch]
+      exporters: [otlphttp/last9]
