@@ -5,26 +5,30 @@ Sends AWS cost metrics to Last9 using the Cost Explorer API. No S3 bucket or CUR
 ## Prerequisites
 
 - AWS account with billing access
+- AWS CLI configured (`aws configure`)
 - [Last9 OTLP credentials](https://app.last9.io/integrations)
 
-## Setup
+## Deploy as Lambda (recommended)
 
-### 1. Create IAM policy
+Runs daily in your AWS account via EventBridge. No servers to manage, no stored credentials.
 
-Attach this policy to the IAM user or role running the collector:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": "ce:GetCostAndUsage",
-    "Resource": "*"
-  }]
-}
+```bash
+OTLP_HEADERS="Authorization=Basic <your-last9-token>" ./deploy.sh
 ```
 
-### 2. Configure and run
+`deploy.sh` creates:
+- IAM role with `ce:GetCostAndUsage` permission
+- Lambda function (Python 3.13, 256 MB, 5 min timeout)
+- EventBridge rule on `rate(1 day)` schedule
+
+Test immediately after deploy:
+```bash
+aws lambda invoke --function-name aws-cost-reporter /tmp/out.json && cat /tmp/out.json
+```
+
+## Run with Docker (alternative)
+
+For local testing or non-AWS environments:
 
 ```bash
 cp .env.example .env
@@ -36,15 +40,15 @@ docker compose up
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `AWS_ACCESS_KEY_ID` | No* | — | AWS access key |
-| `AWS_SECRET_ACCESS_KEY` | No* | — | AWS secret key |
+| `OTLP_HEADERS` | Yes | — | Last9 auth header (`Authorization=Basic <token>`) |
+| `AWS_ACCESS_KEY_ID` | No* | — | AWS access key (Docker only) |
+| `AWS_SECRET_ACCESS_KEY` | No* | — | AWS secret key (Docker only) |
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region |
 | `DAYS_BACK` | No | `30` | Days of history to fetch per run |
-| `POLL_INTERVAL_SECONDS` | No | `86400` | Re-poll interval (Cost Explorer updates ~daily) |
-| `OTLP_HEADERS` | Yes | — | Last9 auth header (e.g. `Authorization=Basic <token>`) |
+| `POLL_INTERVAL_SECONDS` | No | `86400` | Re-poll interval for Docker mode |
 | `OTEL_SERVICE_NAME` | No | `aws-cost-reporter` | Service name in Last9 |
 
-\* Skip on EC2/ECS/Lambda — the attached IAM role is used automatically.
+\* Lambda uses the attached IAM role — no credentials needed.
 
 ## Metrics
 
@@ -55,12 +59,7 @@ docker compose up
 
 ## Verification
 
-Logs show:
-```
-Exported N unblended + N amortized data points to Last9
-```
-
-Then query `aws.cost.unblended` in [Last9 Metrics](https://app.last9.io/metrics) and group by `aws.service`.
+After the Lambda runs, query `aws.cost.unblended` in [Last9 Metrics](https://app.last9.io/metrics) and group by `aws.service`.
 
 ---
 

@@ -1,15 +1,16 @@
 """
 AWS Cost Explorer → OpenTelemetry Pipeline
 
-Polls the AWS Cost Explorer API daily and exports cost metrics to Last9.
+Polls the AWS Cost Explorer API and exports cost metrics to Last9.
 No CUR setup or S3 bucket required — data is available within minutes.
 
 Metrics exported:
   aws.cost.unblended  (USD) — daily unblended cost per service/account/region
   aws.cost.amortized  (USD) — daily amortized cost (includes RI/SP effective rates)
 
-Setup: create an IAM user/role with ce:GetCostAndUsage permission, set
-AWS credentials in .env, and run docker compose up.
+Deployment modes:
+  Lambda  — deploy with deploy.sh; EventBridge triggers daily (recommended)
+  Docker  — docker compose up (for local testing or non-AWS environments)
 """
 
 from __future__ import annotations
@@ -206,6 +207,17 @@ def main() -> None:
         poll(ce)
         log.info("Sleeping %ds…", POLL_INTERVAL_SECONDS)
         time.sleep(POLL_INTERVAL_SECONDS)
+
+
+# ── Lambda handler ─────────────────────────────────────────────────────────────
+
+
+def lambda_handler(event: dict, context: object) -> dict:
+    """Entry point for AWS Lambda (triggered by EventBridge schedule)."""
+    ce = boto3.client("ce", region_name="us-east-1")
+    rows = fetch_costs(ce)
+    send_otlp_metrics(rows)
+    return {"statusCode": 200, "exported": len(rows)}
 
 
 if __name__ == "__main__":
