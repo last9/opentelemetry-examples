@@ -1,0 +1,44 @@
+services:
+  cassandra:
+    image: cassandra:4
+    container_name: cassandra-test
+    environment:
+      # Enable remote JMX access for the otel-collector container
+      - LOCAL_JMX=no
+      - JVM_EXTRA_OPTS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.port=7199 -Dcom.sun.management.jmxremote.rmi.port=7199 -Djava.rmi.server.hostname=cassandra
+    ports:
+      - "9042:9042"
+      - "7199:7199"
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # JMX metrics sidecar: runs the OTel JMX metrics JAR, sends to otel-collector via OTLP
+  jmx-metrics:
+    image: eclipse-temurin:17-jre-jammy
+    container_name: cassandra-jmx-metrics
+    command: ["java", "-jar", "/opt/opentelemetry-jmx-metrics.jar", "-config", "/opt/jmx-config.properties"]
+    volumes:
+      - ./opentelemetry-jmx-metrics.jar:/opt/opentelemetry-jmx-metrics.jar:ro
+      - ./jmx-config.properties:/opt/jmx-config.properties:ro
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: cassandra-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION=${OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION}
+    depends_on:
+      cassandra:
+        condition: service_healthy

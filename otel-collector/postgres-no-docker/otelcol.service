@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenTelemetry Collector Contrib
+Documentation=https://opentelemetry.io/docs/collector/
+After=network.target postgresql.service
+
+[Service]
+EnvironmentFile=/etc/otelcol-contrib/otelcol-contrib.env
+ExecStart=/usr/bin/otelcol-contrib --config /etc/otelcol-contrib/config.yaml --feature-gates transform.flatten.logs
+Restart=on-failure
+RestartSec=5s
+User=otelcol-contrib
+Group=otelcol-contrib
+# Allow reading PostgreSQL log files
+SupplementaryGroups=adm
+
+[Install]
+WantedBy=multi-user.target
