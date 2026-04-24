@@ -1,0 +1,25 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+/node_modules/
+
+# Build artifacts
+/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local test/dev scripts
+test-send.mjs
