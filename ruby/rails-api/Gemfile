@@ -12,7 +12,7 @@ gem "sqlite3", "~> 1.4"
 gem "trilogy"
 
 # Rails OTel context enrichment (source location, slow query tracking)
-gem "rails-otel-context", github: "last9/rails-otel-context", branch: "fix/clickhouse-kwargs-reduce-patch-surface", require: "rails_otel_context"
+gem "rails-otel-context", "~> 0.9.10", require: false
 
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", "~> 8.0"

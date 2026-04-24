@@ -29,6 +29,5 @@ module WithRails
       Dotenv::Railtie.load
     end
 
-    config.middleware.use RailsOtelContext::BodyCapture
   end
 end
