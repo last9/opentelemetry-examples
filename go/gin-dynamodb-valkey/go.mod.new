@@ -1,0 +1,15 @@
+module gin-dynamodb-valkey
+
+go 1.22
+
+require (
+	github.com/aws/aws-sdk-go-v2 v1.32.6
+	github.com/aws/aws-sdk-go-v2/config v1.28.6
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.38.0
+	github.com/gin-gonic/gin v1.10.0
+	github.com/last9/go-agent v0.1.0
+	github.com/valkey-io/valkey-go v1.0.55
+	github.com/valkey-io/valkey-go/valkeyotel v1.0.55
+	go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws v0.57.0
+)
+

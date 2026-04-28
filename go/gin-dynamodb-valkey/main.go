@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -45,11 +47,23 @@ func newValkeyClient() valkey.Client {
 		addr = "localhost:6379"
 	}
 
+	// Options cover every managed + self-hosted deployment we have seen:
+	//   - docker-compose / bare metal: defaults (plaintext, no auth)
+	//   - AWS ElastiCache / MemoryDB: VALKEY_TLS=true, optional ACL user
+	//   - Upstash / Aiven / Redis Cloud: VALKEY_TLS=true + VALKEY_PASSWORD
+	// Multiple nodes (cluster / sentinel): comma-separated VALKEY_ADDR.
+	opt := valkey.ClientOption{
+		InitAddress: strings.Split(addr, ","),
+		Username:    os.Getenv("VALKEY_USERNAME"),
+		Password:    os.Getenv("VALKEY_PASSWORD"),
+	}
+	if os.Getenv("VALKEY_TLS") == "true" {
+		opt.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
 	// valkeyotel.NewClient constructs an instrumented valkey client in a
 	// single call. It returns (valkey.Client, error) — no separate wrap step.
-	client, err := valkeyotel.NewClient(valkey.ClientOption{
-		InitAddress: []string{addr},
-	})
+	client, err := valkeyotel.NewClient(opt)
 	if err != nil {
 		log.Fatalf("valkey: %v", err)
 	}
