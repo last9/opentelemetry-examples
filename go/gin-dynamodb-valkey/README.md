@@ -1,6 +1,6 @@
 # Gin + DynamoDB + Valkey
 
-Go/Gin service instrumented with the Last9 Go Agent — emits distributed traces for Amazon DynamoDB (via `otelaws`) and Valkey (via `valkeyotel`).
+Go/Gin service instrumented with the Last9 Go Agent — emits distributed traces for Amazon DynamoDB (via `otelaws`), Valkey (via `valkeyotel`), SQS long-poll workers, and outbound HTTP (via `httpagent`). Demonstrates `context.Context` propagation end-to-end so spans link into one tree per request.
 
 ## Prerequisites
 
@@ -49,7 +49,12 @@ Go/Gin service instrumented with the Last9 Go Agent — emits distributed traces
    curl -XPOST "http://localhost:8080/cache/hello?value=world"
    curl http://localhost:8080/cache/hello
    curl http://localhost:8080/users/u1
+   curl "http://localhost:8080/external?url=https://httpbin.org/get"
    ```
+
+## Context propagation
+
+`main.go` threads `context.Context` from each gin handler through `Service` methods to every SDK call (DynamoDB, Valkey, SQS, outbound HTTP). This is what makes spans nest into a single trace per request. See the [Go Gin integration guide](https://last9.io/docs/integrations/golang-gin) for the full pattern + anti-patterns.
 
 ## Configuration
 
@@ -66,6 +71,7 @@ Replace every `<placeholder>` with your own values. `local`-only fields (marked 
 | `AWS_ENDPOINT_URL`* | `http://localhost:8000` | DynamoDB-local only. **Omit in production.** |
 | `AWS_ACCESS_KEY_ID`* / `AWS_SECRET_ACCESS_KEY`* | `local` / `local` | DynamoDB-local only. Use IAM role / instance profile in production. |
 | `DYNAMODB_TABLE` | `<your-table-name>` | Defaults to `users` if unset |
+| `SQS_QUEUE_URL` | `<your-sqs-queue-url>` | Optional. When set, starts the SQS long-poll worker. |
 | `VALKEY_ADDR` | `<host:port>` or `<host1:port,host2:port>` | Comma-separated for cluster / sentinel |
 | `VALKEY_TLS` | `true` \| `false` | Set `true` for managed Valkey with encryption in transit |
 | `VALKEY_USERNAME` | `<acl-username>` or empty | Managed Valkey with ACL (e.g. MemoryDB, Upstash) |
@@ -170,6 +176,7 @@ WantedBy=multi-user.target
 
 | Symptom | Cause |
 |---|---|
+| Spans not linked into one trace (orphan single-span traces) | See [span-linking troubleshooting in the product doc](https://last9.io/docs/integrations/golang-gin) — covers ctx propagation, outbound HTTP, SQS poller. |
 | DynamoDB span missing `aws.dynamodb.table_names` | `WithAttributeSetter(DynamoDBAttributeSetter)` not passed to `AppendMiddlewares` |
 | Valkey span missing or orphaned | Handler didn't pass `c.Request.Context()` into `valkeyClient.Do(...)` |
 | No traces in Last9 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` not set before `agent.Start()` |
