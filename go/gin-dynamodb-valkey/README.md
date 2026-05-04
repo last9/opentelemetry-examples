@@ -49,7 +49,7 @@ Go/Gin service instrumented with the Last9 Go Agent — emits distributed traces
    curl -XPOST "http://localhost:8080/cache/hello?value=world"
    curl http://localhost:8080/cache/hello
    curl http://localhost:8080/users/u1
-   curl "http://localhost:8080/external?url=https://httpbin.org/get"
+   curl http://localhost:8080/external
    ```
 
 ## Context propagation

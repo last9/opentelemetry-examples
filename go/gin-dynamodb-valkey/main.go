@@ -266,10 +266,9 @@ func main() {
 
 	// Demonstrates outbound HTTP. The CLIENT span emitted by httpagent nests
 	// under the SERVER span; traceparent is injected so the receiver joins
-	// the same trace.
+	// the same trace. Target is fixed to avoid SSRF in this demo.
 	r.GET("/external", func(c *gin.Context) {
-		target := c.DefaultQuery("url", "https://httpbin.org/get")
-		status, err := svc.CallExternal(c.Request.Context(), target)
+		status, err := svc.CallExternal(c.Request.Context(), "https://httpbin.org/get")
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
