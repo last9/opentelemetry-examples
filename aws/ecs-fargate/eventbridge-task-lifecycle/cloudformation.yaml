@@ -1,0 +1,336 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Forwards ECS lifecycle events to Last9 as structured OTLP logs via Lambda.
+  Captures task state changes, service actions, and deployment events —
+  stored as log records in Last9 with semantic attributes for querying.
+
+  Deployment: aws cloudformation deploy \
+    --template-file cloudformation.yaml \
+    --stack-name last9-ecs-lifecycle \
+    --parameter-overrides \
+        Last9OTLPEndpoint=https://otlp.last9.io/v1/logs \
+        Last9AuthToken=<base64-credentials> \
+    --capabilities CAPABILITY_NAMED_IAM
+
+Parameters:
+  Last9OTLPEndpoint:
+    Type: String
+    Description: >
+      Last9 OTLP HTTP logs endpoint.
+      Find this in Last9 → Integrations → Send Data → OTLP (HTTP endpoint for /v1/logs).
+    AllowedPattern: '^https://.*'
+    ConstraintDescription: Must be an HTTPS URL.
+
+  Last9AuthToken:
+    Type: String
+    NoEcho: true
+    Description: >
+      Last9 Basic auth token — Base64 encoded "username:password".
+      Find this in Last9 → Integrations → Send Data → copy the Authorization header value
+      (everything after "Basic ").
+
+  ECSClusterArn:
+    Type: String
+    Default: ''
+    Description: >
+      Optional: ARN of a specific ECS cluster to monitor.
+      Leave empty to capture events from ALL clusters in this account and region.
+      Example: arn:aws:ecs:us-east-1:123456789012:cluster/prod-cluster
+
+  EnableTaskStateEvents:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Capture ECS Task State Change events (task lifecycle: PROVISIONING,
+      PENDING, RUNNING, DEPROVISIONING, STOPPED).
+
+  EnableServiceActionEvents:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Capture ECS Service Action events (deployments, scaling, steady-state,
+      circuit breaker triggers).
+
+  EnableDeploymentEvents:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Capture ECS Deployment State Change events (deployment progress:
+      IN_PROGRESS, COMPLETED, FAILED).
+
+Conditions:
+  FilterByCluster: !Not [!Equals [!Ref ECSClusterArn, '']]
+  CaptureTaskStateEvents: !Equals [!Ref EnableTaskStateEvents, 'true']
+  CaptureServiceActionEvents: !Equals [!Ref EnableServiceActionEvents, 'true']
+  CaptureDeploymentEvents: !Equals [!Ref EnableDeploymentEvents, 'true']
+
+Resources:
+
+  # ── IAM ──────────────────────────────────────────────────────────────────
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'last9-ecs-lifecycle-${AWS::StackName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # ── Lambda ───────────────────────────────────────────────────────────────
+
+  ForwarderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'last9-ecs-lifecycle-${AWS::StackName}'
+      Description: Transforms ECS EventBridge lifecycle events into OTLP log records for Last9.
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          LAST9_OTLP_ENDPOINT: !Ref Last9OTLPEndpoint
+          LAST9_AUTH: !Ref Last9AuthToken
+      Code:
+        ZipFile: |
+          import json, os, time, urllib.request, urllib.error
+
+          ENDPOINT = os.environ['LAST9_OTLP_ENDPOINT']
+          AUTH     = os.environ['LAST9_AUTH']
+
+          # Map EventBridge detail-type to a short event name for Last9 attributes.
+          EVENT_NAMES = {
+              'ECS Task State Change':      'ecs.task.state_change',
+              'ECS Service Action':         'ecs.service.action',
+              'ECS Deployment State Change': 'ecs.deployment.state_change',
+          }
+
+          def handler(event, context):
+              detail      = event.get('detail', {})
+              detail_type = event.get('detail-type', '')
+              event_name  = EVENT_NAMES.get(detail_type, detail_type.lower().replace(' ', '.'))
+
+              # Extract common ECS fields (safe defaults for events that lack them).
+              task_arn = detail.get('taskArn', '')
+              cluster  = detail.get('clusterArn', '').split('/')[-1]
+              service  = detail.get('group', '').replace('service:', '')
+              task_id  = task_arn.split('/')[-1] if task_arn else ''
+              status   = detail.get('lastStatus', detail.get('eventName', ''))
+
+              # Exit codes (only present on task state change with stopped containers).
+              containers = detail.get('containers', [])
+              exit_codes = {
+                  c['name']: str(c.get('exitCode', ''))
+                  for c in containers if 'exitCode' in c
+              }
+              primary_exit = next(
+                  (v for v in exit_codes.values() if v and v != '0'),
+                  next(iter(exit_codes.values()), '')
+              )
+
+              # Severity: ERROR for non-zero exit codes or failed deployments.
+              is_error = (
+                  primary_exit not in ('', '0')
+                  or detail.get('eventName', '') in ('SERVICE_TASK_START_IMPAIRED',
+                                                     'SERVICE_DEPLOYMENT_FAILED')
+                  or status == 'FAILED'
+              )
+
+              # Timestamp: use stoppedAt, updatedAt, or now.
+              ts_str = detail.get('stoppedAt', detail.get('updatedAt', ''))
+              try:
+                  from datetime import datetime
+                  dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                  timestamp_ns = str(int(dt.timestamp() * 1e9))
+              except Exception:
+                  timestamp_ns = str(int(time.time() * 1e9))
+
+              # Build OTLP attributes — only include non-empty values.
+              attrs = [kv('event.name', event_name)]
+              if status:
+                  attrs.append(kv('aws.ecs.status', status))
+              if detail.get('stopCode'):
+                  attrs.append(kv('aws.ecs.task.stop_code', detail['stopCode']))
+              if detail.get('stoppedReason'):
+                  attrs.append(kv('aws.ecs.task.stopped_reason', detail['stoppedReason']))
+              if exit_codes:
+                  attrs.append(kv('container.exit_codes', json.dumps(exit_codes)))
+                  attrs.append(kv('container.exit_code', primary_exit))
+              if detail.get('eventName'):
+                  attrs.append(kv('aws.ecs.event_name', detail['eventName']))
+              if detail.get('deploymentId'):
+                  attrs.append(kv('aws.ecs.deployment_id', detail['deploymentId']))
+
+              payload = {
+                  'resourceLogs': [{
+                      'resource': {
+                          'attributes': [
+                              kv('aws.ecs.task.arn',     task_arn),
+                              kv('aws.ecs.task.id',      task_id),
+                              kv('aws.ecs.cluster.name', cluster),
+                              kv('service.name',         service or 'ecs-lifecycle'),
+                          ]
+                      },
+                      'scopeLogs': [{
+                          'scope': {'name': 'ecs-eventbridge-forwarder', 'version': '0.2.0'},
+                          'logRecords': [{
+                              'timeUnixNano':         timestamp_ns,
+                              'observedTimeUnixNano': str(int(time.time() * 1e9)),
+                              'severityNumber':       17 if is_error else 9,
+                              'severityText':         'ERROR' if is_error else 'INFO',
+                              'body': {'stringValue': json.dumps(detail)},
+                              'attributes': attrs,
+                          }]
+                      }]
+                  }]
+              }
+
+              data = json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  ENDPOINT, data=data,
+                  headers={'Content-Type': 'application/json', 'Authorization': f'Basic {AUTH}'},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=8) as r:
+                      print(json.dumps({
+                          'status': r.status, 'event_name': event_name,
+                          'task_id': task_id, 'cluster': cluster, 'ecs_status': status,
+                      }))
+                      return r.status
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode()
+                  print(json.dumps({'error': e.code, 'event_name': event_name, 'body': body}))
+                  raise
+
+          def kv(key, val):
+              return {'key': key, 'value': {'stringValue': str(val)}}
+
+  # ── EventBridge Rules ───────────────────────────────────────────────────
+
+  # Rule 1: ECS Task State Change (full lifecycle)
+  ECSTaskStateRule:
+    Type: AWS::Events::Rule
+    Condition: CaptureTaskStateEvents
+    Properties:
+      Name: !Sub 'last9-ecs-task-state-${AWS::StackName}'
+      Description: Captures all ECS task state changes and forwards them to Last9 via Lambda.
+      EventPattern: !If
+        - FilterByCluster
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Task State Change
+          detail:
+            clusterArn:
+              - !Ref ECSClusterArn
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Task State Change
+      State: ENABLED
+      Targets:
+        - Id: Last9ForwarderLambda
+          Arn: !GetAtt ForwarderFunction.Arn
+
+  LambdaInvokePermissionTaskState:
+    Type: AWS::Lambda::Permission
+    Condition: CaptureTaskStateEvents
+    Properties:
+      FunctionName: !GetAtt ForwarderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ECSTaskStateRule.Arn
+
+  # Rule 2: ECS Service Action (deployments, scaling)
+  ECSServiceActionRule:
+    Type: AWS::Events::Rule
+    Condition: CaptureServiceActionEvents
+    Properties:
+      Name: !Sub 'last9-ecs-service-action-${AWS::StackName}'
+      Description: Captures ECS service action events (deployments, scaling) and forwards them to Last9 via Lambda.
+      EventPattern: !If
+        - FilterByCluster
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Service Action
+          detail:
+            clusterArn:
+              - !Ref ECSClusterArn
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Service Action
+      State: ENABLED
+      Targets:
+        - Id: Last9ForwarderLambda
+          Arn: !GetAtt ForwarderFunction.Arn
+
+  LambdaInvokePermissionServiceAction:
+    Type: AWS::Lambda::Permission
+    Condition: CaptureServiceActionEvents
+    Properties:
+      FunctionName: !GetAtt ForwarderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ECSServiceActionRule.Arn
+
+  # Rule 3: ECS Deployment State Change
+  ECSDeploymentStateRule:
+    Type: AWS::Events::Rule
+    Condition: CaptureDeploymentEvents
+    Properties:
+      Name: !Sub 'last9-ecs-deployment-${AWS::StackName}'
+      Description: Captures ECS deployment state changes and forwards them to Last9 via Lambda.
+      EventPattern: !If
+        - FilterByCluster
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Deployment State Change
+          detail:
+            clusterArn:
+              - !Ref ECSClusterArn
+        - source:
+            - aws.ecs
+          detail-type:
+            - ECS Deployment State Change
+      State: ENABLED
+      Targets:
+        - Id: Last9ForwarderLambda
+          Arn: !GetAtt ForwarderFunction.Arn
+
+  LambdaInvokePermissionDeployment:
+    Type: AWS::Lambda::Permission
+    Condition: CaptureDeploymentEvents
+    Properties:
+      FunctionName: !GetAtt ForwarderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ECSDeploymentStateRule.Arn
+
+Outputs:
+  LambdaFunctionName:
+    Description: Lambda function that forwards ECS lifecycle events to Last9
+    Value: !Ref ForwarderFunction
+
+  LambdaLogGroup:
+    Description: CloudWatch log group for forwarder Lambda (check here if events are missing)
+    Value: !Sub '/aws/lambda/last9-ecs-lifecycle-${AWS::StackName}'
+
+  CorrelationKey:
+    Description: >
+      Use this attribute to correlate ECS events with task metrics in Last9.
+      In Last9 logs: filter by event.name (e.g., "ecs.task.state_change")
+      In Last9 metrics: the same value appears as label aws_ecs_task_arn
+    Value: aws.ecs.task.arn
