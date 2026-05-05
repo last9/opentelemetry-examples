@@ -1,0 +1,41 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch/traces:
+    timeout: 1s
+
+  # Normalize spans with timestamps >900s off from now (past or future).
+  # Stores originals as attributes and rewrites start_time/end_time to Now()
+  # while preserving the span's duration.
+  transform/old_traces:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        conditions:
+          - (UnixSeconds(Now()) - UnixSeconds(start_time) > 900 or UnixSeconds(start_time) - UnixSeconds(Now()) > 900)
+        statements:
+          - set(attributes["l9.original_start_time"], UnixSeconds(start_time))
+          - set(attributes["l9.original_end_time"], UnixSeconds(end_time))
+          # preserve duration: shift end first, then start
+          - set(end_time, Now() + (end_time - start_time))
+          - set(start_time, Now())
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch/traces, transform/old_traces]
+      exporters: [debug]
