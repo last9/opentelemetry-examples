@@ -1,0 +1,26 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+/node_modules/
+
+# Build output
+/build/
+/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
