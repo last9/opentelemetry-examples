@@ -16,18 +16,22 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	agent "github.com/last9/go-agent"
 	"github.com/last9/go-agent/integrations/database"
-	gormtrace "github.com/last9/go-agent/instrumentation/gorm"
 	ginagent "github.com/last9/go-agent/instrumentation/gin"
+	gormtrace "github.com/last9/go-agent/instrumentation/gorm"
+	_ "github.com/lib/pq" // register the "postgres" driver for database.Open
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -86,10 +90,33 @@ func main() {
 	r.GET("/users/slow", slowQueryHandler(db))
 
 	addr := ":" + cmpEnv("PORT", "8080")
-	log.Printf("✓ Gin running on %s", addr)
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("gin: %v", err)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	go func() {
+		log.Printf("✓ Gin running on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("gin: %v", err)
+		}
+	}()
+
+	// Shut down on SIGINT/SIGTERM. Defers do not run when the process is
+	// killed by a signal, so we install a handler that drains the HTTP
+	// server and lets the deferred agent.Shutdown flush spans.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	log.Println("shutdown: draining server")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("shutdown: %v", err)
+	}
+	log.Println("shutdown: complete")
 }
 
 func cmpEnv(key, fallback string) string {
@@ -193,11 +220,11 @@ func deleteUserHandler(db *gorm.DB) gin.HandlerFunc {
 }
 
 // slowQueryHandler runs pg_sleep(0.5) so the slow_query event is emitted on
-// the resulting span, regardless of system load.
+// the resulting span, regardless of system load. We use Exec because pg_sleep
+// returns void and we don't care about the result.
 func slowQueryHandler(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var x int
-		if err := db.WithContext(c.Request.Context()).Raw("SELECT pg_sleep(0.5), 1").Scan(&x).Error; err != nil {
+		if err := db.WithContext(c.Request.Context()).Exec("SELECT pg_sleep(0.5)").Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/last9/go-agent v0.0.0
+	github.com/lib/pq v1.10.9
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.31.1
 )
