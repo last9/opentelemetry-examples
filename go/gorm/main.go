@@ -1,18 +1,18 @@
-// Example: GORM v2 instrumented with the last9/go-agent gormtrace plugin,
-// layered on top of the otelsql-wrapped database/sql driver.
+// Example: GORM v2 instrumented with the last9/go-agent gormtrace plugin
+// (which wraps gorm.io/plugin/opentelemetry), layered on top of the
+// otelsql-wrapped database/sql driver.
 //
 // Each HTTP request that hits a handler issues GORM operations and produces
 // a two-layer trace:
 //
 //	gin handler span
-//	  └─ User.Query / User.Create / ... (gormtrace span, ORM context)
+//	  └─ select users / insert users / ... (gormtrace span, ORM context)
 //	        └─ postgres.query (otelsql span, wire SQL)
 //
-// The example also demonstrates two go-agent specifics:
-//   - WithFrame: explicit per-call code namespace/function override that
-//     skips the runtime stack walk (useful for hot paths).
-//   - WithSlowQueryThreshold: marks spans whose duration exceeds the
-//     threshold with slow=true plus a slow_query event.
+// The example also demonstrates Last9-specific opt-ins:
+//   - WithQueryCounter: the list handler wraps its context with the query
+//     counter so spans carry db.query_count / db.query_fingerprint, which
+//     surface N+1 patterns in the Last9 trace UI.
 package main
 
 import (
@@ -71,10 +71,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("gorm open: %v", err)
 	}
-	gormtrace.MustInstall(db,
-		gormtrace.WithDBName("users"),
-		gormtrace.WithSlowQueryThreshold(200*time.Millisecond),
-	)
+	gormtrace.MustInstall(db)
 	log.Println("✓ gormtrace plugin installed")
 
 	if err := db.AutoMigrate(&User{}); err != nil {
@@ -128,10 +125,11 @@ func cmpEnv(key, fallback string) string {
 
 func listUsersHandler(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Demonstrate WithFrame: spans inside this handler will carry
-		// code.namespace=users.List instead of the stack-walked default.
-		ctx := gormtrace.WithFrame(c.Request.Context(), "users.List", "Run")
-		ctx = gormtrace.WithQueryCounter(ctx)
+		// Wrap the request context with a query counter; every GORM span
+		// that runs under ctx will carry db.query_count and
+		// db.query_fingerprint, so an N+1 pattern shows up as
+		// db.query_count >= 2 in the trace UI.
+		ctx := gormtrace.WithQueryCounter(c.Request.Context())
 
 		var users []User
 		if err := db.WithContext(ctx).Find(&users).Error; err != nil {
