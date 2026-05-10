@@ -1,0 +1,6 @@
+# Local build outputs
+/m
+/gorm
+*.exe
+*.test
+*.out
