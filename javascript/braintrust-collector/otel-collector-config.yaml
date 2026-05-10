@@ -1,0 +1,31 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  otlp_http/braintrust:
+    endpoint: https://api.braintrust.dev/otel
+    headers:
+      Authorization: "Bearer ${env:BRAINTRUST_API_KEY}"
+      x-bt-parent: "project_name:${env:BRAINTRUST_PROJECT}"
+
+  otlp_http/last9:
+    endpoint: "${env:LAST9_OTLP_ENDPOINT}"
+    headers:
+      Authorization: "${env:LAST9_OTLP_AUTH}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/braintrust, otlp_http/last9]
