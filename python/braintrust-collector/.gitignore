@@ -1,0 +1,28 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+/.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+/dist/
+/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

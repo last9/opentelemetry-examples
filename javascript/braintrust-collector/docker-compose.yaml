@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    environment:
+      - OTEL_SERVICE_NAME=braintrust-collector-example
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - DEPLOYMENT_ENV=local
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    command: ["--config", "/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    env_file:
+      - .env

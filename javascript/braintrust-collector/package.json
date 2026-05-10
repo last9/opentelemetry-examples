@@ -1,0 +1,19 @@
+{
+  "name": "braintrust-collector-example",
+  "version": "1.0.0",
+  "description": "Braintrust + Last9 dual-export OTel example (collector mode)",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.0",
+    "@opentelemetry/semantic-conventions": "^1.30.0",
+    "dotenv": "^16.4.5",
+    "openai": "^4.70.0"
+  }
+}
