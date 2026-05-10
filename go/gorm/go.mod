@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/gin-gonic/gin v1.10.0
-	github.com/last9/go-agent v0.0.0
+	github.com/last9/go-agent v0.3.0
 	github.com/lib/pq v1.10.9
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
@@ -82,7 +82,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/clickhouse v0.7.0 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
-	gorm.io/plugin/opentelemetry v0.1.16 // indirect
+	gorm.io/plugin/opentelemetry v0.1.16
 )
-
-replace github.com/last9/go-agent => ../../../go-agent

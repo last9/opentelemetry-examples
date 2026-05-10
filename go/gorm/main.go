@@ -1,18 +1,16 @@
-// Example: GORM v2 instrumented with the last9/go-agent gormtrace plugin
-// (which wraps gorm.io/plugin/opentelemetry), layered on top of the
-// otelsql-wrapped database/sql driver.
+// Example: GORM v2 instrumented with the official
+// gorm.io/plugin/opentelemetry tracing plugin, layered on top of the
+// last9/go-agent integrations/database SQL wrapper.
 //
 // Each HTTP request that hits a handler issues GORM operations and produces
 // a two-layer trace:
 //
 //	gin handler span
-//	  └─ select users / insert users / ... (gormtrace span, ORM context)
-//	        └─ postgres.query (otelsql span, wire SQL)
+//	  └─ select users / insert users / ...   (gorm.io/plugin/opentelemetry)
+//	        └─ postgres.query                 (integrations/database / otelsql)
 //
-// The example also demonstrates Last9-specific opt-ins:
-//   - WithQueryCounter: the list handler wraps its context with the query
-//     counter so spans carry db.query_count / db.query_fingerprint, which
-//     surface N+1 patterns in the Last9 trace UI.
+// last9/go-agent does not ship a GORM wrapper; the upstream plugin is the
+// recommended path. See the README in this directory for the rationale.
 package main
 
 import (
@@ -30,10 +28,10 @@ import (
 	agent "github.com/last9/go-agent"
 	"github.com/last9/go-agent/integrations/database"
 	ginagent "github.com/last9/go-agent/instrumentation/gin"
-	gormtrace "github.com/last9/go-agent/instrumentation/gorm"
 	_ "github.com/lib/pq" // register the "postgres" driver for database.Open
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/plugin/opentelemetry/tracing"
 )
 
 type User struct {
@@ -65,14 +63,17 @@ func main() {
 	defer sqlDB.Close()
 	log.Println("✓ otelsql wrapper opened")
 
-	// Layer 2: GORM plugin. Produces User.Query / User.Create etc. as the
-	// parent span, with the postgres.query span beneath it.
+	// Layer 2: official GORM tracing plugin. Produces "select users",
+	// "insert users", etc. as the parent span, with the postgres.query span
+	// from integrations/database beneath it.
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("gorm open: %v", err)
 	}
-	gormtrace.MustInstall(db)
-	log.Println("✓ gormtrace plugin installed")
+	if err := db.Use(tracing.NewPlugin()); err != nil {
+		log.Fatalf("install tracing plugin: %v", err)
+	}
+	log.Println("✓ gorm.io/plugin/opentelemetry installed")
 
 	if err := db.AutoMigrate(&User{}); err != nil {
 		log.Fatalf("automigrate: %v", err)
@@ -125,14 +126,8 @@ func cmpEnv(key, fallback string) string {
 
 func listUsersHandler(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Wrap the request context with a query counter; every GORM span
-		// that runs under ctx will carry db.query_count and
-		// db.query_fingerprint, so an N+1 pattern shows up as
-		// db.query_count >= 2 in the trace UI.
-		ctx := gormtrace.WithQueryCounter(c.Request.Context())
-
 		var users []User
-		if err := db.WithContext(ctx).Find(&users).Error; err != nil {
+		if err := db.WithContext(c.Request.Context()).Find(&users).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -217,9 +212,8 @@ func deleteUserHandler(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// slowQueryHandler runs pg_sleep(0.5) so the slow_query event is emitted on
-// the resulting span, regardless of system load. We use Exec because pg_sleep
-// returns void and we don't care about the result.
+// slowQueryHandler runs pg_sleep(0.5) so a slow query is observable in the
+// trace UI by span duration. We use Exec because pg_sleep returns void.
 func slowQueryHandler(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := db.WithContext(c.Request.Context()).Exec("SELECT pg_sleep(0.5)").Error; err != nil {

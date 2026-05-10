@@ -1,36 +1,44 @@
-# GORM with last9/go-agent
+# GORM with the official OpenTelemetry plugin + last9/go-agent SDK
 
-End-to-end example for [GORM v2](https://gorm.io) instrumented with the
-[`last9/go-agent`](https://github.com/last9/go-agent) `instrumentation/gorm`
-plugin. Every HTTP request produces a two-layer trace:
+End-to-end example for [GORM v2](https://gorm.io) instrumented with
+[`gorm.io/plugin/opentelemetry`](https://github.com/go-gorm/opentelemetry)
+(the official tracing plugin maintained by the GORM team) layered on top of
+[`last9/go-agent`](https://github.com/last9/go-agent)'s
+[`integrations/database`](https://github.com/last9/go-agent#database-support)
+SQL wrapper. Every HTTP request produces a two-layer trace:
 
 ```
 gin handler span
-  └─ User.Query / User.Create / ... (gormtrace span)
-        └─ postgres.query (otelsql span, wire SQL)
+  └─ select users / insert users / ...  (gorm.io/plugin/opentelemetry)
+        └─ postgres.query                (integrations/database / otelsql)
 ```
 
-The GORM span carries ORM-level context (model, operation, table, code frame,
-N+1 query count). The SQL span beneath it carries the wire statement. Together
-they answer both "what business operation is this" and "what SQL did it issue".
+`last9/go-agent` does not ship a GORM wrapper. The upstream plugin is current
+on OpenTelemetry semconv, ships connection-pool metrics by default, and is
+maintained alongside GORM itself — wrapping it would only duplicate work. See
+the [go-agent README](https://github.com/last9/go-agent#orm-support-gorm) for
+the full rationale.
 
 ## What this example demonstrates
 
-- `last9/go-agent/instrumentation/gorm` plugin installation
-- Two-layer wiring: `database.Open` (otelsql) → GORM postgres dialector
-- OTel semconv v1.30.0 attributes (`db.system.name`, `db.query.text`,
-  `db.operation.name`, `db.collection.name`)
-- `WithSlowQueryThreshold` flagging slow queries with `slow=true` and a
-  `slow_query` event
-- `WithFrame` overriding the runtime stack walk for a given handler
-- `WithQueryCounter` enabling per-trace `db.query_count` for N+1 detection
+- Wiring the upstream `gorm.io/plugin/opentelemetry/tracing` plugin
+- Two-layer trace: `database.Open` (otelsql) → GORM postgres dialector via
+  `postgres.Config{Conn: sqlDB}`
+- OTel semconv v1.30.0 attributes emitted by the upstream plugin
+  (`db.system.name`, `db.query.text`, `db.operation.name`,
+  `db.collection.name`, `db.query.summary`, `db.rows_affected`,
+  `server.address`)
+- Connection-pool gauges (`go.sql.connections_*`) emitted by the upstream
+  plugin
+- A `/users/slow` endpoint running `pg_sleep(0.5)` to surface a long
+  span by duration alone (no separate "slow=true" attribute — Last9 derives
+  slow queries from span duration server-side)
 
 ## Prerequisites
 
 - Docker + Docker Compose
 - A Last9 account with OTLP credentials
-- This repo cloned at `~/Projects/l9_otel_examples` and the go-agent repo
-  cloned at `~/Projects/go-agent` (the Dockerfile assumes that layout)
+- This repo cloned at `~/Projects/l9_otel_examples`
 
 ## Run
 
@@ -41,7 +49,7 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <your-token>"
 docker compose up --build
 ```
 
-Then exercise the API:
+Exercise the API:
 
 ```sh
 # Create
@@ -61,43 +69,33 @@ curl -X PUT localhost:8080/users/1 \
 # Delete
 curl -X DELETE localhost:8080/users/1
 
-# Slow query (pg_sleep) → triggers slow_query event
+# Slow query (pg_sleep) — visible in trace UI by duration
 curl localhost:8080/users/slow
 ```
 
 In the Last9 traces UI you should see:
 
-- A `GET /users` Gin span with a child `User.Query` GORM span and a
+- A `GET /users` Gin span with a child `select users` GORM span and a
   grandchild `postgres.query` SQL span.
-- `code.namespace=users.List` on the GORM span for `GET /users` (set via
-  `WithFrame`), the stack-walked default for the others.
-- A `slow=true` attribute and a `slow_query` event on the
-  `GET /users/slow` GORM span.
+- A long (~500ms) `select` span on the `GET /users/slow` request.
+- 404 lookups (`GET /users/9999`) keeping `STATUS_CODE_UNSET` — the upstream
+  plugin's default skip-list swallows `gorm.ErrRecordNotFound`.
 
 ## Endpoints
 
 | Method | Path             | What it does                                     |
 | ------ | ---------------- | ------------------------------------------------ |
-| GET    | `/users`         | List, with `WithFrame` + `WithQueryCounter`      |
+| GET    | `/users`         | List                                             |
 | POST   | `/users`         | Create                                           |
 | GET    | `/users/:id`     | Find one (returns 404 → no error span status)    |
 | PUT    | `/users/:id`     | Update                                           |
 | DELETE | `/users/:id`     | Delete                                           |
-| GET    | `/users/slow`    | Raw `pg_sleep(0.5)` to trip slow_query           |
-
-## Note on the replace directive
-
-While the `instrumentation/gorm` package is unreleased, `go.mod` carries a
-`replace github.com/last9/go-agent => ../../../go-agent` line so the example
-builds against the local branch. Once the package ships in a tagged go-agent
-release, drop the replace and pin to the version.
+| GET    | `/users/slow`    | Raw `pg_sleep(0.5)` — visible by span duration   |
 
 ## Local development without Docker
 
 ```sh
-# Start just postgres
 docker compose up postgres -d
-
-# Local replace path resolves to ~/Projects/go-agent
-go run .
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/users?sslmode=disable" \
+  go run .
 ```
