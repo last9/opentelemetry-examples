@@ -1,0 +1,40 @@
+receivers:
+  # Receive logs and metrics from Cline via gRPC and HTTP
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+
+  # Add organization-level resource attributes
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: "${env:DEPLOYMENT_ENV}"
+        action: upsert
+
+exporters:
+  otlp/last9:
+    endpoint: "${env:LAST9_OTLP_ENDPOINT}"
+    headers:
+      "Authorization": "${env:LAST9_OTLP_AUTH}"
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [otlp/last9, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [otlp/last9, debug]
