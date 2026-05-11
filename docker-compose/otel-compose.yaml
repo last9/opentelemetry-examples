@@ -18,8 +18,10 @@ services:
     user: "0" # root user to access docker stats
     environment:
       - LOGSPOUT=ignore
+      - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
+      - LAST9_OTLP_AUTH_HEADER=${LAST9_OTLP_AUTH_HEADER}
     networks:
-      - otel_network  
+      - otel_network
 
   logspout:
     image: "gliderlabs/logspout:v3.2.14"
