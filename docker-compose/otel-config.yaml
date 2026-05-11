@@ -1,0 +1,101 @@
+receivers:
+  docker_stats:
+    collection_interval: 60s
+    timeout: 30s
+    metrics:
+      container.cpu.usage.total:
+        enabled: true
+      container.cpu.throttling_data.periods:
+        enabled: true
+      container.cpu.throttling_data.throttled_periods:
+        enabled: true
+      container.cpu.utilization:
+        enabled: true
+      container.memory.usage.limit:
+        enabled: true
+      container.memory.usage.total:
+        enabled: true
+      container.memory.percent:
+        enabled: true
+      container.blockio.io_service_bytes_recursive:
+        enabled: true
+      container.network.io.usage.rx_bytes:
+        enabled: true
+      container.network.io.usage.tx_bytes:
+        enabled: true
+      container.network.io.usage.rx_dropped:
+        enabled: true
+      container.network.io.usage.tx_dropped:
+        enabled: true
+      container.network.io.usage.rx_errors:
+        enabled: true
+      container.network.io.usage.tx_errors:
+        enabled: true
+      container.network.io.usage.rx_packets:
+        enabled: true
+      container.network.io.usage.tx_packets:
+        enabled: true
+      container.pids.count:
+        enabled: true
+
+  tcplog/docker:
+    listen_address: "0.0.0.0:2255"
+    operators:
+      - type: syslog_parser
+        protocol: rfc5424
+
+processors:
+  # Set service.name on log records to the container name (set by logspout as
+  # the syslog appname field) so logs are filterable by service in Last9.
+  transform/docker_logs:
+    error_mode: ignore
+    flatten_data: true
+    log_statements:
+      - context: log
+        statements:
+          - set(log.body, log.attributes["message"])
+          - delete_key(log.attributes, "message")
+          - set(resource.attributes["service.name"], log.attributes["appname"])
+
+  # Promote container resource attributes to datapoint attributes so they are
+  # guaranteed to land as filterable labels on metrics in Last9. The
+  # docker_stats receiver emits container.name / container.image.name as
+  # resource attributes; this transform copies them onto each datapoint.
+  transform/container_labels:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(datapoint.attributes["container.name"], resource.attributes["container.name"])
+          - set(datapoint.attributes["container.image.name"], resource.attributes["container.image.name"])
+          - set(datapoint.attributes["container.image.tag"], resource.attributes["container.image.tag"])
+          - set(datapoint.attributes["container.id"], resource.attributes["container.id"])
+
+  batch:
+    send_batch_size: 8192
+    send_batch_max_size: 10000
+    timeout: 20s
+
+  resourcedetection:
+    detectors: [env, system, docker]
+    timeout: 5s
+
+exporters:
+  debug:
+    verbosity: basic
+  otlp/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    compression: gzip
+    headers:
+      Authorization: ${env:LAST9_OTLP_AUTH_HEADER}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [docker_stats]
+      processors: [resourcedetection, transform/container_labels, batch]
+      exporters: [otlp/last9]
+    logs:
+      receivers: [tcplog/docker]
+      processors: [resourcedetection, transform/docker_logs, batch]
+      exporters: [otlp/last9]
