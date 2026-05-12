@@ -44,6 +44,25 @@ receivers:
       - type: syslog_parser
         protocol: rfc5424
 
+  # Active-scrape example: pull Prometheus metrics from sidecars / agents
+  # running inside other containers. The collector container must share a
+  # Docker network with each scrape target (see otel-compose.yaml — it
+  # attaches to nginx_network for this reason). Add one job_name per app.
+  # Replace targets with `<container_name>:<port>` for your services.
+  prometheus/sample-apps:
+    config:
+      scrape_configs:
+        - job_name: nginx
+          scrape_interval: 30s
+          static_configs:
+            # nginx-prometheus-exporter shares the nginx-server network
+            # namespace (see nginx-compose.yaml), so it is reachable on
+            # nginx-server:9113 — there is no separate nginx-exporter DNS.
+            - targets:
+                - nginx-server:9113
+              labels:
+                service: nginx
+
   # Host (VM / bare-metal) metrics. When the collector runs inside a docker
   # container, root_path: /hostfs and the HOST_PROC / HOST_SYS / HOST_ETC env
   # vars (set in otel-compose.yaml) point each scraper at the host filesystem
@@ -171,7 +190,7 @@ exporters:
 service:
   pipelines:
     metrics:
-      receivers: [docker_stats, hostmetrics]
+      receivers: [docker_stats, hostmetrics, prometheus/sample-apps]
       processors:
         - resourcedetection/system
         - resourcedetection/cloud

@@ -33,6 +33,13 @@ services:
       - HOST_ETC=/hostfs/etc
     networks:
       - otel_network
+      # Attach to each sample app's network so the prometheus receiver can
+      # actively scrape sidecar exporters running inside those containers.
+      # Required only for active-scrape receivers (prometheus, redis,
+      # postgresql, httpcheck, ...) — docker_stats + logspout do not need
+      # this because they read via the Docker socket.
+      - nginx_network
+      - apache_network
 
   logspout:
     image: "gliderlabs/logspout:v3.2.14"
