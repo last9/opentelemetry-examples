@@ -44,6 +44,74 @@ receivers:
       - type: syslog_parser
         protocol: rfc5424
 
+  # Active-scrape example: pull Prometheus metrics from sidecars / agents
+  # running inside other containers. The collector container must share a
+  # Docker network with each scrape target (see otel-compose.yaml — it
+  # attaches to nginx_network for this reason). Add one job_name per app.
+  # Replace targets with `<container_name>:<port>` for your services.
+  prometheus/sample-apps:
+    config:
+      scrape_configs:
+        - job_name: nginx
+          scrape_interval: 30s
+          static_configs:
+            # nginx-prometheus-exporter shares the nginx-server network
+            # namespace (see nginx-compose.yaml), so it is reachable on
+            # nginx-server:9113 — there is no separate nginx-exporter DNS.
+            - targets:
+                - nginx-server:9113
+              labels:
+                service: nginx
+
+  # Host (VM / bare-metal) metrics. When the collector runs inside a docker
+  # container, root_path: /hostfs and the HOST_PROC / HOST_SYS / HOST_ETC env
+  # vars (set in otel-compose.yaml) point each scraper at the host filesystem
+  # rather than the collector container's own /proc.
+  hostmetrics:
+    collection_interval: 60s
+    root_path: /hostfs
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.logical.count:
+            enabled: true
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+          system.memory.limit:
+            enabled: true
+      load:
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+        exclude_mount_points:
+          mount_points:
+            - /hostfs/sys/*
+            - /hostfs/proc/*
+            - /var/lib/docker/*
+            - /hostfs/root/var/lib/docker/*
+          match_type: regexp
+      network:
+      paging:
+      processes:
+      # mute_process_*_error: true silences the routine "permission denied"
+      # noise for kernel threads and short-lived processes whose
+      # /proc/<pid>/{exe,io,cmdline} entries can't be read.
+      process:
+        mute_process_user_error: true
+        mute_process_io_error: true
+        mute_process_exe_error: true
+        metrics:
+          process.cpu.utilization:
+            enabled: true
+          process.memory.utilization:
+            enabled: true
+
 processors:
   # Set service.name on log records to the container name (set by logspout as
   # the syslog appname field) so logs are filterable by service in Last9.
@@ -71,13 +139,43 @@ processors:
           - set(datapoint.attributes["container.image.tag"], resource.attributes["container.image.tag"])
           - set(datapoint.attributes["container.id"], resource.attributes["container.id"])
 
+  # Promote host + cloud resource attributes onto each host metric datapoint
+  # so they are filterable as labels in Last9. The resourcedetection
+  # processor sets these as resource attributes; without this transform they
+  # would not appear as labels on the metric series.
+  transform/hostmetrics:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(datapoint.attributes["host.name"], resource.attributes["host.name"])
+          - set(datapoint.attributes["host.type"], resource.attributes["host.type"])
+          - set(datapoint.attributes["host.image.id"], resource.attributes["host.image.id"])
+          - set(datapoint.attributes["cloud.provider"], resource.attributes["cloud.provider"])
+          - set(datapoint.attributes["cloud.platform"], resource.attributes["cloud.platform"])
+          - set(datapoint.attributes["cloud.region"], resource.attributes["cloud.region"])
+          - set(datapoint.attributes["cloud.account.id"], resource.attributes["cloud.account.id"])
+          - set(datapoint.attributes["cloud.availability_zone"], resource.attributes["cloud.availability_zone"])
+
   batch:
     send_batch_size: 8192
     send_batch_max_size: 10000
     timeout: 20s
 
-  resourcedetection:
+  resourcedetection/system:
     detectors: [env, system, docker]
+    system:
+      hostname_sources: ["os"]
+    timeout: 5s
+
+  # Cloud-specific VM detectors. Each detector is a no-op on hosts that
+  # aren't on the matching cloud, so it is safe to list all three — only the
+  # one that matches the runtime environment will populate cloud.* labels.
+  # ECS / EKS / AKS detectors are deliberately omitted because they require
+  # runtime context (Kubernetes service env vars / ECS task metadata) that
+  # is not present in a plain docker-on-VM setup.
+  resourcedetection/cloud:
+    detectors: [ec2, gcp, azure]
     timeout: 5s
 
 exporters:
@@ -92,10 +190,19 @@ exporters:
 service:
   pipelines:
     metrics:
-      receivers: [docker_stats]
-      processors: [resourcedetection, transform/container_labels, batch]
+      receivers: [docker_stats, hostmetrics, prometheus/sample-apps]
+      processors:
+        - resourcedetection/system
+        - resourcedetection/cloud
+        - transform/container_labels
+        - transform/hostmetrics
+        - batch
       exporters: [otlp/last9]
     logs:
       receivers: [tcplog/docker]
-      processors: [resourcedetection, transform/docker_logs, batch]
+      processors:
+        - resourcedetection/system
+        - resourcedetection/cloud
+        - transform/docker_logs
+        - batch
       exporters: [otlp/last9]

@@ -9,8 +9,24 @@ services:
       - "collect-logs=true"
     volumes:
       - nginx_logs:/var/log/nginx
+      - ./nginx-default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - nginx_network
+
+  # Sidecar exporter that converts nginx's stub_status endpoint into Prometheus
+  # format on :9113. Shares nginx's network namespace so it can scrape
+  # http://localhost/stub_status (which the nginx config restricts to loopback).
+  # The OTel collector scrapes this on nginx-server:9113 via the shared
+  # nginx_network (see otel-compose.yaml + otel-config.yaml).
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4
+    container_name: nginx-exporter
+    command:
+      - "--nginx.scrape-uri=http://localhost/stub_status"
+    network_mode: "service:nginx"
+    depends_on:
+      - nginx
+    restart: unless-stopped
 
 networks:
   nginx_network:

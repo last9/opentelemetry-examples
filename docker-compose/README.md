@@ -83,6 +83,33 @@ The OpenTelemetry Collector is configured to collect various metrics:
 - Block I/O information
 - Container process information
 
+### Active Prometheus scrape (per-app metrics)
+
+`otel-config.yaml` also includes a `prometheus/sample-apps` receiver that
+scrapes the `nginx-prometheus-exporter` sidecar in the `nginx-compose.yaml`
+stack at `nginx-exporter:9113`. This produces metrics like
+`nginx_http_requests_total`, `nginx_connections_active`, etc. in Last9 with
+a `service="nginx"` label.
+
+The collector container is attached to `nginx_network` (and `apache_network`)
+in `otel-compose.yaml` so it can resolve the exporter's hostname over the
+shared Docker network.
+
+To add scraping for your own app:
+
+1. Expose Prometheus metrics from your container (typically on its own
+   port, e.g. `livekit-server:6789/metrics`).
+2. Add the app's network as `external: true` under `networks:` in
+   `otel-compose.yaml`, and list it under the `otel-collector` service.
+3. Add a `scrape_configs` entry under `prometheus/sample-apps` pointing at
+   `<container_name>:<port>`, with a `service` label.
+4. `docker compose -f otel-compose.yaml up -d` to restart the collector.
+
+Unlike `docker_stats` and `logspout` (which read the Docker socket and need
+no network sharing), active-scrape receivers (`prometheus`, `redis`,
+`postgresql`, `httpcheck`, ...) **must** share a Docker network with the
+container they scrape.
+
 ### Log Collection
 
 Container logs are collected using Logspout and sent to OpenTelemetry Collector for processing before being exported to Last9.
