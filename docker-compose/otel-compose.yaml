@@ -8,18 +8,29 @@ services:
         "--feature-gates=transform.flatten.logs"
       ]
     volumes:
-      - ./otel-config.yaml:/etc/otel-collector-config.yaml
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./otel-config.yaml:/etc/otel-collector-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - nginx_logs:/var/log/nginx
+      # Host filesystem mounts so the hostmetrics receiver can read the VM's
+      # CPU / memory / disk / network / process stats rather than the
+      # collector container's own (containerized) view.
+      - /proc:/hostfs/proc:ro
+      - /sys:/hostfs/sys:ro
+      - /etc/os-release:/hostfs/etc/os-release:ro
+      - /:/hostfs/root:ro,rslave
     ports:
       - "4317:4317" # OTLP gRPC receiver
       - "4318:4318" # OTLP HTTP receiver
     restart: on-failure
-    user: "0" # root user to access docker stats
+    user: "0" # root user to access docker stats + /proc
+    pid: host # required so the process scraper can see host PIDs
     environment:
       - LOGSPOUT=ignore
       - LAST9_OTLP_ENDPOINT=${LAST9_OTLP_ENDPOINT}
       - LAST9_OTLP_AUTH_HEADER=${LAST9_OTLP_AUTH_HEADER}
+      - HOST_PROC=/hostfs/proc
+      - HOST_SYS=/hostfs/sys
+      - HOST_ETC=/hostfs/etc
     networks:
       - otel_network
 
