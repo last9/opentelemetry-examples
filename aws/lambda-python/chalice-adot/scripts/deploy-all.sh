@@ -12,6 +12,7 @@ if [[ -f "${ROOT}/.env" ]]; then
 fi
 
 : "${LAST9_OTLP_AUTH:?LAST9_OTLP_AUTH not set (put it in .env)}"
+: "${LAST9_OTLP_ENDPOINT:?LAST9_OTLP_ENDPOINT not set (put it in .env — find in Last9 UI under Integrations -> OpenTelemetry)}"
 : "${LAMBDA_EXEC_ROLE_ARN:?LAMBDA_EXEC_ROLE_ARN not set (existing IAM role with AWSLambdaBasicExecutionRole; put it in .env)}"
 export AWS_REGION="${AWS_REGION:-ap-south-1}"
 
@@ -48,6 +49,7 @@ for variant in "${VARIANTS[@]}"; do
   sed \
     -e "s#__LAMBDA_EXEC_ROLE_ARN__#${LAMBDA_EXEC_ROLE_ARN}#g" \
     -e "s#__LAST9_OTLP_AUTH__#${LAST9_OTLP_AUTH}#g" \
+    -e "s#__LAST9_OTLP_ENDPOINT__#${LAST9_OTLP_ENDPOINT}#g" \
     -e "s#__DEPS_LAYER_ARN__#${DEPS_LAYER_ARN:-arn:aws:lambda:placeholder:0:layer:none:0}#g" \
     "${CONFIG_IN}" > "${CONFIG_OUT}"
 

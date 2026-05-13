@@ -17,7 +17,7 @@
         "OTEL_SERVICE_NAME": "chalice-adot-e",
         "OTEL_SERVICE_NAMESPACE": "chalice-adot",
         "OTEL_DEPLOYMENT_ENV": "ci",
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-aps1.last9.io",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "__LAST9_OTLP_ENDPOINT__",
         "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
         "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=__LAST9_OTLP_AUTH__"
       }
