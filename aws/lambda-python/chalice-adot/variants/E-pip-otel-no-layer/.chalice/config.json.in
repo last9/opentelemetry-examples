@@ -1,0 +1,26 @@
+{
+  "version": "2.0",
+  "app_name": "chalice-adot-e",
+  "stages": {
+    "dev": {
+      "api_gateway_stage": "dev",
+      "lambda_memory_size": 512,
+      "lambda_timeout": 30,
+      "manage_iam_role": false,
+      "iam_role_arn": "__LAMBDA_EXEC_ROLE_ARN__",
+      "tags": {
+        "Project": "chalice-adot",
+        "chalice-adot-variant": "E"
+      },
+      "layers": [],
+      "environment_variables": {
+        "OTEL_SERVICE_NAME": "chalice-adot-e",
+        "OTEL_SERVICE_NAMESPACE": "chalice-adot",
+        "OTEL_DEPLOYMENT_ENV": "ci",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "__LAST9_OTLP_ENDPOINT__",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=__LAST9_OTLP_AUTH__"
+      }
+    }
+  }
+}

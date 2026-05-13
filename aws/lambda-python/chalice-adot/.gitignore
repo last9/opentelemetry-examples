@@ -1,0 +1,31 @@
+# Environment / secrets
+.env
+.env.local
+
+# Chalice state (never commit)
+**/.chalice/deployments/
+**/.chalice/deployed/
+
+# Generated from template (may contain substituted secrets)
+**/.chalice/collector-config.yaml
+**/chalicelib/collector-config.yaml
+
+# All variants: .chalice/config.json is generated from config.json.in at deploy
+# time via scripts/deploy-all.sh. The generated file embeds LAMBDA_EXEC_ROLE_ARN,
+# LAST9_OTLP_AUTH, and (variant D) DEPS_LAYER_ARN — never commit.
+**/.chalice/config.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Verify script artifacts
+/tmp/chalice-adot-*.zip

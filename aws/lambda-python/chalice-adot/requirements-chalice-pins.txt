@@ -1,0 +1,5 @@
+# Optional: pin Chalice for reproducing a customer version side-by-side with latest.
+# Usage: pip install -r requirements-chalice-pins.txt -r variants/A-automatic-layer-true/requirements.txt
+#
+# Example (replace with customer's pin):
+# chalice==1.32.0
