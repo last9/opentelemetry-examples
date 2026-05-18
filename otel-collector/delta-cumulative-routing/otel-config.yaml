@@ -1,0 +1,98 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Drop cumulative metrics so only delta passes through this pipeline
+  filter/keep_delta:
+    error_mode: ignore
+    metrics:
+      metric:
+        - 'aggregation_temporality == AGGREGATION_TEMPORALITY_CUMULATIVE'
+
+  # Drop delta metrics so only cumulative passes through this pipeline
+  filter/keep_cumulative:
+    error_mode: ignore
+    metrics:
+      metric:
+        - 'aggregation_temporality == AGGREGATION_TEMPORALITY_DELTA'
+
+  # Adds host.name to resource attributes from the OS hostname.
+  # Required so transform/setshardkey can read resource.attributes["host.name"].
+  resourcedetection:
+    detectors: [system]
+    system:
+      hostname_sources: [os]
+    override: false
+
+  # Stamps collector_id on delta metrics only — needed because each collector
+  # replica independently accumulates deltas from 0; without isolation the
+  # same series gets conflicting values from different pods.
+  transform/setshardkey:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["collector_id"], resource.attributes["host.name"])
+
+  # Converts delta to cumulative in-memory per pod.
+  # Safe here because setshardkey already isolates each pod's series.
+  deltatocumulative:
+    max_stale: 5m
+    max_streams: 10000
+
+  # Renames delta metric to expose the broken (no shard key) variant alongside correct one.
+  # Applied AFTER deltatocumulative so d2c state is keyed on original name.
+  transform/rename_broken:
+    metric_statements:
+      - context: metric
+        statements:
+          - set(name, "demo_requests_delta_broken_total") where name == "demo_requests_delta_total"
+
+  batch:
+    send_batch_size: 1000
+    timeout: 5s
+
+exporters:
+  prometheusremotewrite:
+    endpoint: http://victoriametrics:8428/api/v1/write
+    tls:
+      insecure: true
+
+  # Last9 OTLP exporter — for e2e verification via Last9 MCP
+  otlphttp/last9:
+    endpoint: ${env:LAST9_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LAST9_OTLP_AUTH_HEADER}
+
+  # Debug exporter — shows what each pipeline actually processes
+  debug:
+    verbosity: basic
+
+service:
+  telemetry:
+    logs:
+      level: info
+
+  pipelines:
+    # Delta path: filter → detect host.name → stamp collector_id → d2c → write
+    # Queries must use sum without(collector_id) to aggregate across pods
+    metrics/delta:
+      receivers: [otlp]
+      processors: [filter/keep_delta, resourcedetection, transform/setshardkey, deltatocumulative, batch]
+      exporters: [prometheusremotewrite, otlphttp/last9, debug]
+
+    # Broken delta path: no setshardkey → both pods write same series → last-write-wins in VM
+    # Use demo_requests_delta_broken_total to observe the incorrect value vs correct sum
+    metrics/delta_broken:
+      receivers: [otlp]
+      processors: [filter/keep_delta, resourcedetection, deltatocumulative, transform/rename_broken, batch]
+      exporters: [prometheusremotewrite, otlphttp/last9, debug]
+
+    # Cumulative path: no collector_id, no d2c — SDK owns the counter
+    # Queries work as-is; no dedup label needed
+    metrics/cumulative:
+      receivers: [otlp]
+      processors: [filter/keep_cumulative, batch]
+      exporters: [prometheusremotewrite, otlphttp/last9, debug]
