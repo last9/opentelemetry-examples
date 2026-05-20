@@ -1,6 +1,6 @@
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.118.0
+    image: otel/opentelemetry-collector-contrib:0.144.0
     container_name: otel-collector
     command:
       [
@@ -14,10 +14,7 @@ services:
       # Host filesystem mounts so the hostmetrics receiver can read the VM's
       # CPU / memory / disk / network / process stats rather than the
       # collector container's own (containerized) view.
-      - /proc:/hostfs/proc:ro
-      - /sys:/hostfs/sys:ro
-      - /etc/os-release:/hostfs/etc/os-release:ro
-      - /:/hostfs/root:ro,rslave
+      - /:/hostfs:ro,rslave
     ports:
       - "4317:4317" # OTLP gRPC receiver
       - "4318:4318" # OTLP HTTP receiver
@@ -40,6 +37,11 @@ services:
       # this because they read via the Docker socket.
       - nginx_network
       - apache_network
+      # Note: bridge networking is required here for active prometheus scraping
+      # of named docker networks. For scraping host-networked containers
+      # (network_mode: host), switch to network_mode: host on this service,
+      # remove the networks: block, use localhost:<port> as scrape target,
+      # and change logspout command to syslog+tcp://localhost:2255.
 
   logspout:
     image: "gliderlabs/logspout:v3.2.14"
