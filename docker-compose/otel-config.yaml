@@ -89,19 +89,40 @@ receivers:
         metrics:
           system.filesystem.utilization:
             enabled: true
+        exclude_fs_types:
+          fs_types:
+            - squashfs
+            - tmpfs
+            - devtmpfs
+            - overlay
+            - nsfs
+            - autofs
+            - cgroup
+            - cgroup2
+            - proc
+            - sysfs
+          match_type: strict
         exclude_mount_points:
           mount_points:
-            - /hostfs/sys/*
-            - /hostfs/proc/*
-            - /var/lib/docker/*
-            - /hostfs/root/var/lib/docker/*
+            - /hostfs/sys/.*
+            - /hostfs/proc/.*
+            - /hostfs/dev/.*
+            - /hostfs/run/.*
+            - /hostfs/var/lib/docker/.*
+            - /hostfs/snap/.*
+            - /hostfs/boot.*
+            - /var/lib/docker/.*
           match_type: regexp
       network:
       paging:
       processes:
-      # mute_process_*_error: true silences the routine "permission denied"
-      # noise for kernel threads and short-lived processes whose
-      # /proc/<pid>/{exe,io,cmdline} entries can't be read.
+      # mute_process_*_error: true silences "permission denied" noise for
+      # kernel threads and short-lived processes. Note: these flags do NOT
+      # cover TOCTOU races — if a process exits between PID discovery and
+      # stat read, /proc/<pid>/stat returns ENOENT and is still logged as
+      # an error. On busy hosts with many short-lived processes (kworkers,
+      # sshd child processes), remove the process: scraper entirely and rely
+      # on docker_stats for per-container granularity instead.
       process:
         mute_process_user_error: true
         mute_process_io_error: true
