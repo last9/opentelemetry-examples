@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://collector:4318}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-resteasy-agent-test}
+      OTEL_TRACES_EXPORTER: otlp
+      VERTX_OTEL_BODY_CAPTURE_ENABLED: ${VERTX_OTEL_BODY_CAPTURE_ENABLED:-true}
+      VERTX_OTEL_BODY_CAPTURE_ERROR_ONLY: ${VERTX_OTEL_BODY_CAPTURE_ERROR_ONLY:-false}
+      PORT: "8080"
+    depends_on:
+      - collector
+
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.137.0
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    command: ["--config", "/etc/otel/config.yaml"]
+    ports:
+      - "4318:4318"

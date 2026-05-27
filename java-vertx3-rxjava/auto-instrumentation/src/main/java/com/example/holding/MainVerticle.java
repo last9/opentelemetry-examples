@@ -197,7 +197,11 @@ public class MainVerticle extends AbstractVerticle {
         // Complex multi-system endpoint — DB + Aerospike + Kafka + outbound HTTP
         router.get("/v1/portfolio-full/:userId").handler(this::handleFullPortfolio);
 
-        // Exception scenario endpoints
+        // Exception scenario endpoints — verify exception events on SERVER spans in the collector
+        router.get("/v1/error/fail").handler(ctx ->
+                ctx.fail(new RuntimeException("Simulated failure via ctx.fail()")));
+        router.get("/v1/error/direct-500").handler(ctx ->
+                ctx.response().setStatusCode(500).end("error without throwable"));
         router.get("/v1/error/http").handler(this::handleErrorHttp);
         router.get("/v1/error/try-catch").handler(this::handleErrorTryCatch);
 
