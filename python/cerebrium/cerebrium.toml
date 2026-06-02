@@ -1,0 +1,51 @@
+# Cerebrium app with OpenTelemetry auto-instrumentation exporting to Last9.
+# main.py contains zero OTel code — opentelemetry-instrument in the entrypoint
+# does all the patching at process startup.
+
+[cerebrium.deployment]
+name = "otel-autoinstrument-last9"
+python_version = "3.12"
+include = ["*"]
+exclude = [".*", "__pycache__", "*.pyc"]
+
+# Install all available instrumentors after pip deps are resolved.
+# opentelemetry-bootstrap detects every supported library in the env and
+# pins the matching instrumentation package for opentelemetry-instrument.
+shell_commands = [
+  "opentelemetry-bootstrap --action=install",
+]
+
+[cerebrium.hardware]
+cpu = 1
+memory = 2
+compute = "CPU"
+
+[cerebrium.scaling]
+min_replicas = 0
+max_replicas = 1
+cooldown = 60
+
+[cerebrium.dependencies.pip]
+fastapi = "*"
+uvicorn = "*"
+requests = "*"
+httpx = "*"
+# Pin OTel core + semconv together. Without this, pip can resolve a newer
+# exporter-otlp-proto-common (which imports semconv._incubating) against an
+# older semantic-conventions wheel — startup fails with ModuleNotFoundError.
+opentelemetry-distro = ">=0.51b0"
+opentelemetry-exporter-otlp = ">=1.30.0"
+opentelemetry-semantic-conventions = ">=0.51b0"
+
+[cerebrium.runtime.custom]
+port = 8000
+healthcheck_endpoint = "/health"
+readycheck_endpoint = "/ready"
+# Prepending opentelemetry-instrument is the auto-instrumentation hook.
+# It sets PYTHONPATH to the OTel sitecustomize, then execs uvicorn.
+entrypoint = [
+  "opentelemetry-instrument",
+  "uvicorn", "main:app",
+  "--host", "0.0.0.0",
+  "--port", "8000",
+]
