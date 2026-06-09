@@ -80,4 +80,33 @@ class InheritedScopesTest < ActionDispatch::IntegrationTest
     assert_equal 200, response.status
     assert_equal count, SecurityAssessment.count, "repeated hits should not duplicate rows"
   end
+
+  test "span_name_formatter rewrites the inherited-scope DB span to Model.scope" do
+    get "/api/v1/demo/inherited_scopes"
+
+    names = SPAN_EXPORTER.finished_spans.map(&:name)
+    assert names.any? { |n| n.start_with?("SecurityAssessment.") },
+           "expected a DB span renamed to SecurityAssessment.<scope>, got #{names.inspect}"
+  end
+
+  test "span_name_formatter does not rename non-DB spans" do
+    get "/api/v1/demo/inherited_scopes"
+
+    http_span = SPAN_EXPORTER.finished_spans.find { |s| s.attributes.key?("http.method") }
+    assert http_span
+    refute http_span.name.start_with?("SecurityAssessment", "Assessment"),
+           "HTTP span should not be renamed by the DB-only formatter"
+  end
+
+  # Requires rails-otel-context 0.9.11+ (aggregate-query scope tagging).
+  test "aggregate query on an inherited scope is scope-tagged" do
+    get "/api/v1/demo/inherited_scopes" # seed rows + ensure gem installed
+    SPAN_EXPORTER.reset
+
+    SecurityAssessment.unresolved.count
+
+    span = scope_spans_for("SecurityAssessment").first
+    assert span, "expected a scope-tagged SecurityAssessment span for an aggregate query"
+    assert_equal "unresolved", span.attributes["code.activerecord.scope"]
+  end
 end
