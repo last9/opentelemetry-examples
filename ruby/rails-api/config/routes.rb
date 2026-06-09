@@ -60,6 +60,7 @@ Rails.application.routes.draw do
       get 'demo/complex_queries',  to: 'demo#complex_queries'
       get 'demo/otel_v8_features', to: 'demo#otel_v8_features'
       get 'demo/redis',            to: 'demo#redis_demo'
+      get 'demo/inherited_scopes', to: 'demo#inherited_scopes'
 
       # Public endpoints - NO service.namespace attribute
       scope :public do

@@ -198,6 +198,42 @@ module Api
 
         render json: { ok: true, results: results }
       end
+
+      # GET /api/v1/demo/inherited_scopes
+      #
+      # Exercises inherited scopes on an abstract-base STI model. Assessment's
+      # default_scope calls an abstract class method (`category`), implemented by
+      # each subclass. Calling an inherited named scope on a subclass runs the scope
+      # body with self = the subclass, so `category` resolves on the subclass and the
+      # DB span is scope-tagged.
+      #
+      #  FEATURE                     ATTRIBUTE TO CHECK (in your OTel backend)
+      #  ─────────────────────────────────────────────────────────────────────
+      #  Inherited scope tracking    code.activerecord.scope: "unresolved" / "critical"
+      #  Subclass receiver           code.activerecord.model:  "SecurityAssessment"
+      #  Span rename                 span.name: "SecurityAssessment.unresolved"
+      #                              (via span_name_formatter)
+      # ─────────────────────────────────────────────────────────────────────
+      def inherited_scopes
+        # Self-contained, idempotent seed. find_or_create_by! is a non-scope class
+        # method; the scope-tracking enrichment is carried by the named-scope chain
+        # below.
+        SecurityAssessment.find_or_create_by!(title: 'unpatched CVE')    { |a| a.state = 'blocked' }
+        SecurityAssessment.find_or_create_by!(title: 'resolved finding') { |a| a.state = 'open'; a.resolved_at = Time.current }
+        ComplianceAssessment.find_or_create_by!(title: 'SOC2 gap')       { |a| a.state = 'suspended' }
+
+        # The failing call chain — inherited named scopes on a subclass.
+        critical_open_security = SecurityAssessment.unresolved.critical.to_a
+        open_compliance        = ComplianceAssessment.unresolved.to_a
+
+        render json: {
+          ok: true,
+          security_kind:   SecurityAssessment.category,   # => "security"
+          compliance_kind: ComplianceAssessment.category, # => "compliance"
+          critical_unresolved_security: critical_open_security.map(&:title),
+          unresolved_compliance_count:  open_compliance.size
+        }
+      end
     end
   end
 end

@@ -41,8 +41,18 @@ bin/rails server
 - POST `/api/v1/users` - Create a new user
 - PUT `/api/v1/users/:id` - Update a user
 - DELETE `/api/v1/users/:id` - Delete a user
+- GET `/api/v1/demo/inherited_scopes` - Inherited scopes on an abstract-base STI model
 
 7. Sign in to [Last9 Dashboard](https://app.last9.io) and visit the APM
    dashboard to see the traces and metrics in action.
 
 ![Traces](./traces.png)
+
+## Inherited scopes on an abstract base class
+
+`GET /api/v1/demo/inherited_scopes` calls inherited named scopes on an STI
+subclass (`SecurityAssessment.unresolved.critical`) whose abstract base uses
+`default_scope`. On the DB spans for this trace, check that
+`code.activerecord.scope` is `unresolved` / `critical` and
+`code.activerecord.model` is `SecurityAssessment` (the subclass). Requires
+`rails-otel-context` 0.9.11+.

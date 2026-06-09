@@ -17,6 +17,13 @@ module Api
       def echo
         render json: { params: params.to_unsafe_h.except(:controller, :action) }
       end
+
+      # POST /api/v1/public/echo
+      # Echoes the raw request body back so the body-capture middleware has a
+      # request/response payload to record.
+      def echo_post
+        render json: { echo: request.raw_post }
+      end
     end
   end
 end

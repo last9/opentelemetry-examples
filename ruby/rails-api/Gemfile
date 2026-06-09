@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-ruby "3.3.3"
+ruby "3.4.8"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8.0"
@@ -11,8 +11,13 @@ gem "sqlite3", "~> 1.4"
 # Trilogy MySQL client (Rails 7.1+ built-in support)
 gem "trilogy"
 
+# csv left Ruby's default gems in 3.4; rails/all still requires it
+gem "csv"
+
 # Rails OTel context enrichment (source location, slow query tracking)
-gem "rails-otel-context", "~> 0.9.10", require: false
+# Temporary: pinned to the fix branch for pre-release verification; switch back to
+# the published version once it ships.
+gem "rails-otel-context", github: "last9/rails-otel-context", branch: "fix-inherited-scope-receiver", require: false
 
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", "~> 8.0"
