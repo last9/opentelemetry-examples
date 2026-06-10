@@ -34,6 +34,11 @@ const ANDROID_MAVEN_URL = 'https://cdn.last9.io/rum-sdk/android/maven/';
 const IOS_PODSPEC_URL =
   'https://cdn.last9.io/rum-sdk/ios/builds/0.7.1/Last9RUM.podspec';
 
+// Sentinel comments written alongside each injected entry. Idempotency is
+// keyed off these markers (not the URLs) so re-running prebuild is a no-op.
+const ANDROID_MARKER = '// last9-rum: Maven repo (managed by withLast9Rum)';
+const IOS_MARKER = '# last9-rum: pod (managed by withLast9Rum)';
+
 /**
  * Inject the Last9 Maven repo into the root android/build.gradle
  * `allprojects { repositories { ... } }` block (idempotent).
@@ -42,12 +47,15 @@ function withLast9AndroidMaven(config) {
   return withProjectBuildGradle(config, (cfg) => {
     let contents = cfg.modResults.contents;
 
-    // Already present — nothing to do.
-    if (contents.includes(ANDROID_MAVEN_URL)) {
+    // Already present — nothing to do (keyed off our sentinel marker, not the
+    // URL, so the check isn't an incomplete URL substring match).
+    if (contents.includes(ANDROID_MARKER)) {
       return cfg;
     }
 
-    const mavenLine = `        maven { url '${ANDROID_MAVEN_URL}' }`;
+    const mavenLine =
+      `        ${ANDROID_MARKER}\n` +
+      `        maven { url '${ANDROID_MAVEN_URL}' }`;
 
     // Insert just inside the `allprojects { repositories {` block.
     const repositoriesAnchor = /allprojects\s*{[\s\S]*?repositories\s*{/;
@@ -88,17 +96,17 @@ function withLast9IosPod(config) {
 
       let contents = fs.readFileSync(podfilePath, 'utf-8');
 
-      // Already present — nothing to do. We check for the explicit CDN
-      // podspec URL rather than the bare "Last9RUM" string: the autolinked
-      // Last9RumReactNative podspec already *depends on* `Last9RUM`, so that
-      // word is in the Podfile regardless. Only our explicit
-      // `:podspec => <CDN url>` line tells CocoaPods where to find it.
-      if (contents.includes(IOS_PODSPEC_URL)) {
+      // Already present — nothing to do. We key off our sentinel marker rather
+      // than "Last9RUM" (the autolinked Last9RumReactNative podspec already
+      // depends on `Last9RUM`, so that word is in the Podfile regardless) and
+      // rather than the URL (which would be an incomplete URL substring check).
+      if (contents.includes(IOS_MARKER)) {
         return cfg;
       }
 
       const podLine = [
         '',
+        `  ${IOS_MARKER}`,
         "  # Last9RUM is hosted on Last9's CDN, not the public CocoaPods trunk,",
         '  # so CocoaPods must be pointed at the explicit numbered podspec URL.',
         '  # Keep this version in sync with the @last9/rum-react-native version',
