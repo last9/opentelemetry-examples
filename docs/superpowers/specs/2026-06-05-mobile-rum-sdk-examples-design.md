@@ -110,7 +110,8 @@ git-ignored. Avoids committing a bulky, Xcode-version-bound `pbxproj`.
 Subagents generate **real** native scaffolds using official tooling so the apps
 are genuinely runnable:
 
-- Android — full Gradle project including the Gradle wrapper.
+- Android — full Gradle project including the Gradle wrapper scripts (the
+  binary `gradle-wrapper.jar` is not committed; `gradle wrapper` regenerates it).
 - iOS — XcodeGen `project.yml` + SwiftUI sources + `Podfile`.
 - Flutter — `flutter create` scaffold, then RUM wiring + screens.
 - React Native — React Native community CLI scaffold, then RUM wiring + screens.
