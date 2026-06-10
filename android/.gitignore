@@ -1,0 +1,27 @@
+# Local config / secrets (Android convention: never committed)
+local.properties
+
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+/app/build/
+
+# Build artifacts
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+
+# Native build
+.cxx/
+captures/
+
+# OS
+.DS_Store
+
+# Gradle wrapper jar is NOT committed (repo policy: no binaries).
+# Run `gradle wrapper` once to generate it locally.
+gradle/wrapper/gradle-wrapper.jar

@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Last9 RUM Example",
+    "slug": "last9-rum-react-native-example",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.last9.rumexample"
+    },
+    "android": {
+      "package": "io.last9.rumexample"
+    },
+    "plugins": ["expo-dev-client", "./plugins/withLast9Rum.js"]
+  }
+}
