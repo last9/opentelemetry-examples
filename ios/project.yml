@@ -1,0 +1,36 @@
+name: RUMExample
+options:
+  bundleIdPrefix: io.last9.rum.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+  RUMExample:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Sources
+      - path: Config-Debug.xcconfig
+        buildPhase: none
+      - path: Config-Release.xcconfig
+        buildPhase: none
+    configFiles:
+      Debug: Config-Debug.xcconfig
+      Release: Config-Release.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.last9.rum.example
+        INFOPLIST_FILE: Sources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        # Allow plain HTTP for the jsonplaceholder demo if needed (it is HTTPS,
+        # so ATS defaults are fine; left here for reference only).

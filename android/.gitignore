@@ -1,0 +1,27 @@
+# Local config / secrets (Android convention: never committed)
+local.properties
+
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+/app/build/
+
+# Build artifacts
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+
+# Native build
+.cxx/
+captures/
+
+# OS
+.DS_Store
+
+# Keep the Gradle wrapper jar committed so the project runs out of the box.
+# (The repo-root .gitignore excludes *.jar; this negation re-includes the wrapper.)
+!gradle/wrapper/gradle-wrapper.jar

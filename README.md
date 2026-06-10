@@ -119,6 +119,17 @@ Getting OpenTelemetry instrumentation right can be tricky. This repository provi
 | `react/` | React | SPA instrumentation |
 | `angular/` | Angular | SPA instrumentation |
 
+### Mobile RUM (Real User Monitoring)
+
+Runnable demo apps for the [Last9 RUM](https://last9.io) mobile SDKs. Each app initializes the SDK from a git-ignored token file and exercises the full feature set: automatic view tracking via real screen navigation, network instrumentation (with DNS/TCP/TLS/TTFB phase spans), caught + uncaught error capture, user identify, custom events, and session flush.
+
+| Directory | Platform | SDK | Signals |
+|-----------|----------|-----|---------|
+| `android/` | Android (Jetpack Compose) | `io.last9:rum-android` | Sessions, Views, HTTP, Errors, ANR, Resources |
+| `ios/` | iOS (SwiftUI) | `Last9RUM` (CocoaPods) | Sessions, Views, HTTP, Errors, Resources |
+| `flutter/rum/` | Flutter | `last9_rum_flutter` | Sessions, Views, HTTP, Errors, ANR, Resources |
+| `react-native/` | React Native | `@last9/rum-react-native` | Sessions, Views, HTTP, Errors, ANR, Resources |
+
 ## Cloud & Infrastructure
 
 ### AWS (`aws/`)

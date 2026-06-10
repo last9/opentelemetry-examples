@@ -1,213 +1,102 @@
-# iOS OpenTelemetry - Last9 Integration
+# Last9 RUM — iOS Example
 
-Send distributed traces from an iOS app to Last9 using the [Last9 RUM SDK](https://github.com/last9/last9-ios-swift-sdk). Auto-instruments URLSession network calls, tracks sessions and screen views, and injects W3C `traceparent` for backend correlation.
-
-Uses **client monitoring tokens** (write-only, safe for mobile apps) with synthetic origins (`ios://com.yourcompany.yourapp`).
+A runnable SwiftUI app demonstrating the [Last9 RUM iOS SDK](https://cdn.last9.io/rum-sdk/ios/builds/0.7.1/Last9RUM.podspec)
+(`Last9RUM` v0.7.1). It exercises the full RUM feature surface: SDK
+initialization, automatic view tracking via `NavigationStack`, automatic
+`URLSession` network instrumentation, `identify`/`clearUser`, caught and
+uncaught error capture, custom events, global span attributes, session id, and
+flush.
 
 ## Prerequisites
 
-- Xcode 15+ / Swift 5.9+
-- iOS 13+ deployment target
-- A Last9 client monitoring token from [Ingestion Tokens](https://app.last9.io/control-plane/ingestion-tokens)
+- **Xcode 15+** (tested with Xcode 26.4), iOS 16.0+ simulator or device
+  (the app uses SwiftUI `NavigationStack`, which requires iOS 16; the SDK
+  itself supports iOS 15.1+)
+- **XcodeGen** — `brew install xcodegen`
+- **CocoaPods** — `sudo gem install cocoapods` (tested with 1.16.2)
+- A **Last9 account** for the client token, base URL (with org path), and origin
 
 ## Quick Start
 
-### 1. Add the Last9 RUM SDK via SPM
+```bash
+cd ios
 
-In Xcode: **File → Add Package Dependencies**, enter:
+# 1. Create your secrets file and fill in your Last9 values.
+cp Secrets.example.xcconfig Secrets.xcconfig
+# edit Secrets.xcconfig
 
+# 2. Generate the Xcode project from project.yml.
+xcodegen generate
+
+# 3. Install the Last9 RUM pod (fetches the podspec from the Last9 CDN).
+#    Defaults to v0.7.1; override with `export LAST9_RUM_VERSION=<version>`.
+pod install
+
+# 4. Open the generated workspace and Run (Cmd-R).
+open RUMExample.xcworkspace
 ```
-https://github.com/last9/last9-ios-swift-sdk
-```
-
-Select **Last9RUM** as the product to add to your target.
-
-Or add to your `Package.swift`:
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/last9/last9-ios-swift-sdk", from: "0.1.2"),
-],
-targets: [
-    .target(name: "YourApp", dependencies: [
-        .product(name: "Last9RUM", package: "last9-ios-swift-sdk"),
-    ]),
-]
-```
-
-### 2. Create a Client Monitoring Token
-
-1. Go to [Ingestion Tokens](https://app.last9.io/control-plane/ingestion-tokens)
-2. Click **Create New Token** → select **Client**
-3. Set allowed origin to `ios://com.yourcompany.yourapp` (your app's bundle ID)
-4. Copy the token and the endpoint URL
-
-### 3. Initialize in AppDelegate
-
-```swift
-import Last9RUM
-
-func application(_ application: UIApplication,
-                 didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-
-    Last9RUM.initialize(
-        endpoint: "<your-base-url>/v1/otlp/organizations/<your-org-slug>/telemetry/client_monitoring",
-        clientToken: "<your-client-token>",
-        serviceName: "my-ios-app"
-    )
-
-    return true
-}
-```
-
-Or for SwiftUI:
-
-```swift
-import Last9RUM
-
-@main
-struct YourApp: App {
-    init() {
-        Last9RUM.initialize(
-            endpoint: "<your-base-url>/v1/otlp/organizations/<your-org-slug>/telemetry/client_monitoring",
-            clientToken: "<your-client-token>",
-            serviceName: "my-ios-app"
-        )
-    }
-    var body: some Scene {
-        WindowGroup { ContentView() }
-    }
-}
-```
-
-### 4. That's it — network calls are auto-traced
-
-Every `URLSession` request is now automatically traced with:
-- HTTP method, URL, status code, latency
-- W3C `traceparent` header injected (links to backend traces)
-- Device model, OS version, app version attached
 
 ## Configuration
 
-| Environment Variable | Description |
-|---------------------|-------------|
-| `LAST9_OTLP_ENDPOINT` | Last9 client monitoring endpoint |
-| `LAST9_CLIENT_TOKEN` | Client token from [Ingestion Tokens](https://app.last9.io/control-plane/ingestion-tokens) |
+Secrets live in `Secrets.xcconfig` (git-ignored). They are surfaced into
+`Info.plist` keys at build time and read at runtime via
+`Bundle.main.object(forInfoDictionaryKey:)` (see `Sources/RUMConfig.swift`).
 
-## What's Auto-Instrumented
+| xcconfig key         | Maps to                | Example value                                            |
+|----------------------|------------------------|----------------------------------------------------------|
+| `LAST9_BASE_URL`     | `L9RumConfig.baseUrl`  | `otlp-ext-aps1.last9.io/v1/otlp/organizations/your-org`  |
+| `LAST9_CLIENT_TOKEN` | `L9RumConfig.clientToken` | `your-client-token`                                   |
+| `LAST9_ORIGIN`       | `L9RumConfig.origin`   | `app.last9.io`                                           |
 
-| Signal | Details |
-|--------|---------|
-| URLSession requests | Every `dataTask`, `data(from:)`, `download` call — latency, status, URL |
-| W3C trace propagation | `traceparent` + `tracestate` headers injected into outgoing requests |
-| Sessions | Auto-managed with 15m inactivity / 4h max duration, persisted to disk |
-| Screen views (UIKit) | UIViewController swizzle — `view.id`, `view.name`, `view.time_spent` |
-| App launch time | Cold and warm start duration (process start → first viewDidAppear) |
-| Frame rate | Slow frames (>25ms) and frozen frames (>700ms) per view via CADisplayLink |
-| CPU / Memory | Per-view CPU usage and resident memory sampling via mach_task_basic_info |
-| User interactions | Tap tracking via UIApplication.sendEvent swizzle with target info |
-| Network timing | DNS, TLS, TTFB, transfer breakdown from URLSessionTaskMetrics |
-| Hangs (ANR) | Background thread detects main thread blocks > 2s, captures stack trace |
-| Watchdog terminations | Detects abnormal previous termination (0x8badf00d) on next launch |
-| Signal crashes | SIGSEGV, SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGTRAP with crash markers |
-| Resource attributes | `device.model.identifier`, `os.name`, `os.version`, `service.version` |
-| Network type | WiFi vs Cellular (iOS only) |
+Non-secret values are hardcoded in `Sources/RUMExampleApp.swift`:
+`serviceName = "rum-ios-example"`, `serviceVersion = "1.0.0"`,
+`deploymentEnvironment = "development"`.
 
-Every span automatically includes `session.id`, `view.id`, `view.name`, and `user.*` attributes (if set).
+**SDK source.** The `Last9RUM` pod is fetched from the Last9 CDN podspec
+`https://cdn.last9.io/rum-sdk/ios/builds/<version>/Last9RUM.podspec` (see the
+`Podfile`). The version defaults to `0.7.1`; pin a different one with
+`export LAST9_RUM_VERSION=<version>` before `pod install`.
 
-## User Identification
+`Config-Debug.xcconfig` / `Config-Release.xcconfig` (committed) are the base
+configs set in `project.yml`. Each one `#include`s the CocoaPods-generated pod
+config (so `Last9RUM` links) and your git-ignored `Secrets.xcconfig`. You only
+ever edit `Secrets.xcconfig`.
 
-After login, identify the user so all subsequent spans carry user context:
+### Note on URL values (the `//` problem)
 
-```swift
-Last9RUM.identify(id: "u_123", name: "Alice", email: "alice@example.com")
-```
+xcconfig treats `//` as the start of a comment, so a value like
+`https://otlp-ext-aps1.last9.io/...` is silently truncated to `https:`.
+To avoid this, **store URLs without the `https://` scheme** (host + path only)
+in `Secrets.xcconfig`. The app re-adds `https://` at runtime in
+`RUMConfig.swift`. The placeholders in `Secrets.example.xcconfig` already follow
+this convention.
 
-On logout:
+## What the app does
 
-```swift
-Last9RUM.clearUser()
-```
+Three screens reached by real `NavigationStack` route navigation (so view
+tracking fires on each transition):
 
-## SwiftUI View Tracking
-
-UIKit views are tracked automatically. For SwiftUI, use the `.trackView(name:)` modifier:
-
-```swift
-ContentView()
-    .trackView(name: "Home")
-```
-
-Or use the manual API for custom navigation flows:
-
-```swift
-Last9RUM.startView(name: "Onboarding Step 1")
-// ... later ...
-Last9RUM.endView()
-```
-
-## Configuration Options
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `sessionInactivityTimeout` | `900` (15 min) | Seconds of inactivity before session expires |
-| `enableAutoViewTracking` | `true` | Swizzle UIViewController for auto view tracking |
-| `hangThreshold` | `2.0` (2 sec) | Main thread block time to report as a hang. `0` to disable |
-
-```swift
-Last9RUM.initialize(
-    endpoint: "...",
-    clientToken: "...",
-    serviceName: "my-ios-app",
-    sessionInactivityTimeout: 10 * 60,  // 10 minutes
-    enableAutoViewTracking: false,       // manual only
-    hangThreshold: 3.0                   // 3-second hang threshold
-)
-```
-
-## Custom Spans
-
-Track business-specific events:
-
-```swift
-let tracer = Last9RUM.tracer("auth")
-let span = tracer.spanBuilder(spanName: "user.login")
-    .setAttribute(key: "auth.method", value: "otp")
-    .startSpan()
-
-// ... your logic ...
-
-span.setAttribute(key: "auth.success", value: true)
-span.end()
-```
-
-See `Sources/ExampleUsage.swift` for more patterns (screen tracking, video playback, error handling).
+1. **Home** — `identify()` / `clearUser()`, `addEvent()`, `spanAttributes()`
+   (set and clear), and navigation buttons.
+2. **Network** — a GET (`/todos/1`) and a POST (`/posts`) to
+   `https://jsonplaceholder.typicode.com` via `URLSession`. The response is
+   shown in the UI.
+3. **Errors** — a caught error routed through `captureError(_:context:)`, a
+   button that raises an uncaught error to exercise automatic error
+   instrumentation, the live `getSessionId()`, and a `flush()` button.
 
 ## Verification
 
-1. Run the app and trigger a network request
-2. Open [Last9 Traces](https://app.last9.io) and search for your service name
-3. You should see HTTP spans with `url.full`, `http.response.status_code`, `http.request.method`
+With a real token configured, after running the app and tapping through the
+screens you should see in your Last9 dashboard:
 
-## Security
+- A **session** for `rum-ios-example` (`development` environment)
+- **Views** for the Home, Network, and Errors screens (one per navigation)
+- **HTTP spans** for the GET and POST, each with DNS/TCP/TLS/TTFB phase child
+  spans (under Sessions → APIs)
+- An **error** event (the caught `captureError`, and the uncaught crash on next
+  launch)
+- The custom **event** `purchase_completed` and the global span attributes
+- A `flush()` immediately pushes any buffered telemetry
 
-This integration uses **client monitoring tokens** which are:
-- **Write-only** — can send telemetry, cannot read or query data
-- **Origin-scoped** — tied to your app's bundle ID (`ios://com.yourcompany.yourapp`)
-- **Rate-limited** — server-side rate limiting prevents abuse
-
-The token is safe to ship in your app binary.
-
-## Project Structure
-
-```
-ios/
-├── Package.swift              # SPM: imports last9/last9-ios-swift-sdk
-├── Sources/
-│   ├── AppDelegate.swift      # Example initialization
-│   └── ExampleUsage.swift     # Usage patterns
-├── .env.example               # Credential template
-└── README.md
-```
-
-The SDK source lives in [last9/last9-ios-swift-sdk](https://github.com/last9/last9-ios-swift-sdk).
+See the [Last9 RUM docs](https://last9.io/docs/) for more detail.

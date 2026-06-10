@@ -1,0 +1,10 @@
+// Release base configuration for the RUMExample target.
+//
+// Layers two things on top of each other:
+//   1. The CocoaPods-generated config (so the Last9RUM pod links). Optional via
+//      `#include?` so this file is valid before `pod install` has run.
+//   2. Your secrets from the git-ignored Secrets.xcconfig.
+//
+// This file is committed; Secrets.xcconfig is NOT.
+#include? "Pods/Target Support Files/Pods-RUMExample/Pods-RUMExample.release.xcconfig"
+#include "Secrets.xcconfig"

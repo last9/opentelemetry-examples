@@ -1,0 +1,26 @@
+# Copy this file to local.properties and fill in your values.
+# local.properties is git-ignored (Android convention) — never commit real tokens.
+
+# Android SDK location. OPTIONAL — only needed if neither the ANDROID_HOME nor
+# ANDROID_SDK_ROOT environment variable is set (Android Studio sets it for you).
+# If you do need it, uncomment and point it at your local SDK.
+# Example (macOS): /Users/<you>/Library/Android/sdk
+# sdk.dir=/path/to/your/Android/sdk
+
+# --- Last9 RUM credentials (read in app/build.gradle.kts → BuildConfig) ---
+
+# OTLP endpoint. Replace <org> with your Last9 organization slug.
+last9.baseUrl=https://otlp-ext-aps1.last9.io/v1/otlp/organizations/<org>
+
+# Client token from the Last9 dashboard.
+last9.clientToken=<your-client-token>
+
+# Origin sent as the X-LAST9-ORIGIN header.
+last9.origin=https://app.last9.io
+
+# --- Last9 RUM Android SDK source (distributed via Last9 CDN) ---
+# The SDK resolves from the CDN Maven repo declared in settings.gradle.kts:
+#   https://cdn.last9.io/rum-sdk/android/maven/
+# (Maven coordinates: io.last9:rum-android — see the SDK README.)
+# Pin/override the SDK version here. Default is 0.7.1 if this is omitted.
+last9.rumSdkVersion=0.7.1
