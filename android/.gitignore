@@ -22,6 +22,6 @@ captures/
 # OS
 .DS_Store
 
-# Keep the Gradle wrapper jar committed so the project runs out of the box.
-# (The repo-root .gitignore excludes *.jar; this negation re-includes the wrapper.)
-!gradle/wrapper/gradle-wrapper.jar
+# Gradle wrapper jar is NOT committed (repo policy: no binaries).
+# Run `gradle wrapper` once to generate it locally.
+gradle/wrapper/gradle-wrapper.jar

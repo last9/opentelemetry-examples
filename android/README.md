@@ -7,6 +7,7 @@ A runnable Jetpack Compose app demonstrating the [Last9 RUM Android SDK](https:/
 - **Android Studio** (latest stable) or the Android command-line SDK tools.
 - **JDK 17–21** to run Gradle/AGP. Android Studio bundles a compatible JBR (JDK 21). The Android Gradle Plugin does **not** support JDK 25 — use 17–21.
 - Android SDK with **API 36** platform and build-tools installed.
+- **Gradle** (any recent version, e.g. via `brew install gradle`) — used once to generate the Gradle wrapper jar, which is not committed (repo policy: no binaries). Android Studio users can skip this; the IDE handles it.
 - A **Last9 account** with a RUM client token. See the [Last9 docs](https://last9.io/docs/).
 - SDK version: **`io.last9:rum-android:0.7.1`** (resolved from the Last9 CDN Maven repo configured in `settings.gradle.kts`).
 
@@ -24,7 +25,13 @@ A runnable Jetpack Compose app demonstrating the [Last9 RUM Android SDK](https:/
 
    `local.properties` is git-ignored and must never be committed.
 
-2. Build and install on a connected device/emulator:
+2. Generate the Gradle wrapper jar (first time only — `gradle-wrapper.jar` is a binary and is not committed):
+
+   ```bash
+   gradle wrapper
+   ```
+
+3. Build and install on a connected device/emulator:
 
    ```bash
    ./gradlew installDebug
