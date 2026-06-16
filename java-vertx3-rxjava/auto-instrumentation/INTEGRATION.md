@@ -124,3 +124,4 @@ java -jar target/your-app.jar run com.yourpackage.MainVerticle
 - HTTP client calls (downstream services)
 - RxJava2 context propagation
 - Log correlation (trace_id, span_id in logs)
+- **Exceptions** on SERVER spans when handlers use `ctx.fail(throwable)` or unhandled errors reach the failure handler (see `README.md` → *Verify automatic exception capture*)

@@ -63,10 +63,21 @@ java -javaagent:vertx3-otel-agent.jar \
 
 That's it. Every Router endpoint, JDBC query, Kafka message, Aerospike operation, and outbound HTTP call is automatically traced.
 
-### 4. Start infrastructure and test
+### 4. Local E2E (collector + app on host)
+
+Minimal flow with a **debug-only** collector — no Last9 credentials, no full Docker stack:
 
 ```bash
-# Start Postgres, Kafka, Aerospike, MySQL
+cd java-vertx3-rxjava/auto-instrumentation
+./scripts/local-e2e.sh
+```
+
+Uses collector on host ports **24317/24318** and Postgres on **5433**. Override `VERTX_OTEL_REPO` if your vertx-opentelemetry checkout is elsewhere.
+
+### 5. Full Docker stack (optional)
+
+```bash
+# Start Postgres, Kafka, Aerospike, MySQL + collector + services
 docker compose up -d
 
 # Test endpoints
@@ -77,6 +88,29 @@ curl -X POST http://localhost:8080/v1/holding \
   -d '{"userId": "user1", "symbol": "AAPL", "quantity": 100}'
 curl http://localhost:8080/v1/portfolio-full/user1
 ```
+
+### Verify automatic exception capture
+
+These endpoints demonstrate when stack traces appear on SERVER spans (no manual `recordException` in app code for the first two):
+
+```bash
+# Automatic: ctx.fail(throwable) → exception event + ERROR status on SERVER span
+curl -s http://localhost:8080/v1/error/fail
+
+# Automatic: unhandled handler error routed through failure handler
+curl -s "http://localhost:8080/v1/error/http?type=runtime"
+
+# No stack trace (by design): HTTP 500 without a Throwable on the routing context
+curl -s http://localhost:8080/v1/error/direct-500
+```
+
+In the OTel collector debug output, look for an `exception` event on the SERVER span with `exception.type`, `exception.message`, and `exception.stacktrace`:
+
+```bash
+docker logs vertx3-otel-collector-local 2>&1 | grep -E "(Name |exception\.|Status )"
+```
+
+Use `ctx.fail(status, error)` (or the global failure handler) in production handlers so exceptions are captured automatically — returning `setStatusCode(500).end()` alone marks the span as ERROR but does not attach a stack trace.
 
 ## What Gets Auto-Traced
 
@@ -140,8 +174,10 @@ Application-specific variables:
 | DELETE | `/v1/cache/:key` | Cache delete | Router + Aerospike |
 | GET | `/v1/mysql/ping` | MySQL health | Router + MySQL |
 | GET | `/v1/portfolio-full/:userId` | Multi-system query | Router + JDBC + Aerospike + WebClient + Kafka |
-| GET | `/v1/error/http` | Error scenario | Router (exception recording) |
-| GET | `/v1/error/try-catch` | Manual span error | Router + `Span.recordException()` |
+| GET | `/v1/error/fail` | `ctx.fail()` — automatic exception event | Router |
+| GET | `/v1/error/direct-500` | 500 without throwable (no stack) | Router |
+| GET | `/v1/error/http` | Simulated error (`?type=runtime\|npe\|illegal`) | Router |
+| GET | `/v1/error/try-catch` | Manual `Span.recordException()` in handler | Router |
 
 ## Key Difference: Zero-Code vs Manual
 
