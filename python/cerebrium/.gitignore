@@ -1,0 +1,27 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Cerebrium build artifacts
+.cerebrium/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
