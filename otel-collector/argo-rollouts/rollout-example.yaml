@@ -1,0 +1,63 @@
+---
+# Example Rollout using Last9 as the canary analysis gate.
+#
+# This is a reference template — adapt the container image, port,
+# service selectors, and metric labels to match your application.
+#
+# The rollout progresses through 10% → 25% → 50% → 100% traffic,
+# running Last9 error rate and latency checks at each pause.
+# Any analysis failure triggers an automatic rollback to stable.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: my-app
+  namespace: default
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: my-app
+          image: my-app:latest
+          ports:
+            - containerPort: 8080
+  strategy:
+    canary:
+      # Run both analysis templates in parallel at each pause step
+      analysis:
+        templates:
+          - templateName: last9-http-error-rate
+          - templateName: last9-latency-p99
+        args:
+          - name: service-name
+            value: my-app
+          - name: namespace
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        # How long to wait before starting analysis after each weight change
+        startingStep: 1
+      steps:
+        # Step 1: Send 10% of traffic to canary
+        - setWeight: 10
+        # Step 2: Pause 5 minutes — analysis runs here
+        # If Last9 reports error rate > 10% or p99 > 1s: auto rollback
+        - pause:
+            duration: 5m
+        # Step 3: Promote to 25%
+        - setWeight: 25
+        # Step 4: Pause 5 minutes — analysis runs again
+        - pause:
+            duration: 5m
+        # Step 5: Promote to 50%
+        - setWeight: 50
+        # Step 6: Final pause before full promotion
+        - pause:
+            duration: 5m
+        # Step 7: 100% — stable fully replaced by new version
