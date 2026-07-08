@@ -1,0 +1,40 @@
+# Environment/secrets
+local.properties
+.env
+.env.local
+.env.*.local
+
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+/app/build/
+
+# Build artifacts
+*.apk
+*.aab
+/dist/
+/build/
+
+# Dependencies
+/vendor/
+/node_modules/
+/.venv/
+/target/
+/bin/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Gradle wrapper jar is intentionally not committed.
+gradle/wrapper/gradle-wrapper.jar

@@ -1,0 +1,10 @@
+# Copy this file to local.properties and fill in your values.
+# local.properties is git-ignored. Never commit real tokens.
+
+# Optional if ANDROID_HOME or ANDROID_SDK_ROOT is set.
+# sdk.dir=/path/to/your/Android/sdk
+
+last9.baseUrl=https://otlp-ext-aps1.last9.io/v1/otlp/organizations/<org>
+last9.clientToken=<your-client-token>
+last9.origin=https://app.last9.io
+last9.rumSdkVersion=0.9.0

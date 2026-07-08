@@ -1,0 +1,36 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+Secrets.xcconfig
+
+# Swift / Xcode
+.build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+*.xcuserstate
+xcuserdata/
+
+# Dependencies
+/vendor/
+/node_modules/
+/.venv/
+/target/
+/bin/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+/dist/
+/build/
