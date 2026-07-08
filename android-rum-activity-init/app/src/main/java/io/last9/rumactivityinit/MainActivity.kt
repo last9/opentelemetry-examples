@@ -26,28 +26,15 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        L9Rum.initialize(
-            application,
-            L9RumConfig(
-                baseUrl = BuildConfig.LAST9_BASE_URL,
-                clientToken = BuildConfig.LAST9_CLIENT_TOKEN,
-                origin = BuildConfig.LAST9_ORIGIN,
-                serviceName = "android-rum-activity-init",
-                serviceVersion = BuildConfig.VERSION_NAME,
-                deploymentEnvironment = "development",
-                debugLogs = true,
-            ),
-        )
-
-        client = L9Rum.instrumentOkHttp(OkHttpClient.Builder(), this).build()
         setContentView(buildUi())
-        append("SDK initialized from MainActivity using activity.application")
+        initializeRum("initial launch")
     }
 
     override fun onDestroy() {
         executor.shutdownNow()
-        L9Rum.shutdown()
+        if (L9Rum.isActive()) {
+            L9Rum.shutdown()
+        }
         super.onDestroy()
     }
 
@@ -69,6 +56,22 @@ class MainActivity : Activity() {
             text = "GET httpbin"
             setOnClickListener { runRequest("GET", "https://httpbin.org/get") }
         }
+        val attributesButton = Button(this).apply {
+            text = "Set per-flow attributes"
+            setOnClickListener {
+                L9Rum.spanAttributes(
+                    mapOf(
+                        "example.flow" to "activity-init",
+                        "feature.flag" to "v0.9.0-lifecycle",
+                    ),
+                )
+                append("Per-flow span attributes set")
+            }
+        }
+        val activeButton = Button(this).apply {
+            text = "Check active state"
+            setOnClickListener { append("SDK active: ${L9Rum.isActive()}") }
+        }
         val flushButton = Button(this).apply {
             text = "Flush"
             setOnClickListener {
@@ -76,16 +79,31 @@ class MainActivity : Activity() {
                 append("Flush requested")
             }
         }
+        val shutdownButton = Button(this).apply {
+            text = "Shutdown SDK"
+            setOnClickListener {
+                L9Rum.shutdown()
+                append("SDK shutdown complete; active: ${L9Rum.isActive()}")
+            }
+        }
+        val reinitializeButton = Button(this).apply {
+            text = "Re-initialize SDK"
+            setOnClickListener { initializeRum("manual re-init") }
+        }
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 48, 32, 48)
             addView(title("Last9 RUM Activity Init"))
-            addView(body("No custom Application subclass. The SDK is initialized from MainActivity with activity.application."))
+            addView(body("No custom Application subclass. The SDK is initialized from MainActivity with activity.application. SDK v0.9.0 supports shutdown() and clean re-initialization."))
             addView(getButton)
             addView(postButton)
             addView(httpBinButton)
+            addView(attributesButton)
+            addView(activeButton)
             addView(flushButton)
+            addView(shutdownButton)
+            addView(reinitializeButton)
             addView(status)
         }
 
@@ -104,6 +122,23 @@ class MainActivity : Activity() {
         text = value
         textSize = 16f
         setPadding(0, 0, 0, 24)
+    }
+
+    private fun initializeRum(reason: String) {
+        L9Rum.initialize(
+            application,
+            L9RumConfig(
+                baseUrl = BuildConfig.LAST9_BASE_URL,
+                clientToken = BuildConfig.LAST9_CLIENT_TOKEN,
+                origin = BuildConfig.LAST9_ORIGIN,
+                serviceName = "android-rum-activity-init",
+                serviceVersion = BuildConfig.VERSION_NAME,
+                deploymentEnvironment = "development",
+                debugLogs = true,
+            ),
+        )
+        client = L9Rum.instrumentOkHttp(OkHttpClient.Builder(), this).build()
+        append("SDK initialize requested ($reason); active: ${L9Rum.isActive()}")
     }
 
     private fun runRequest(method: String, url: String) {

@@ -126,7 +126,10 @@ Runnable demo apps for the [Last9 RUM](https://last9.io) mobile SDKs. Each app i
 | Directory | Platform | SDK | Signals |
 |-----------|----------|-----|---------|
 | `android/` | Android (Jetpack Compose) | `io.last9:rum-android` | Sessions, Views, HTTP, Errors, ANR, Resources |
+| `android-rum-activity-init/` | Android (Activity init) | `io.last9:rum-android` | Sessions, Views, HTTP, Errors, Lifecycle controls |
+| `android-rum-jitpack-resolve/` | Android (Gradle resolver) | `io.last9:rum-android` | Dependency resolution |
 | `ios/` | iOS (SwiftUI) | `Last9RUM` (CocoaPods) | Sessions, Views, HTTP, Errors, Resources |
+| `ios-rum-spm-demo/` | iOS (SwiftPM/XcodeGen) | `Last9RUM` | Sessions, Views, HTTP, Errors, Lifecycle controls |
 | `flutter/rum/` | Flutter | `last9_rum_flutter` | Sessions, Views, HTTP, Errors, ANR, Resources |
 | `react-native/` | React Native | `@last9/rum-react-native` | Sessions, Views, HTTP, Errors, ANR, Resources |
 

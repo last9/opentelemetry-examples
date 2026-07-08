@@ -49,6 +49,23 @@ dependencies {
 }
 ```
 
+## v0.9.0 Lifecycle APIs
+
+Version `0.9.0` adds embedded/per-flow lifecycle support. After resolving the CDN artifact, an app or library can initialize RUM for a flow, attach flow attributes, shut it down, and later re-initialize cleanly:
+
+```kotlin
+L9Rum.initialize(application, config)
+L9Rum.spanAttributes(mapOf("example.flow" to "checkout"))
+
+if (L9Rum.isActive()) {
+    L9Rum.shutdown()
+}
+
+L9Rum.initialize(application, config)
+```
+
+Do not run two integrations at the same time. A second `initialize()` while RUM is active is ignored until `shutdown()` tears down the active integration.
+
 ## Verification
 
 `gradle resolveLast9Rum` should print `rum-android-0.9.0.aar`.

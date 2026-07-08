@@ -1,6 +1,6 @@
 # Android RUM Activity Init
 
-A minimal Android app showing Last9 RUM initialization from an `Activity` without a custom `Application` subclass. It initializes with `activity.application`, instruments OkHttp, and makes external API calls that should show as spans in Last9.
+A minimal Android app showing Last9 RUM initialization from an `Activity` without a custom `Application` subclass. It initializes with `activity.application`, instruments OkHttp, makes external API calls, and demonstrates the v0.9.0 embedded lifecycle APIs: `spanAttributes()`, `isActive()`, `shutdown()`, and clean re-initialization.
 
 ## Prerequisites
 
@@ -48,6 +48,17 @@ maven { url = uri("https://cdn.last9.io/rum-sdk/android/maven/") }
 implementation("io.last9:rum-android:0.9.0")
 ```
 
+## What the app demonstrates
+
+- `L9Rum.initialize(application, config)` from `MainActivity`, with no custom `Application` class.
+- `L9Rum.instrumentOkHttp(...)` for HTTP spans and DNS/TCP/TLS/TTFB phase child spans.
+- `L9Rum.spanAttributes(...)` for per-flow attributes stamped on subsequent spans.
+- `L9Rum.isActive()` to check whether the singleton SDK is currently running.
+- `L9Rum.shutdown()` to end the active view/session, flush, and tear down RUM.
+- Re-initialization after shutdown to start a clean new flow.
+
 ## Verification
 
 Tap the GET/POST buttons. In Last9 you should see a session for `android-rum-activity-init` and HTTP spans for `jsonplaceholder.typicode.com` and `httpbin.org`.
+
+To verify v0.9.0 lifecycle behavior, tap **Set per-flow attributes**, make a request, tap **Shutdown SDK**, then tap **Re-initialize SDK** and make another request. The second flow should export as a clean session after re-initialization.
