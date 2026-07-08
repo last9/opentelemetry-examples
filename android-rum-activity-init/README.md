@@ -7,7 +7,7 @@ A minimal Android app showing Last9 RUM initialization from an `Activity` withou
 - Android Studio or Android SDK command-line tools
 - JDK 17-21
 - Android SDK API 36
-- Gradle installed locally to generate the wrapper jar, or Android Studio
+- Gradle installed locally to generate the wrapper jar (first run only), or Android Studio (which handles it)
 - A Last9 RUM client token
 
 ## Quick Start
@@ -20,7 +20,7 @@ A minimal Android app showing Last9 RUM initialization from an `Activity` withou
 
 2. Edit `local.properties` with your Last9 values.
 
-3. Generate a Gradle wrapper jar if needed:
+3. Generate the Gradle wrapper jar (first time only — `gradle-wrapper.jar` is a binary and is not committed; `gradlew` and `gradle-wrapper.properties` already are). Android Studio users can skip this:
 
    ```bash
    gradle wrapper
