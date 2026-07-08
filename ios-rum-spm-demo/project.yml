@@ -1,0 +1,30 @@
+name: Last9RUMSPMDemo
+options:
+  bundleIdPrefix: io.last9
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  Last9RUMSPMDemo:
+    path: .
+targets:
+  Last9RUMSPMDemo:
+    type: application
+    platform: iOS
+    sources:
+      - Sources/App
+    dependencies:
+      - package: Last9RUMSPMDemo
+        product: RUMSPMDemoApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.last9.rumspmdemo
+        INFOPLIST_FILE: Sources/App/Info.plist
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          LAST9_BASE_URL: $(LAST9_BASE_URL)
+          LAST9_CLIENT_TOKEN: $(LAST9_CLIENT_TOKEN)
+          LAST9_ORIGIN: $(LAST9_ORIGIN)
+    configFiles:
+      Debug: Config-Debug.xcconfig
+      Release: Config-Release.xcconfig

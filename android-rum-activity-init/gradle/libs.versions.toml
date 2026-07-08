@@ -1,0 +1,11 @@
+[versions]
+agp = "8.13.0"
+kotlin = "2.2.21"
+okhttp = "4.12.0"
+
+[libraries]
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
