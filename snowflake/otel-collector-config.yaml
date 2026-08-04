@@ -1,0 +1,82 @@
+receivers:
+  snowflake:
+    username: "<SNOWFLAKE_USERNAME>"
+    password: "<SNOWFLAKE_PASSWORD>"
+    account: "<SNOWFLAKE_ACCOUNT>" # e.g. xy12345.us-east-1
+    warehouse: "<SNOWFLAKE_WAREHOUSE>" # dedicated monitoring warehouse, e.g. MONITORING_WH
+    role: "ACCOUNTADMIN" # or a custom role with ACCOUNT_USAGE access
+    collection_interval: 30m
+    metrics:
+      # Opt-in metrics enabled below (disabled by default upstream).
+      # See README "Metrics reference" for the full list and what each covers.
+      snowflake.billing.cloud_service.total:
+        enabled: true
+      snowflake.billing.total_credit.total:
+        enabled: true
+      snowflake.billing.virtual_warehouse.total:
+        enabled: true
+      snowflake.billing.warehouse.cloud_service.total:
+        enabled: true
+      snowflake.billing.warehouse.total_credit.total:
+        enabled: true
+      snowflake.billing.warehouse.virtual_warehouse.total:
+        enabled: true
+      snowflake.logins.total:
+        enabled: true
+      snowflake.pipe.credits_used.total:
+        enabled: true
+      snowflake.query.bytes_spilled.local.avg:
+        enabled: true
+      snowflake.query.bytes_spilled.remote.avg:
+        enabled: true
+      snowflake.query.data_scanned_cache.avg:
+        enabled: true
+      snowflake.query.partitions_scanned.avg:
+        enabled: true
+      snowflake.rows_deleted.avg:
+        enabled: true
+      snowflake.rows_inserted.avg:
+        enabled: true
+      snowflake.rows_produced.avg:
+        enabled: true
+      snowflake.rows_unloaded.avg:
+        enabled: true
+      snowflake.rows_updated.avg:
+        enabled: true
+      snowflake.session_id.count:
+        enabled: true
+      snowflake.storage.failsafe_bytes.total:
+        enabled: true
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 10000
+  resourcedetection:
+    detectors: [env, system]
+    timeout: 2s
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: dev
+        action: upsert
+
+exporters:
+  otlp/last9:
+    endpoint: "<LAST9_OTLP_ENDPOINT>"
+    headers:
+      "Authorization": "Basic <LAST9_OTLP_AUTH_HEADER>"
+
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [snowflake]
+      processors: [resourcedetection, resource, batch]
+      exporters: [otlp/last9]
+
+  telemetry:
+    logs:
+      level: info
