@@ -1,6 +1,6 @@
 # Monitoring Snowflake with OpenTelemetry and Last9
 
-A guide for setting up Snowflake monitoring using the OpenTelemetry Collector's `snowflake` receiver with Last9. It collects query, warehouse, storage, billing, and login metrics from Snowflake's `ACCOUNT_USAGE` views and sends them to Last9.
+A guide for setting up Snowflake monitoring using the OpenTelemetry Collector's `snowflake` receiver with Last9. It collects query, warehouse, storage, billing, and login metrics from Snowflake's `ACCOUNT_USAGE` views and sends them to Last9. A second `sqlquery` receiver adds Task Scheduler failures, COPY/load pipeline failures, Snowpipe file/byte throughput, and serverless task credit usage — none of which the native `snowflake` receiver exposes.
 
 > **Note:** The `snowflake` receiver is alpha stability in collector-contrib. The config shape may change in future releases — pin your collector image version.
 
@@ -29,6 +29,11 @@ You also need:
 CREATE WAREHOUSE IF NOT EXISTS monitoring_wh WITH WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60;
 CREATE USER IF NOT EXISTS otel_monitor PASSWORD = '<strong-password>' DEFAULT_WAREHOUSE = monitoring_wh;
 GRANT ROLE ACCOUNTADMIN TO USER otel_monitor;
+
+-- Explicit grant for the sqlquery receiver's TASK_HISTORY / COPY_HISTORY /
+-- PIPE_USAGE_HISTORY / SERVERLESS_TASK_HISTORY queries below. ACCOUNTADMIN
+-- already has this; run it anyway if you're using a custom role instead.
+GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE ACCOUNTADMIN;
 ```
 
 `ACCOUNT_USAGE` views require `ACCOUNTADMIN` (or a role explicitly granted `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database). Least-privilege setup is tracked upstream but not yet supported by the receiver.
@@ -38,6 +43,7 @@ GRANT ROLE ACCOUNTADMIN TO USER otel_monitor;
 The setup uses `otel-collector-config.yaml`, which defines:
 - The `snowflake` receiver, connecting directly to your account via the Snowflake Go driver
 - Opt-in metrics (billing, logins, row counts, query spill) enabled in addition to the receiver's defaults
+- A `sqlquery` receiver running custom SQL against `TASK_HISTORY`, `COPY_HISTORY`, `PIPE_USAGE_HISTORY`, and `SERVERLESS_TASK_HISTORY` for task/pipeline failure and serverless cost metrics (see [Task & pipeline metrics](#task--pipeline-metrics) below)
 - Last9 OTLP exporter configuration
 
 Edit `otel-collector-config.yaml` and replace:
@@ -45,6 +51,8 @@ Edit `otel-collector-config.yaml` and replace:
 - `<SNOWFLAKE_ACCOUNT>` — your account identifier, e.g. `xy12345.us-east-1`
 - `<SNOWFLAKE_WAREHOUSE>` — the warehouse from step 2
 - `<LAST9_OTLP_ENDPOINT>` and `<LAST9_OTLP_AUTH_HEADER>` — from Last9 Integrations
+
+The `sqlquery` receiver's `datasource` line needs the same four values substituted into its DSN string (`user:password@account/...`) — it's a second connection to the same account, using the Snowflake Go driver directly rather than the `snowflake` receiver's built-in client.
 
 ### 4. Start the Collector
 
@@ -101,6 +109,20 @@ The receiver queries Snowflake's `ACCOUNT_USAGE` views on a fixed interval (`col
 | `snowflake.storage.failsafe_bytes.total` | Fail-safe storage bytes |
 
 Remove or set `enabled: false` for any opt-in metric you don't need to reduce query load on your monitoring warehouse.
+
+#### Task & pipeline metrics
+
+The `snowflake` receiver above has no visibility into Task Scheduler or COPY/Snowpipe failures — it only sees query-level and billing data. The `sqlquery` receiver fills that gap with custom SQL against four `ACCOUNT_USAGE` views:
+
+| Metric | Source view | Notes |
+| --- | --- | --- |
+| `snowflake.task.run_count` | `TASK_HISTORY` | Task runs in the last 60m, by `state`. Alert on `state="FAILED"` for task failures. |
+| `snowflake.copy.load_count` | `COPY_HISTORY` | COPY INTO loads in the last 60m, by `status`. `LOAD_FAILED` / `PARTIALLY_LOADED` indicate pipeline failures. |
+| `snowflake.copy.rows_parsed` / `snowflake.copy.rows_loaded` | `COPY_HISTORY` | A gap between parsed and loaded rows on an otherwise-successful load indicates a silent partial failure. |
+| `snowflake.pipe.bytes_inserted` / `snowflake.pipe.files_inserted` | `PIPE_USAGE_HISTORY` | Snowpipe throughput by pipe. Cross-reference with `snowflake.copy.load_count{status="LOAD_FAILED", pipe_name=...}` for pipe-driven load errors — this complements the existing `snowflake.pipe.credits_used.total` (cost only, no throughput/error detail). |
+| `snowflake.serverless_task.credits_used` | `SERVERLESS_TASK_HISTORY` | Serverless task compute cost by task, separate from the failure metrics above. |
+
+These are gauges: each data point is a count/sum over the last 60 minutes (2x the 30m `collection_interval`, to cover `ACCOUNT_USAGE` ingestion lag without gaps), not a running total. Use `sum_over_time` / `max_over_time` in queries rather than treating them as monotonic counters.
 
 ### Verification
 
