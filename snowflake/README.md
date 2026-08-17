@@ -27,20 +27,20 @@ You also need:
 
 ```sql
 CREATE WAREHOUSE IF NOT EXISTS monitoring_wh WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60;
-CREATE ROLE IF NOT EXISTS otel_monitor;
+CREATE ROLE IF NOT EXISTS otel_monitor_role;
 CREATE USER IF NOT EXISTS otel_monitor PASSWORD = '<strong-password>'
-  DEFAULT_WAREHOUSE = monitoring_wh DEFAULT_ROLE = otel_monitor;
-GRANT USAGE, OPERATE ON WAREHOUSE monitoring_wh TO ROLE otel_monitor;
+  DEFAULT_WAREHOUSE = monitoring_wh DEFAULT_ROLE = otel_monitor_role;
+GRANT USAGE, OPERATE ON WAREHOUSE monitoring_wh TO ROLE otel_monitor_role;
 
 -- IMPORTED PRIVILEGES is what actually grants ACCOUNT_USAGE access — this
 -- covers both the snowflake receiver's own views and the sqlquery
 -- receiver's TASK_HISTORY / COPY_HISTORY / PIPE_USAGE_HISTORY /
 -- SERVERLESS_TASK_HISTORY queries below. No ACCOUNTADMIN grant needed.
-GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE otel_monitor;
-GRANT ROLE otel_monitor TO USER otel_monitor;
+GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE otel_monitor_role;
+GRANT ROLE otel_monitor_role TO USER otel_monitor;
 ```
 
-`ACCOUNT_USAGE` views require `ACCOUNTADMIN`, or — as above — a custom role explicitly granted `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database. The `role` field in both receivers below is a plain string with no built-in constraint to `ACCOUNTADMIN`; point it at `otel_monitor`.
+`ACCOUNT_USAGE` views require `ACCOUNTADMIN`, or — as above — a custom role explicitly granted `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database. The `role` field in both receivers below is a plain string with no built-in constraint to `ACCOUNTADMIN`; point it at `otel_monitor_role`.
 
 ### 3. Configure the OpenTelemetry Collector
 
@@ -54,7 +54,7 @@ Edit `otel-collector-config.yaml` and replace:
 - `<SNOWFLAKE_USERNAME>`, `<SNOWFLAKE_PASSWORD>` — your monitoring user's credentials
 - `<SNOWFLAKE_ACCOUNT>` — your account identifier, e.g. `xy12345.us-east-1`
 - `<SNOWFLAKE_WAREHOUSE>` — the warehouse from step 2
-- `<SNOWFLAKE_ROLE>` — the `otel_monitor` role from step 2 (not `ACCOUNTADMIN`)
+- `<SNOWFLAKE_ROLE>` — the `otel_monitor_role` role from step 2 (not `ACCOUNTADMIN`)
 - `<LAST9_OTLP_ENDPOINT>` and `<LAST9_OTLP_AUTH_HEADER>` — from Last9 Integrations
 
 The `sqlquery` receiver's `datasource` line needs the same four values substituted into its DSN string (`user:password@account/...`) — it's a second connection to the same account, using the Snowflake Go driver directly rather than the `snowflake` receiver's built-in client.
