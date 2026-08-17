@@ -4,7 +4,7 @@ receivers:
     password: "<SNOWFLAKE_PASSWORD>"
     account: "<SNOWFLAKE_ACCOUNT>" # e.g. xy12345.us-east-1
     warehouse: "<SNOWFLAKE_WAREHOUSE>" # dedicated monitoring warehouse, e.g. MONITORING_WH
-    role: "ACCOUNTADMIN" # or a custom role with ACCOUNT_USAGE access
+    role: "<SNOWFLAKE_ROLE>" # dedicated monitoring role, e.g. OTEL_MONITOR — see README step 2
     collection_interval: 30m
     metrics:
       # Opt-in metrics enabled below (disabled by default upstream).
@@ -52,7 +52,7 @@ receivers:
     driver: snowflake
     # Reuses the same monitoring user/warehouse/role as the snowflake receiver above.
     # DSN format: user:password@account/db/schema?warehouse=wh&role=role
-    datasource: "<SNOWFLAKE_USERNAME>:<SNOWFLAKE_PASSWORD>@<SNOWFLAKE_ACCOUNT>/SNOWFLAKE/ACCOUNT_USAGE?warehouse=<SNOWFLAKE_WAREHOUSE>&role=ACCOUNTADMIN"
+    datasource: "<SNOWFLAKE_USERNAME>:<SNOWFLAKE_PASSWORD>@<SNOWFLAKE_ACCOUNT>/SNOWFLAKE/ACCOUNT_USAGE?warehouse=<SNOWFLAKE_WAREHOUSE>&role=<SNOWFLAKE_ROLE>"
     collection_interval: 30m
     # Lookback windows are 2x collection_interval to cover ACCOUNT_USAGE's ingestion
     # lag/jitter without gaps. These are point-in-time window counts (gauges), not

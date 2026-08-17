@@ -19,24 +19,28 @@ docker compose version
 ```
 
 You also need:
-- A Snowflake user with the `ACCOUNTADMIN` role (or a custom role granted access to `ACCOUNT_USAGE` views)
+- A Snowflake user with a custom role granted `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database (or `ACCOUNTADMIN`, but a dedicated least-privilege role is recommended — see below)
 - A dedicated Snowflake warehouse for monitoring queries
 - Username/password auth (the receiver does not yet support RSA key-pair auth — see [Troubleshooting](#troubleshooting))
 
-### 2. Create a monitoring role and warehouse (optional but recommended)
+### 2. Create a monitoring role and warehouse
 
 ```sql
-CREATE WAREHOUSE IF NOT EXISTS monitoring_wh WITH WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60;
-CREATE USER IF NOT EXISTS otel_monitor PASSWORD = '<strong-password>' DEFAULT_WAREHOUSE = monitoring_wh;
-GRANT ROLE ACCOUNTADMIN TO USER otel_monitor;
+CREATE WAREHOUSE IF NOT EXISTS monitoring_wh WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60;
+CREATE ROLE IF NOT EXISTS otel_monitor;
+CREATE USER IF NOT EXISTS otel_monitor PASSWORD = '<strong-password>'
+  DEFAULT_WAREHOUSE = monitoring_wh DEFAULT_ROLE = otel_monitor;
+GRANT USAGE, OPERATE ON WAREHOUSE monitoring_wh TO ROLE otel_monitor;
 
--- Explicit grant for the sqlquery receiver's TASK_HISTORY / COPY_HISTORY /
--- PIPE_USAGE_HISTORY / SERVERLESS_TASK_HISTORY queries below. ACCOUNTADMIN
--- already has this; run it anyway if you're using a custom role instead.
-GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE ACCOUNTADMIN;
+-- IMPORTED PRIVILEGES is what actually grants ACCOUNT_USAGE access — this
+-- covers both the snowflake receiver's own views and the sqlquery
+-- receiver's TASK_HISTORY / COPY_HISTORY / PIPE_USAGE_HISTORY /
+-- SERVERLESS_TASK_HISTORY queries below. No ACCOUNTADMIN grant needed.
+GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE otel_monitor;
+GRANT ROLE otel_monitor TO USER otel_monitor;
 ```
 
-`ACCOUNT_USAGE` views require `ACCOUNTADMIN` (or a role explicitly granted `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database). Least-privilege setup is tracked upstream but not yet supported by the receiver.
+`ACCOUNT_USAGE` views require `ACCOUNTADMIN`, or — as above — a custom role explicitly granted `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database. The `role` field in both receivers below is a plain string with no built-in constraint to `ACCOUNTADMIN`; point it at `otel_monitor`.
 
 ### 3. Configure the OpenTelemetry Collector
 
@@ -50,6 +54,7 @@ Edit `otel-collector-config.yaml` and replace:
 - `<SNOWFLAKE_USERNAME>`, `<SNOWFLAKE_PASSWORD>` — your monitoring user's credentials
 - `<SNOWFLAKE_ACCOUNT>` — your account identifier, e.g. `xy12345.us-east-1`
 - `<SNOWFLAKE_WAREHOUSE>` — the warehouse from step 2
+- `<SNOWFLAKE_ROLE>` — the `otel_monitor` role from step 2 (not `ACCOUNTADMIN`)
 - `<LAST9_OTLP_ENDPOINT>` and `<LAST9_OTLP_AUTH_HEADER>` — from Last9 Integrations
 
 The `sqlquery` receiver's `datasource` line needs the same four values substituted into its DSN string (`user:password@account/...`) — it's a second connection to the same account, using the Snowflake Go driver directly rather than the `snowflake` receiver's built-in client.
@@ -66,7 +71,7 @@ docker compose -f docker-compose.yaml up -d
 
 The receiver queries Snowflake's `ACCOUNT_USAGE` views on a fixed interval (`collection_interval: 30m` here) and converts the results into OTLP metrics. It connects directly — no separate exporter process is needed.
 
-> **Data latency:** `ACCOUNT_USAGE` views lag live activity by up to 45 minutes. This is a Snowflake platform limitation, not specific to this receiver — Datadog and Grafana integrations see the same delay. Don't set `collection_interval` below ~10m; it won't surface data any sooner and just adds load to your monitoring warehouse.
+> **Data latency:** `ACCOUNT_USAGE` view latency varies by view — this is a Snowflake platform limitation, not specific to this receiver (Datadog and Grafana integrations see the same delay). `QUERY_HISTORY`-backed metrics lag up to 45 minutes; `WAREHOUSE_LOAD_HISTORY` — the source of `snowflake.query.executed`, `snowflake.query.blocked`, and the other warehouse-load metrics — can lag up to 3 hours. Don't set `collection_interval` below ~10m; it won't surface data any sooner and just adds load to your monitoring warehouse.
 
 #### Metrics reference
 
@@ -74,7 +79,7 @@ The receiver queries Snowflake's `ACCOUNT_USAGE` views on a fixed interval (`col
 
 | Metric | Notes |
 | --- | --- |
-| `snowflake.query.executed` | Query count by status |
+| `snowflake.query.executed` | Avg running-query count per warehouse over a 24h window (from `WAREHOUSE_LOAD_HISTORY`) |
 | `snowflake.query.blocked` | Blocked queries |
 | `snowflake.query.queued_overload` | Queue overload |
 | `snowflake.query.queued_provision` | Queue provisioning |
@@ -98,7 +103,9 @@ The receiver queries Snowflake's `ACCOUNT_USAGE` views on a fixed interval (`col
 | `snowflake.billing.cloud_service.total` | Credits used by cloud service |
 | `snowflake.billing.total_credit.total` | Total credits used, account-wide |
 | `snowflake.billing.virtual_warehouse.total` | Credits used by virtual warehouses |
-| `snowflake.billing.warehouse.*` | Per-warehouse credit breakdowns |
+| `snowflake.billing.warehouse.cloud_service.total` | Per-warehouse cloud service credits |
+| `snowflake.billing.warehouse.total_credit.total` | Per-warehouse total credits |
+| `snowflake.billing.warehouse.virtual_warehouse.total` | Per-warehouse virtual warehouse credits |
 | `snowflake.logins.total` | Login attempts (success/fail) |
 | `snowflake.pipe.credits_used.total` | Snowpipe credit usage |
 | `snowflake.rows_inserted.avg` / `rows_deleted.avg` / `rows_updated.avg` / `rows_produced.avg` / `rows_unloaded.avg` | Row-level throughput |
@@ -139,7 +146,7 @@ With `debug` exporter enabled, you should see Snowflake metrics logged locally w
 
 **No metrics after startup:** The first collection cycle only fires after `collection_interval` elapses (default 30m in this config). Check `docker logs otel-collector` for auth or query errors in the meantime.
 
-**Auth errors:** Verify the user has `ACCOUNTADMIN` (or `ACCOUNT_USAGE` access) and that the warehouse is running and not suspended indefinitely.
+**Auth errors:** Verify the user's role has `ACCOUNT_USAGE` access (either `ACCOUNTADMIN`, or `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database as set up above) and that the warehouse is running and not suspended indefinitely.
 
 **Need RSA / key-pair auth:** The `snowflake` receiver only supports username/password today. If your security policy requires key-pair auth, use the Prometheus path instead — Grafana Alloy's [`prometheus.exporter.snowflake`](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.exporter.snowflake/) supports RSA, scraped via the collector's `prometheusreceiver`.
 
