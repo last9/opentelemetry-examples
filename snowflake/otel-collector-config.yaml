@@ -4,7 +4,7 @@ receivers:
     password: "<SNOWFLAKE_PASSWORD>"
     account: "<SNOWFLAKE_ACCOUNT>" # e.g. xy12345.us-east-1
     warehouse: "<SNOWFLAKE_WAREHOUSE>" # dedicated monitoring warehouse, e.g. MONITORING_WH
-    role: "ACCOUNTADMIN" # or a custom role with ACCOUNT_USAGE access
+    role: "<SNOWFLAKE_ROLE>" # dedicated monitoring role, e.g. OTEL_MONITOR — see README step 2
     collection_interval: 30m
     metrics:
       # Opt-in metrics enabled below (disabled by default upstream).
@@ -48,6 +48,103 @@ receivers:
       snowflake.storage.failsafe_bytes.total:
         enabled: true
 
+  sqlquery:
+    driver: snowflake
+    # Reuses the same monitoring user/warehouse/role as the snowflake receiver above.
+    # DSN format: user:password@account/db/schema?warehouse=wh&role=role
+    datasource: "<SNOWFLAKE_USERNAME>:<SNOWFLAKE_PASSWORD>@<SNOWFLAKE_ACCOUNT>/SNOWFLAKE/ACCOUNT_USAGE?warehouse=<SNOWFLAKE_WAREHOUSE>&role=<SNOWFLAKE_ROLE>"
+    collection_interval: 30m
+    # Lookback windows are 2x collection_interval to cover ACCOUNT_USAGE's ingestion
+    # lag/jitter without gaps. These are point-in-time window counts (gauges), not
+    # running totals, so overlap between windows does not double-count.
+    queries:
+      # Task failures — SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+      - sql: >-
+          SELECT database_name, schema_name, name AS task_name, state,
+                 COUNT(*) AS run_count
+          FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+          WHERE scheduled_time >= DATEADD('minute', -60, CURRENT_TIMESTAMP())
+          GROUP BY 1, 2, 3, 4
+        metrics:
+          - metric_name: snowflake.task.run_count
+            value_column: run_count
+            value_type: int
+            data_type: gauge
+            attribute_columns: [database_name, schema_name, task_name, state]
+            unit: "1"
+            description: "Task Scheduler runs in the last 60m, by state (FAILED indicates a task failure)"
+
+      # Load/pipeline failures — SNOWFLAKE.ACCOUNT_USAGE.COPY_HISTORY
+      - sql: >-
+          SELECT table_name, COALESCE(pipe_name, '') AS pipe_name, status,
+                 COUNT(*) AS load_count,
+                 SUM(row_parsed) AS rows_parsed,
+                 SUM(row_count) AS rows_loaded
+          FROM SNOWFLAKE.ACCOUNT_USAGE.COPY_HISTORY
+          WHERE last_load_time >= DATEADD('minute', -60, CURRENT_TIMESTAMP())
+          GROUP BY 1, 2, 3
+        metrics:
+          - metric_name: snowflake.copy.load_count
+            value_column: load_count
+            value_type: int
+            data_type: gauge
+            attribute_columns: [table_name, pipe_name, status]
+            unit: "1"
+            description: "COPY INTO loads in the last 60m, by status (LOAD_FAILED / PARTIALLY_LOADED indicate pipeline failures)"
+          - metric_name: snowflake.copy.rows_parsed
+            value_column: rows_parsed
+            value_type: int
+            data_type: gauge
+            attribute_columns: [table_name, pipe_name, status]
+            unit: "1"
+            description: "Rows parsed from staged files in the last 60m"
+          - metric_name: snowflake.copy.rows_loaded
+            value_column: rows_loaded
+            value_type: int
+            data_type: gauge
+            attribute_columns: [table_name, pipe_name, status]
+            unit: "1"
+            description: "Rows actually loaded in the last 60m — gap vs rows_parsed indicates silent partial-load failures"
+
+      # Snowpipe throughput detail — SNOWFLAKE.ACCOUNT_USAGE.PIPE_USAGE_HISTORY
+      - sql: >-
+          SELECT pipe_name,
+                 SUM(bytes_inserted) AS bytes_inserted,
+                 SUM(files_inserted) AS files_inserted
+          FROM SNOWFLAKE.ACCOUNT_USAGE.PIPE_USAGE_HISTORY
+          WHERE start_time >= DATEADD('minute', -60, CURRENT_TIMESTAMP())
+          GROUP BY 1
+        metrics:
+          - metric_name: snowflake.pipe.bytes_inserted
+            value_column: bytes_inserted
+            value_type: int
+            data_type: gauge
+            attribute_columns: [pipe_name]
+            unit: "By"
+            description: "Bytes inserted via Snowpipe in the last 60m, by pipe"
+          - metric_name: snowflake.pipe.files_inserted
+            value_column: files_inserted
+            value_type: int
+            data_type: gauge
+            attribute_columns: [pipe_name]
+            unit: "1"
+            description: "Files inserted via Snowpipe in the last 60m, by pipe — cross-reference with snowflake.copy.load_count{status=LOAD_FAILED} for pipe-driven load errors"
+
+      # Serverless task cost — SNOWFLAKE.ACCOUNT_USAGE.SERVERLESS_TASK_HISTORY
+      - sql: >-
+          SELECT task_name, database_name, SUM(credits_used) AS credits_used
+          FROM SNOWFLAKE.ACCOUNT_USAGE.SERVERLESS_TASK_HISTORY
+          WHERE start_time >= DATEADD('minute', -60, CURRENT_TIMESTAMP())
+          GROUP BY 1, 2
+        metrics:
+          - metric_name: snowflake.serverless_task.credits_used
+            value_column: credits_used
+            value_type: double
+            data_type: gauge
+            attribute_columns: [task_name, database_name]
+            unit: "1"
+            description: "Serverless task compute credits consumed in the last 60m, by task"
+
 processors:
   batch:
     timeout: 10s
@@ -73,7 +170,7 @@ exporters:
 service:
   pipelines:
     metrics:
-      receivers: [snowflake]
+      receivers: [snowflake, sqlquery]
       processors: [resourcedetection, resource, batch]
       exporters: [otlp/last9]
 
