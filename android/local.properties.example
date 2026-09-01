@@ -18,9 +18,12 @@ last9.clientToken=<your-client-token>
 # Origin sent as the X-LAST9-ORIGIN header.
 last9.origin=https://app.last9.io
 
-# --- Last9 RUM Android SDK source (distributed via Last9 CDN) ---
-# The SDK resolves from the CDN Maven repo declared in settings.gradle.kts:
-#   https://cdn.last9.io/rum-sdk/android/maven/
-# (Maven coordinates: io.last9:rum-android — see the SDK README.)
-# Pin/override the SDK version here. Default is 0.7.1 if this is omitted.
-last9.rumSdkVersion=0.7.1
+# --- Last9 RUM Android SDK source ---
+# Prefer a locally published rum-sdk build when testing unreleased fixes:
+#   cd ~/Projects/browser/packages/android && ./gradlew :rum:publishToMavenLocal
+# Then set:
+last9.rumSdkVersion=1.6.9
+# settings.gradle.kts already puts mavenLocal() ahead of the CDN repo.
+#
+# CDN fallback (omit mavenLocal publish): pin any published CDN version here.
+# last9.rumSdkVersion=0.7.1

@@ -1,13 +1,22 @@
 platform :ios, '15.1'
 
-# Last9 RUM iOS SDK, distributed from the Last9 CDN (no checksum step on the
-# CocoaPods path). Podspec URL pattern (see the SDK README):
-#   https://cdn.last9.io/rum-sdk/ios/builds/<version>/Last9RUM.podspec
-# Override the pinned version with:  export LAST9_RUM_VERSION=<version>
-last9_rum_version = ENV['LAST9_RUM_VERSION'] || '0.7.1'
+# Last9 RUM iOS SDK.
+#
+# Local checkout (default for this harness branch) — exercise unreleased fixes
+# from rum-sdk packages/ios. Override path with LAST9_RUM_PATH.
+#
+# CDN podspec fallback:
+#   LAST9_RUM_USE_CDN=1 LAST9_RUM_VERSION=1.6.9 pod install
+last9_rum_path = ENV['LAST9_RUM_PATH'] || "#{Dir.home}/Projects/browser/packages/ios"
+last9_rum_version = ENV['LAST9_RUM_VERSION'] || '1.6.9'
+use_cdn = ENV['LAST9_RUM_USE_CDN'] == '1'
 
 target 'RUMExample' do
   use_frameworks!
 
-  pod 'Last9RUM', :podspec => "https://cdn.last9.io/rum-sdk/ios/builds/#{last9_rum_version}/Last9RUM.podspec"
+  if use_cdn
+    pod 'Last9RUM', :podspec => "https://cdn.last9.io/rum-sdk/ios/builds/#{last9_rum_version}/Last9RUM.podspec"
+  else
+    pod 'Last9RUM', :path => last9_rum_path
+  end
 end

@@ -15,9 +15,11 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // Prefer locally published SDK when testing unreleased rum-sdk changes:
+        //   cd ~/Projects/browser/packages/android && ./gradlew :rum:publishToMavenLocal
+        mavenLocal()
         google()
         mavenCentral()
-        // Last9 RUM Android SDK distribution
         maven { url = uri("https://cdn.last9.io/rum-sdk/android/maven/") }
     }
 }

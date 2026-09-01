@@ -87,10 +87,11 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.okhttp)
 
-    // Last9 RUM Android SDK — resolved from the CDN Maven repo declared in
-    // settings.gradle.kts (https://cdn.last9.io/rum-sdk/android/maven/).
-    // Version comes from local.properties (last9.rumSdkVersion); default 0.7.1.
-    implementation("io.last9:rum-android:${localProp("last9.rumSdkVersion", "0.7.1")}")
+    // Last9 RUM Android SDK — CDN by default; substituted by includeBuild when
+    // last9.useLocalSdk=true in local.properties (see settings.gradle.kts).
+    // Version comes from local.properties (last9.rumSdkVersion); default 1.6.9
+    // to match the current mobile RUM line under test.
+    implementation("io.last9:rum-android:${localProp("last9.rumSdkVersion", "1.6.9")}")
 
     debugImplementation(libs.androidx.ui.tooling)
 }

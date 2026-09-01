@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Last9 WebView Harness</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; margin: 16px; color: #111; }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    p { font-size: 13px; color: #444; }
+    button { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 14px;
+             border-radius: 8px; border: 1px solid #ddd; background: #f7f7f7; }
+    code { background: #eee; padding: 2px 4px; border-radius: 4px; font-size: 12px; }
+    #path { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Last9 WebView Harness</h1>
+  <p>Path: <code id="path"></code></p>
+  <p>Use these buttons to exercise native RUM view rotation / fold / SPA tracking
+     (ENG-1844, ENG-1837, ENG-1848, ENG-1847).</p>
+
+  <button onclick="go('/labs')">Go /labs (path rotate)</button>
+  <button onclick="go('/labs/tests')">Go /labs/tests (path rotate)</button>
+  <button onclick="go('/labs/tests?city=test')">Go /labs/tests?city=test (query-only)</button>
+  <button onclick="goHash('/health-record')">Hash #/health-record (SPA)</button>
+  <button onclick="goHash('/cart')">Hash #/cart (SPA)</button>
+  <button onclick="history.back()">history.back()</button>
+  <button onclick="pushSpa('/checkout')">pushState /checkout (SPA)</button>
+  <button onclick="replaceSpa('/checkout?step=2')">replaceState query-only</button>
+
+  <script>
+    function show() {
+      document.getElementById('path').textContent = location.pathname + location.search + location.hash;
+    }
+    function go(path) {
+      // file:// assets can't do real path navigations — simulate via hash so the
+      // native SPA/history hooks still fire. https pages use a real navigation.
+      if (location.protocol === 'file:') {
+        location.hash = path;
+        show();
+        return;
+      }
+      location.href = path;
+    }
+    function goHash(frag) {
+      location.hash = frag;
+      show();
+    }
+    function pushSpa(path) {
+      if (location.protocol === 'file:') {
+        history.pushState({}, '', '#' + path);
+      } else {
+        history.pushState({}, '', path);
+      }
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      show();
+    }
+    function replaceSpa(path) {
+      if (location.protocol === 'file:') {
+        history.replaceState({}, '', '#' + path);
+      } else {
+        history.replaceState({}, '', path);
+      }
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      show();
+    }
+    window.addEventListener('hashchange', show);
+    window.addEventListener('popstate', show);
+    show();
+  </script>
+</body>
+</html>

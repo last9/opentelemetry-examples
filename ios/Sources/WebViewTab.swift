@@ -3,20 +3,54 @@ import WebKit
 import Last9RUM
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  WebView Tab — native session/view correlation for Browser RUM in WebViews.
-//  Loads https://app.last9.io/ in a WKWebView, injects the SDK's native
-//  context script (getWebViewInjectedJavaScript) + a Browser-RUM bootstrap, and
-//  calls instrument(webView:) so the page's spans share the native session.
+//  WebView Harness — ENG-1844 / 1837 / 1847 / 1848 against local 1.6.9 SDK.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-private let WEBVIEW_TEST_URL = "https://app.last9.io/"
+private let LIVE_URL = "https://app.last9.io/"
 
-/// Browser-RUM bootstrap analogous to the RN reference app's
-/// `WEBVIEW_RUM_BOOTSTRAP`. It waits for the native context (written by the
-/// SDK's injected script) and `window.L9RUM`, then posts the context back to
-/// native via `window.webkit.messageHandlers.l9native`. Browser RUM itself is
-/// auto-loaded by the SDK (webViewAutoLoadBrowserRum=true), so this script only
-/// adds the context-probe round-trip the demo UI displays.
+private let HARNESS_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Last9 WebView Harness</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; margin: 16px; color: #111; }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    p { font-size: 13px; color: #444; }
+    button { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 14px;
+             border-radius: 8px; border: 1px solid #ddd; background: #f7f7f7; }
+    code { background: #eee; padding: 2px 4px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Last9 WebView Harness</h1>
+  <p>Path: <code id="path"></code></p>
+  <button onclick="goHash('/labs')">Hash #/labs</button>
+  <button onclick="goHash('/labs/tests')">Hash #/labs/tests</button>
+  <button onclick="goHash('/labs/tests?city=test')">Hash query-ish</button>
+  <button onclick="goHash('/health-record')">Hash #/health-record</button>
+  <button onclick="pushSpa('/checkout')">pushState /checkout</button>
+  <button onclick="history.back()">history.back()</button>
+  <script>
+    function show() {
+      document.getElementById('path').textContent = location.pathname + location.search + location.hash;
+    }
+    function goHash(frag) { location.hash = frag; show(); }
+    function pushSpa(path) {
+      history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      show();
+    }
+    window.addEventListener('hashchange', show);
+    window.addEventListener('popstate', show);
+    show();
+  </script>
+</body>
+</html>
+"""
+
 private let WEBVIEW_RUM_BOOTSTRAP = """
 (function() {
   if (window.__L9_WEBVIEW_PROBE_BOOTSTRAPPED) return true;
@@ -66,14 +100,24 @@ struct WebViewTab: View {
         NavigationStack {
             ScreenScroll {
                 FeatureBadge(features: [
-                    "getWebViewInjectedJavaScript() native context helper",
-                    "instrument(webView:) re-injects context on navigation",
-                    "Native session.id shared with Browser RUM in the page",
-                    "Native view.id stamped as native.view.id",
+                    "Local 1.6.9 SDK (path rotate / resume fold / SPA / kill tombstone)",
+                    "instrument(webView:) + getWebViewInjectedJavaScript()",
+                    "Harness HTML: hash + pushState SPA",
+                    "flush() without session rollover",
                 ])
-                Hint("This screen loads the Last9 dashboard in a real WKWebView. The app injects native session/view context and auto-loads Browser RUM on the page, then the page posts its context back to native.")
+                Hint("1) Tap hash/pushState buttons → expect view.url updates.\n2) Leave WebView tab → return → fold, no bare host.\n3) Flush then force-quit → cold start tombstone + restore.")
 
-                PrimaryButton(title: "Refresh WebView Context") { model.refresh() }
+                PrimaryButton(title: "Load harness HTML") { model.loadHarness() }
+                PrimaryButton(title: "Load app.last9.io") { model.loadLive() }
+                PrimaryButton(title: "flush() — export, keep session") {
+                    L9Rum.shared.flush()
+                    EventLog.shared.add("L9Rum.flush()")
+                }
+                PrimaryButton(title: "addEvent(WebView_shown)") {
+                    L9Rum.shared.addEvent("WebView_shown", attributes: ["source": "ios-harness"])
+                    EventLog.shared.add("addEvent WebView_shown")
+                }
+                PrimaryButton(title: "Reload") { model.refresh() }
 
                 SectionHeader(title: "Last Context Probe")
                 VStack(alignment: .leading, spacing: 6) {
@@ -83,6 +127,8 @@ struct WebViewTab: View {
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).textSelection(.enabled)
                     Text("native.view.id: \(model.viewId ?? "waiting…")")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).textSelection(.enabled)
+                    Text("mode: \(model.mode)")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -98,34 +144,42 @@ struct WebViewTab: View {
 
                 SectionHeader(title: "Actual WebView")
                 WebViewContainer(model: model)
-                    .frame(height: 360)
+                    .frame(height: 420)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder, lineWidth: 1))
                     .padding(.bottom, 24)
             }
-            .navigationTitle("WebView Correlation")
+            .navigationTitle("WebView Harness")
             .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
 
-/// Holds the WebView state + receives the JS context-probe messages.
 @MainActor
 final class WebViewModel: NSObject, ObservableObject, WKScriptMessageHandler {
+    enum Mode { case harness, live }
+
     @Published var contextProbe = "Waiting for WebView context…"
     @Published var sessionId: String?
     @Published var viewId: String?
-
-    /// Bumped to force the WebView to reload.
     @Published var reloadToken = 0
+    @Published var mode: Mode = .harness
 
-    func refresh() {
-        L9Rum.shared.startView("WebViewSessionCorrelation")
-        EventLog.shared.add("WebView context refresh requested")
-        reloadToken += 1
+    func loadHarness() {
+        mode = .harness
+        refresh()
     }
 
-    // MARK: - WKScriptMessageHandler
+    func loadLive() {
+        mode = .live
+        refresh()
+    }
+
+    func refresh() {
+        L9Rum.shared.startView("WebViewHarness")
+        EventLog.shared.add("WebView refresh mode=\(mode)")
+        reloadToken += 1
+    }
 
     nonisolated func userContentController(_ userContentController: WKUserContentController,
                                            didReceive message: WKScriptMessage) {
@@ -147,20 +201,15 @@ final class WebViewModel: NSObject, ObservableObject, WKScriptMessageHandler {
     }
 }
 
-/// Bridges a configured `WKWebView` into SwiftUI.
 struct WebViewContainer: UIViewRepresentable {
     @ObservedObject var model: WebViewModel
 
     func makeUIView(context: Context) -> WKWebView {
-        // Start the native view BEFORE the WebView so the SDK has an active
-        // view to stamp as the WebView host (view.type=webview, native.view.id).
-        L9Rum.shared.startView("WebViewSessionCorrelation")
+        L9Rum.shared.startView("WebViewHarness")
 
         let controller = WKUserContentController()
         controller.add(model, name: "l9native")
 
-        // Document-start injection of the SDK's native-context script + the
-        // demo's context-probe bootstrap.
         let injected = L9Rum.shared.getWebViewInjectedJavaScript() + "\n" + WEBVIEW_RUM_BOOTSTRAP
         EventLog.shared.add("WebView injected JS loaded (\(injected.count) chars)")
         controller.addUserScript(WKUserScript(source: injected,
@@ -171,21 +220,29 @@ struct WebViewContainer: UIViewRepresentable {
         config.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: config)
-
-        // Forwarding navigation delegate that re-injects context on every
-        // committed navigation and auto-loads Browser RUM.
         L9Rum.shared.instrument(webView: webView)
-
-        webView.load(URLRequest(url: URL(string: WEBVIEW_TEST_URL)!))
+        load(into: webView)
         context.coordinator.lastReloadToken = model.reloadToken
+        context.coordinator.lastMode = model.mode
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        if context.coordinator.lastReloadToken != model.reloadToken {
+        if context.coordinator.lastReloadToken != model.reloadToken
+            || context.coordinator.lastMode != model.mode {
             context.coordinator.lastReloadToken = model.reloadToken
+            context.coordinator.lastMode = model.mode
             L9Rum.shared.instrument(webView: webView)
-            webView.reload()
+            load(into: webView)
+        }
+    }
+
+    private func load(into webView: WKWebView) {
+        switch model.mode {
+        case .harness:
+            webView.loadHTMLString(HARNESS_HTML, baseURL: URL(string: "https://harness.local/"))
+        case .live:
+            webView.load(URLRequest(url: URL(string: LIVE_URL)!))
         }
     }
 
@@ -193,5 +250,6 @@ struct WebViewContainer: UIViewRepresentable {
 
     final class Coordinator {
         var lastReloadToken = -1
+        var lastMode: WebViewModel.Mode = .harness
     }
 }

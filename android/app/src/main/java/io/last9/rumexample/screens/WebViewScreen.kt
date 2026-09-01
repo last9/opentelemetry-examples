@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,17 +41,10 @@ import io.last9.rumexample.ui.SectionTitle
 import io.last9.rumexample.ui.SummaryCard
 import org.json.JSONObject
 
-private const val WEBVIEW_TEST_URL = "https://app.last9.io/"
+private const val HARNESS_URL = "file:///android_asset/webview_harness.html"
+private const val LIVE_URL = "https://app.last9.io/"
 private const val BROWSER_RUM_SDK_URL = "https://cdn.last9.io/rum-sdk/builds/2.5.0-alpha/l9.umd.js"
 
-/**
- * Browser-RUM bootstrap injected after [L9Rum.getWebViewInjectedJavaScript]. It
- * loads the Browser RUM SDK from the CDN, inits it against this app's baseUrl +
- * clientToken (read from window.__LAST9_RUM_NATIVE_CONTEXT set by the native
- * helper), and posts the native context back to the app via the
- * `L9RumNative.postMessage` bridge so the context-probe card can render it.
- * Analogous to the reference's WEBVIEW_RUM_BOOTSTRAP.
- */
 private fun webViewRumBootstrap(baseUrl: String, clientToken: String): String = """
   (function() {
     if (window.__L9_WEBVIEW_RUM_BOOTSTRAPPED) return true;
@@ -110,9 +104,10 @@ private fun webViewRumBootstrap(baseUrl: String, clientToken: String): String = 
 """.trimIndent()
 
 /**
- * WebView tab — loads a real WebView, calls [L9Rum.getWebViewInjectedJavaScript]
- * and [L9Rum.instrument] so the page's Browser RUM shares the native session.id
- * and native.view.id, and shows the resulting context probe.
+ * WebView harness for ENG-1844 / 1837 / 1847 / 1848.
+ *
+ * Cases: path rotation, query-only, hash/pushState SPA, leave+return fold,
+ * flush without session rollover, kill/restart tombstone + restore.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -121,35 +116,92 @@ fun WebViewScreen() {
     var nativeSessionId by remember { mutableStateOf<String?>(null) }
     var nativeViewId by remember { mutableStateOf<String?>(null) }
     var webViewKey by remember { mutableIntStateOf(0) }
+    var targetUrl by remember { mutableStateOf(HARNESS_URL) }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
     val lastReloadedKey = remember { intArrayOf(0) }
 
     LaunchedEffect(Unit) {
-        L9Rum.startView("WebViewSessionCorrelation")
-        EventLog.add("startView: WebViewSessionCorrelation")
+        L9Rum.startView("WebViewHarness")
+        EventLog.add("startView: WebViewHarness")
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            EventLog.add("WebViewScreen disposed (leave tab → resume rebind on return)")
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(L9Theme.ScreenBg)) {
-        ScreenHeader("WebView Correlation")
+        ScreenHeader("WebView Harness")
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FeatureBadge(
                 features = listOf(
-                    "getWebViewInjectedJavaScript() native context helper",
-                    "instrument(webView) re-injects on navigation",
-                    "Native session.id shared with Browser RUM in the page",
-                    "Native view.id stamped as native.view.id",
+                    "Local 1.6.9 SDK (path rotate / resume fold / SPA / kill tombstone)",
+                    "instrument(webView) + getWebViewInjectedJavaScript()",
+                    "Harness HTML: path, query, hash, pushState",
+                    "flush() without session rollover",
                 ),
             )
-            Hint("This screen loads the Last9 dashboard in a real WebView. The app injects native context and boots Browser RUM on the page so its spans share the native session.")
+            Hint(
+                "1) Stay on harness → tap path buttons → expect new view.url rows.\n" +
+                    "2) Switch Home → WebView → expect fold onto one view (no bare Activity).\n" +
+                    "3) Tap Flush, then force-stop from Recents → cold start → prior page via " +
+                    "process_death view tombstone; restored page gets a new view.",
+            )
 
+            SectionTitle("Load target")
             PrimaryButton(
-                label = "Refresh WebView Context",
+                label = "Load harness HTML (SPA / path)",
                 onClick = {
-                    L9Rum.startView("WebViewSessionCorrelation")
-                    EventLog.add("WebView context refresh")
+                    targetUrl = HARNESS_URL
                     webViewKey += 1
+                    EventLog.add("load harness HTML")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PrimaryButton(
+                label = "Load app.last9.io (live)",
+                onClick = {
+                    targetUrl = LIVE_URL
+                    webViewKey += 1
+                    EventLog.add("load live URL")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            SectionTitle("Native actions")
+            PrimaryButton(
+                label = "flush() — export, keep session",
+                onClick = {
+                    L9Rum.flush()
+                    EventLog.add("L9Rum.flush()")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PrimaryButton(
+                label = "addEvent(WebView_shown)",
+                onClick = {
+                    L9Rum.addEvent("WebView_shown", mapOf("source" to "android-harness"))
+                    EventLog.add("addEvent WebView_shown")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PrimaryButton(
+                label = "Reload WebView (same URL)",
+                onClick = {
+                    webViewRef?.reload()
+                    EventLog.add("webview.reload()")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PrimaryButton(
+                label = "Crash process (uncaught) — optional",
+                onClick = {
+                    EventLog.add("throwing for crash-path end+flush")
+                    throw RuntimeException("intentional harness crash for ENG-1847")
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -160,6 +212,7 @@ fun WebViewScreen() {
                 lines = listOf(
                     "sessionId: ${nativeSessionId ?: "waiting..."}",
                     "native.view.id: ${nativeViewId ?: "waiting..."}",
+                    "url: $targetUrl",
                 ),
             )
             ContextCard(nativeContext)
@@ -168,13 +221,13 @@ fun WebViewScreen() {
             AndroidView(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(360.dp)
+                    .height(420.dp)
                     .clip(RoundedCornerShape(12.dp)),
                 factory = { ctx ->
                     WebView(ctx).apply {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
-                        // Correlate this WebView with the native session/view.
+                        settings.allowFileAccess = true
                         L9Rum.instrument(this)
                         addJavascriptInterface(
                             object {
@@ -190,7 +243,10 @@ fun WebViewScreen() {
                                             nativeSessionId = session
                                             nativeViewId = view
                                             nativeContext = payload.toString(2)
-                                            EventLog.add("WebView context → session:${session ?: "missing"} view:${view ?: "missing"}")
+                                            EventLog.add(
+                                                "WebView context → session:${session ?: "missing"} " +
+                                                    "view:${view ?: "missing"} href:${payload.optString("href")}",
+                                            )
                                         }.onFailure { nativeContext = data }
                                     }
                                 }
@@ -199,27 +255,30 @@ fun WebViewScreen() {
                         )
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView, url: String) {
-                                // Native context script + Browser-RUM bootstrap.
+                                EventLog.add("onPageFinished $url")
                                 val script = L9Rum.getWebViewInjectedJavaScript()
-                                EventLog.add("WebView injected JS loaded (${script.length} chars)")
                                 view.evaluateJavascript(script, null)
-                                view.evaluateJavascript(
-                                    webViewRumBootstrap(
-                                        io.last9.rumexample.BuildConfig.LAST9_BASE_URL,
-                                        io.last9.rumexample.BuildConfig.LAST9_CLIENT_TOKEN,
-                                    ),
-                                    null,
-                                )
+                                if (!url.startsWith("file:")) {
+                                    view.evaluateJavascript(
+                                        webViewRumBootstrap(
+                                            io.last9.rumexample.BuildConfig.LAST9_BASE_URL,
+                                            io.last9.rumexample.BuildConfig.LAST9_CLIENT_TOKEN,
+                                        ),
+                                        null,
+                                    )
+                                }
                             }
                         }
-                        loadUrl(WEBVIEW_TEST_URL)
+                        webViewRef = this
+                        loadUrl(targetUrl)
                     }
                 },
                 update = { webView ->
-                    // The refresh button bumps webViewKey; reload once per bump.
+                    webViewRef = webView
                     if (lastReloadedKey[0] != webViewKey) {
                         lastReloadedKey[0] = webViewKey
-                        if (webViewKey > 0) webView.reload()
+                        L9Rum.instrument(webView)
+                        webView.loadUrl(targetUrl)
                     }
                 },
             )
