@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      RAILS_ENV: development
+      PORT: 3001
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      OTEL_SERVICE_NAME: stripe-payments-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS}
+      OTEL_DEPLOYMENT_ENVIRONMENT: development
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_STRIPE_PUBLISHABLE_KEY: ${REACT_APP_STRIPE_PUBLISHABLE_KEY}
+      REACT_APP_BACKEND_URL: http://localhost:3001
+      REACT_APP_OTEL_SERVICE_NAME: stripe-checkout
+      REACT_APP_OTEL_TRACES_ENDPOINT: ${REACT_APP_OTEL_TRACES_ENDPOINT}
+      REACT_APP_OTEL_LOGS_ENDPOINT: ${REACT_APP_OTEL_LOGS_ENDPOINT}
+      REACT_APP_OTEL_API_TOKEN: ${REACT_APP_OTEL_API_TOKEN}
+      REACT_APP_OTEL_ORIGIN: http://localhost:3000
+      REACT_APP_OTEL_ENVIRONMENT: development
+    depends_on:
+      - backend
