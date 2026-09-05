@@ -29,7 +29,7 @@
         <slf4j.version>1.7.36</slf4j.version>
 
         <!-- Auto-instrumentation JAR -->
-        <vertx3.otel.autoconfigure.version>2.1.0-beta.1</vertx3.otel.autoconfigure.version>
+        <vertx3.otel.autoconfigure.version>2.3.5-beta.8</vertx3.otel.autoconfigure.version>
 
         <!-- Main verticle -->
         <main.verticle>com.example.holding.MainVerticle</main.verticle>

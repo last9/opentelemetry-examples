@@ -21,6 +21,7 @@ import io.vertx.reactivex.ext.jdbc.JDBCClient;
 import io.vertx.reactivex.ext.sql.SQLClient;
 import io.vertx.reactivex.ext.web.Router;
 import io.vertx.reactivex.ext.web.RoutingContext;
+import io.vertx.reactivex.ext.web.handler.BodyHandler;
 import io.vertx.reactivex.ext.web.client.WebClient;
 import io.vertx.reactivex.kafka.client.producer.KafkaProducer;
 import io.vertx.reactivex.kafka.client.producer.KafkaProducerRecord;
@@ -163,6 +164,9 @@ public class MainVerticle extends AbstractVerticle {
 
         // Plain Router — auto-instrumented by RouterImplAdvice
         Router router = Router.router(vertx);
+
+        // Buffer request bodies for POST/PUT routes
+        router.route().handler(BodyHandler.create());
 
         // Health check endpoint
         router.get("/health").handler(this::handleHealth);
