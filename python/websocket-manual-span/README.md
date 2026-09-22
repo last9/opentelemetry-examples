@@ -18,7 +18,7 @@ source .env
 python app.py
 ```
 
-`WEBSOCKET_URL` defaults to a public echo endpoint. Replace it with your own WebSocket URL; query parameters are stripped from span attributes to avoid capturing credentials.
+`WEBSOCKET_URL` defaults to Postman's public echo endpoint. Replace it with your own WebSocket URL; query parameters are stripped from span attributes to avoid capturing credentials.
 
 ## Configuration
 
