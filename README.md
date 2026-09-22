@@ -60,6 +60,7 @@ Getting OpenTelemetry instrumentation right can be tricky. This repository provi
 | Flask | Lightweight WSGI framework | Traces |
 | Django | Full-featured web framework | Traces |
 | Sanic | Async web framework | Traces |
+| WebSocket Manual Span | Manual client span for WebSocket upgrades | Traces |
 | GCP Cloud Functions | Serverless function instrumentation | Traces |
 
 ### JavaScript / Node.js (`javascript/`)
