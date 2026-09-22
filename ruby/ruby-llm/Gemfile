@@ -1,0 +1,25 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# Tiny HTTP shell so each curl request produces one chat span — same
+# pattern as the sinatra/ example in this repo.
+gem "sinatra", "~> 4.0"
+gem "puma"
+gem "rackup"
+gem "dotenv"
+# Ruby 3.4 unbundled erb; sinatra/rack require it transitively.
+gem "erb"
+
+# OpenTelemetry SDK + OTLP exporter (Last9 or any OTLP backend).
+gem "opentelemetry-sdk", "~> 1.5"
+gem "opentelemetry-exporter-otlp", "~> 0.28"
+
+# The LLM client we're instrumenting.
+gem "ruby_llm", "~> 1.15"
+
+# The auto-instrumentation. Pinned to a tag so Bundler doesn't track HEAD
+# of the default branch — see the gem's README for the supply-chain note.
+gem "ruby-llm-otel",
+    github: "last9/ruby-llm-otel",
+    tag:    "v0.1.0.beta1"
