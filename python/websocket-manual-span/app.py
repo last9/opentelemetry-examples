@@ -24,7 +24,12 @@ def configure_tracing() -> TracerProvider:
 
 def sanitized_url(url: str) -> str:
     parts = urlsplit(url)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    hostname = parts.hostname or ""
+    if ":" in hostname:
+        hostname = f"[{hostname}]"
+    if parts.port is not None:
+        hostname = f"{hostname}:{parts.port}"
+    return urlunsplit((parts.scheme, hostname, parts.path, "", ""))
 
 
 async def connect_websocket(url: str, **connect_kwargs):
@@ -38,7 +43,10 @@ async def connect_websocket(url: str, **connect_kwargs):
 
     # End the span after the HTTP upgrade, not when the long-lived socket closes.
     with tracer.start_as_current_span(
-        f"GET {parts.hostname}", kind=SpanKind.CLIENT
+        f"GET {parts.hostname}",
+        kind=SpanKind.CLIENT,
+        record_exception=False,
+        set_status_on_exception=False,
     ) as span:
         # Current and legacy HTTP attributes keep the endpoint queryable across backends.
         span.set_attribute("http.request.method", "GET")

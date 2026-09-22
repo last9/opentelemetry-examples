@@ -11,10 +11,11 @@ Adds a manual OpenTelemetry client span for a WebSocket HTTP upgrade. It records
 
 ```bash
 uv venv
+source .venv/bin/activate
 uv pip install -r requirements.txt
 python test_app.py
 cp .env.example .env
-source .env
+set -a; source .env; set +a
 python app.py
 ```
 
