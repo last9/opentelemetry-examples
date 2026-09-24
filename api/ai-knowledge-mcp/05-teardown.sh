@@ -12,13 +12,23 @@ trap 'rm -f "${HDRS}" "${BODY}"' EXIT
 
 delete_with_etag() {
   local path="$1"
-  curl -sS -D "${HDRS}" -o "${BODY}" "${BASE}${path}" -H "$(auth_header)"
+  local code
+  code="$(curl -sS -o "${BODY}" -D "${HDRS}" -w '%{http_code}' "${BASE}${path}" -H "$(auth_header)")"
+  if [[ "${code}" == "404" ]]; then
+    echo "Skip ${path} (not found)"
+    return 0
+  fi
+  if [[ "${code}" != "200" ]]; then
+    echo "GET ${path} failed (${code}):" >&2
+    cat "${BODY}" >&2
+    return 1
+  fi
   local etag
   etag="$(etag_from_headers <"${HDRS}")"
   if [[ -z "${etag}" ]]; then
     echo "No ETag for ${path}; response:" >&2
     cat "${BODY}" >&2
-    exit 1
+    return 1
   fi
   echo "DELETE ${BASE}${path} If-Match: ${etag}"
   curl -sS -X DELETE "${BASE}${path}" \
@@ -27,8 +37,8 @@ delete_with_etag() {
 }
 
 echo "Deleting topic ${TOPIC_ID} (if present)..."
-delete_with_etag "/knowledge/topics/${TOPIC_ID}" || true
+delete_with_etag "/knowledge/topics/${TOPIC_ID}"
 
 echo
 echo "Deleting MCP server ${MCP_NAME} (if present)..."
-delete_with_etag "/mcp-servers/${MCP_NAME}" || true
+delete_with_etag "/mcp-servers/${MCP_NAME}"

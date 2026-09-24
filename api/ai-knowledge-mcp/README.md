@@ -2,7 +2,7 @@
 
 Shell example that registers a remote MCP server for Last9 AI, creates an `incident_triage` knowledge topic with tool bindings, and uploads an app runbook.
 
-Product docs:
+Product docs (merge [last9.io#805](https://github.com/last9/last9.io/pull/805) first if these 404):
 
 - [Remote MCP servers](https://last9.io/docs/ai/remote-mcp-servers/)
 - [Knowledge](https://last9.io/docs/ai/knowledge/)
