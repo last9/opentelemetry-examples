@@ -1,0 +1,16 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local outputs
+*.log
+/tmp-*.json
+/reports/

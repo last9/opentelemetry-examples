@@ -173,6 +173,14 @@ Pre-configured collector setups for common use cases:
 |-----------|-------------|
 | `datadog-k8s-operator/` | Migrate from Datadog Agent to OpenTelemetry |
 
+### Last9 API (`api/`)
+
+| Directory | Description |
+|-----------|-------------|
+| `api/query-metric-api.sh` | PromQL query against a Last9 datasource |
+| `api/query-log-api.py` | LogQL / log query with pagination |
+| [`api/ai-knowledge-mcp/`](./api/ai-knowledge-mcp/) | Register a remote MCP server and upload AI knowledge runbooks |
+
 ## Documentation
 
 ### Last9 Integration Guides
