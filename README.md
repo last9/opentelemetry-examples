@@ -174,6 +174,14 @@ Pre-configured collector setups for common use cases:
 |-----------|-------------|
 | `datadog-k8s-operator/` | Migrate from Datadog Agent to OpenTelemetry |
 
+### Last9 API (`api/`)
+
+| Directory | Description |
+|-----------|-------------|
+| `api/query-metric-api.sh` | PromQL query against a Last9 datasource |
+| `api/query-log-api.py` | LogQL / log query with pagination |
+| [`api/ai-knowledge-mcp/`](./api/ai-knowledge-mcp/) | Register a remote MCP server and upload AI knowledge runbooks |
+
 ## Documentation
 
 ### Last9 Integration Guides
@@ -181,6 +189,7 @@ Pre-configured collector setups for common use cases:
 **Getting Started**
 - [OpenTelemetry Overview](https://last9.io/docs/integrations/observability/opentelemetry/) - OTLP endpoints, credentials, and setup
 - [OpenTelemetry Collector](https://last9.io/docs/integrations/observability/opentelemetry-collector/) - Collector configuration
+- [Remote MCP servers](https://last9.io/docs/ai/remote-mcp-servers/) ・ [AI knowledge](https://last9.io/docs/ai/knowledge/) - Last9 AI organization MCP and runbooks
 
 **Go Frameworks**
 - [Gin](https://last9.io/docs/integrations/frameworks/go/gin/) ・ [gRPC](https://last9.io/docs/integrations/frameworks/go/grpc/) ・ [FastHTTP](https://last9.io/docs/integrations/frameworks/go/fasthttp/) ・ [Iris](https://last9.io/docs/integrations/frameworks/go/iris/) ・ [Gorilla Mux](https://last9.io/docs/integrations/frameworks/go/gorilla-mux/)
