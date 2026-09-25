@@ -8,12 +8,12 @@ source "${SCRIPT_DIR}/common.sh"
 BASE="$(ai_base)"
 
 echo "== config/status =="
-curl -sS "${BASE}/config/status" -H "$(auth_header)" | pretty
+http_json "${BASE}/config/status" -H "$(auth_header)"
 
 echo
 echo "== mcp-servers =="
-curl -sS "${BASE}/mcp-servers" -H "$(auth_header)" | pretty
+http_json "${BASE}/mcp-servers" -H "$(auth_header)"
 
 echo
 echo "== knowledge/topics =="
-curl -sS "${BASE}/knowledge/topics" -H "$(auth_header)" | pretty
+http_json "${BASE}/knowledge/topics" -H "$(auth_header)"

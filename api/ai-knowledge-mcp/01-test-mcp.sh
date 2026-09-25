@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/common.sh"
 
 BASE="$(ai_base)"
 echo "POST ${BASE}/mcp-servers/test"
-curl -sS -X POST "${BASE}/mcp-servers/test" \
+http_json -X POST "${BASE}/mcp-servers/test" \
   -H "$(auth_header)" \
   -H 'Content-Type: application/json' \
-  -d "$(mcp_payload)" | pretty
+  -d "$(mcp_payload)"

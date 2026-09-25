@@ -66,7 +66,36 @@ pretty() {
   fi
 }
 
+# curl wrapper that fails on non-2xx before dependent steps continue.
+# Usage: http_json [curl args...]
+http_json() {
+  local body code rc=0
+  body="$(mktemp)"
+  code="$(curl -sS -o "${body}" -w '%{http_code}' "$@")" || rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    rm -f "${body}"
+    return "${rc}"
+  fi
+  if [[ ! "${code}" =~ ^2[0-9][0-9]$ ]]; then
+    echo "HTTP ${code}:" >&2
+    cat "${body}" >&2
+    echo >&2
+    rm -f "${body}"
+    return 1
+  fi
+  pretty <"${body}"
+  rm -f "${body}"
+}
+
 etag_from_headers() {
   # Reads curl -D headers from stdin; prints quoted ETag value.
-  awk 'BEGIN{IGNORECASE=1} /^ETag:/{sub(/\r$/,""); sub(/^ETag:[[:space:]]*/,""); print; exit}'
+  # Portable case-insensitive match (works with mawk; avoids gawk IGNORECASE).
+  awk '
+    tolower($0) ~ /^etag:/ {
+      sub(/\r$/, "")
+      sub(/^[^:]+:[[:space:]]*/, "")
+      print
+      exit
+    }
+  '
 }

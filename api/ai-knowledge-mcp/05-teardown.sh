@@ -31,9 +31,17 @@ delete_with_etag() {
     return 1
   fi
   echo "DELETE ${BASE}${path} If-Match: ${etag}"
-  curl -sS -X DELETE "${BASE}${path}" \
+  code="$(curl -sS -o "${BODY}" -w '%{http_code}' -X DELETE "${BASE}${path}" \
     -H "$(auth_header)" \
-    -H "If-Match: ${etag}" | pretty
+    -H "If-Match: ${etag}")"
+  if [[ ! "${code}" =~ ^2[0-9][0-9]$ ]]; then
+    echo "DELETE ${path} failed (${code}):" >&2
+    cat "${BODY}" >&2
+    return 1
+  fi
+  if [[ -s "${BODY}" ]]; then
+    pretty <"${BODY}"
+  fi
 }
 
 echo "Deleting topic ${TOPIC_ID} (if present)..."

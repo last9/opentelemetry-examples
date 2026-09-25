@@ -25,15 +25,15 @@ TOPIC_BODY="$(jq -n \
   }')"
 
 echo "POST ${BASE}/knowledge/topics"
-curl -sS -X POST "${BASE}/knowledge/topics" \
+http_json -X POST "${BASE}/knowledge/topics" \
   -H "$(auth_header)" \
   -H 'Content-Type: application/json' \
-  -d "${TOPIC_BODY}" | pretty
+  -d "${TOPIC_BODY}"
 
 echo
 echo "POST ${BASE}/knowledge/topics/${TOPIC_ID}/documents (multipart)"
-curl -sS -X POST "${BASE}/knowledge/topics/${TOPIC_ID}/documents" \
+http_json -X POST "${BASE}/knowledge/topics/${TOPIC_ID}/documents" \
   -H "$(auth_header)" \
   -F 'id=sev1-runbook' \
   -F 'title=SEV1 payments runbook' \
-  -F "file=@${RUNBOOK};type=text/markdown" | pretty
+  -F "file=@${RUNBOOK};type=text/markdown"
