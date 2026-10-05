@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Last9 CloudWatch Metric Enrichment Lambda.
+  Enriches CloudWatch Metric Stream data with AWS resource tags
+  before delivering to Last9 via Kinesis Data Firehose.
+
+Parameters:
+  CrossAccountRoles:
+    Type: String
+    Default: "{}"
+    Description: >
+      JSON object mapping AWS account IDs to IAM role ARNs for cross-account
+      tag enrichment. Example: {"123456789012":"arn:aws:iam::123456789012:role/Last9MetricEnrichment"}
+
+  TagCacheTTL:
+    Type: String
+    Default: "1h"
+    Description: Go duration for tag cache expiry (e.g., 1h, 30m, 2h)
+
+  LogLevel:
+    Type: String
+    Default: info
+    AllowedValues:
+      - info
+      - debug
+    Description: Lambda log verbosity
+
+  ContinueOnTagFailure:
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Skip enrichment on tag API errors instead of failing the record
+
+Resources:
+  EnrichmentFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      FunctionName: last9-cloudwatch-metric-enrichment
+      Handler: bootstrap
+      Runtime: provided.al2023
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 60
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          CROSS_ACCOUNT_ROLES: !Ref CrossAccountRoles
+          TAG_CACHE_TTL: !Ref TagCacheTTL
+          LOG_LEVEL: !Ref LogLevel
+          CONTINUE_ON_TAG_FAILURE: !Ref ContinueOnTagFailure
+      Policies:
+        - Statement:
+            - Sid: TaggingAPIAccess
+              Effect: Allow
+              Action:
+                - tag:GetResources
+              Resource: "*"
+            - Sid: STSAccess
+              Effect: Allow
+              Action:
+                - sts:AssumeRole
+                - sts:GetCallerIdentity
+              Resource: "*"
+
+  EnrichmentFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt EnrichmentFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: firehose.amazonaws.com
+
+Outputs:
+  EnrichmentFunctionArn:
+    Description: ARN of the enrichment Lambda function
+    Value: !GetAtt EnrichmentFunction.Arn
+    Export:
+      Name: Last9MetricEnrichmentFunctionArn
+
+  EnrichmentFunctionName:
+    Description: Name of the enrichment Lambda function
+    Value: !Ref EnrichmentFunction
