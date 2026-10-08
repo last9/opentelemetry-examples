@@ -1,27 +1,22 @@
 # Custom OpenTelemetry Collector image with RDS CA bundle
 # Use this if you need to customize the collector
 
-FROM otel/opentelemetry-collector-contrib:0.142.0
+FROM alpine:3.23 AS certificates
+RUN wget -q https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+    -O /rds-combined-ca-bundle.pem
 
-# Download RDS CA bundle for TLS connections
-USER root
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
-    && wget -q https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-       -O /etc/ssl/certs/rds-combined-ca-bundle.pem \
-    && chmod 644 /etc/ssl/certs/rds-combined-ca-bundle.pem \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+FROM otel/opentelemetry-collector-contrib:0.162.0 AS collector
+FROM alpine:3.23
+RUN apk add --no-cache ca-certificates
+COPY --from=collector /otelcol-contrib /otelcol-contrib
+COPY --from=certificates /rds-combined-ca-bundle.pem /etc/ssl/certs/rds-combined-ca-bundle.pem
 
-# Copy custom config (optional - can be mounted instead)
-# COPY config/otel-collector-config.yaml /etc/otel/config.yaml
-
-USER otelcol
-
-# Health check
+COPY config/otel-evidence-config.yaml /etc/otel/config.yaml
+USER 10001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD wget --spider -q http://localhost:13133/health || exit 1
 
 EXPOSE 13133 8888 55679
 
 ENTRYPOINT ["/otelcol-contrib"]
-CMD ["--config=/etc/otel/config.yaml"]
+CMD ["--config=/etc/otel/config.yaml", "--feature-gates=receiver.postgresql.useOTelSemconv"]

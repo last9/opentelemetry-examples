@@ -1,5 +1,5 @@
 {
-  "app": "npx ts-node bin/app.ts",
+  "app": "npm run build && node --enable-source-maps dist/bin/app.js",
   "watch": {
     "include": [
       "**"

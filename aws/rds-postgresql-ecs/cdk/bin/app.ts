@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { PostgreSQLCollectorStack } from '../lib/postgresql-collector-stack';
 
@@ -11,6 +10,11 @@ const vpcId = app.node.tryGetContext('vpcId') || process.env.VPC_ID;
 const last9OtlpEndpoint = app.node.tryGetContext('last9OtlpEndpoint') || process.env.LAST9_OTLP_ENDPOINT;
 const rdsInstanceId = app.node.tryGetContext('rdsInstanceId') || process.env.RDS_INSTANCE_ID;
 const dbCredentialsSecretArn = app.node.tryGetContext('dbCredentialsSecretArn') || process.env.DB_CREDENTIALS_SECRET_ARN;
+const collectorImage = app.node.tryGetContext('collectorImage');
+const excludedDatabases = JSON.parse(app.node.tryGetContext('excludedDatabases') || '["rdsadmin","template0","template1"]');
+if (!Array.isArray(excludedDatabases) || excludedDatabases.some((name: unknown) => typeof name !== 'string')) {
+  throw new Error('excludedDatabases must be a JSON array of database names');
+}
 
 // Validate required parameters
 if (!vpcId) {
@@ -38,6 +42,9 @@ new PostgreSQLCollectorStack(app, `PostgreSQLCollector-${environment}`, {
   last9OtlpEndpoint,
   rdsInstanceId,
   dbCredentialsSecretArn,
+  collectorImage,
+  excludedDatabases,
+  captureQueryText: app.node.tryGetContext('captureQueryText') === 'true',
   description: `PostgreSQL Collector for Last9 Integration - ${environment}`,
   tags: {
     Environment: environment,
