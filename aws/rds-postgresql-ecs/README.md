@@ -56,6 +56,14 @@ application database out of the exclusion array. These commands supplement the
 required VPC, endpoint, instance and secret context values described below.
 
 **What to verify:** In Last9 logs, filter `event.name` to the four event names above.
+In Database details, open **Query activity** and select **View details** for a
+record. Activity types appear as **Query sample**, **Query metrics**, **Explain
+plan** and **Blocking activity**. Raw event names remain in **Recorded details**.
+**Waiting and blocking sessions** shows the paired sessions and the last query
+recorded for each blocking session. That query may not have acquired the lock.
+Use **View trace** when a trace link was recorded. **Explain plan (estimated)**
+describes a query pattern and may differ from the plan used by that request.
+
 Create a controlled blocking transaction in a test database, capture it, release it,
 then verify both sessions remain visible in the selected historical time range.
 Check that metrics and logs share `server.address`, `server.port` and `db.system.name`.
