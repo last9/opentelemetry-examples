@@ -42,6 +42,17 @@ Parameters:
     Default: 'otel/opentelemetry-collector-contrib:0.142.0'
     Description: Docker image for the OpenTelemetry Collector
 
+  PGExcludedDatabases:
+    Type: String
+    Default: '[rdsadmin,template0,template1]'
+    Description: For the evidence image, YAML array excluding every database except the secret dbname
+
+  CaptureQueryText:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['false', 'true']
+    Description: Opt in to SQL text in blocker snapshots after reviewing sensitive literals and retention
+
   TaskCpu:
     Type: Number
     Default: 256
@@ -296,6 +307,10 @@ Resources:
               Value: !Ref RDSInstanceId
             - Name: PG_PORT
               Value: '5432'
+            - Name: PG_EXCLUDE_DATABASES
+              Value: !Ref PGExcludedDatabases
+            - Name: PG_CAPTURE_QUERY_TEXT
+              Value: !Ref CaptureQueryText
           Secrets:
             - Name: LAST9_AUTH_HEADER
               ValueFrom: !Sub '${Last9AuthSecret}:auth_header::'

@@ -35,6 +35,9 @@ export interface PostgreSQLCollectorStackProps extends cdk.StackProps {
    * If not provided, a new secret will be created
    */
   dbCredentialsSecretArn?: string;
+  collectorImage?: string;
+  excludedDatabases?: string[];
+  captureQueryText?: boolean;
 }
 
 export class PostgreSQLCollectorStack extends cdk.Stack {
@@ -210,7 +213,7 @@ export class PostgreSQLCollectorStack extends cdk.Stack {
 
     // Main collector container
     const collectorContainer = taskDefinition.addContainer('otel-collector', {
-      image: ecs.ContainerImage.fromRegistry('otel/opentelemetry-collector-contrib:0.142.0'),
+      image: ecs.ContainerImage.fromRegistry(props.collectorImage ?? 'otel/opentelemetry-collector-contrib:0.142.0'),
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'collector',
         logGroup,
@@ -221,6 +224,8 @@ export class PostgreSQLCollectorStack extends cdk.Stack {
         LAST9_OTLP_ENDPOINT: props.last9OtlpEndpoint,
         RDS_INSTANCE_ID: props.rdsInstanceId,
         PG_PORT: '5432',
+        PG_EXCLUDE_DATABASES: JSON.stringify(props.excludedDatabases ?? ['rdsadmin', 'template0', 'template1']),
+        PG_CAPTURE_QUERY_TEXT: String(props.captureQueryText ?? false),
       },
       secrets: {
         LAST9_AUTH_HEADER: ecs.Secret.fromSecretsManager(this.last9AuthSecret, 'auth_header'),

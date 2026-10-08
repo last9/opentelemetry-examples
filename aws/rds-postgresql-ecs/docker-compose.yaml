@@ -9,11 +9,13 @@ version: '3.8'
 services:
   # OpenTelemetry Collector - metrics and logs
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.142.0
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: postgresql-collector
-    command: ["--config=/etc/otel/config.yaml"]
+    command: ["--config=/etc/otel/config.yaml", "--feature-gates=receiver.postgresql.useOTelSemconv"]
     volumes:
-      - ./config/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+      - ./config/otel-evidence-config.yaml:/etc/otel/config.yaml:ro
       - ./config/rds-combined-ca-bundle.pem:/etc/ssl/certs/rds-combined-ca-bundle.pem:ro
     ports:
       - "13133:13133"  # Health check
@@ -26,6 +28,8 @@ services:
       - PG_USERNAME=${PG_USERNAME}
       - PG_PASSWORD=${PG_PASSWORD}
       - PG_DATABASE=${PG_DATABASE}
+      - PG_EXCLUDE_DATABASES=${PG_EXCLUDE_DATABASES}
+      - PG_CAPTURE_QUERY_TEXT=${PG_CAPTURE_QUERY_TEXT:-false}
       # AWS Configuration
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}

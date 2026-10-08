@@ -13,6 +13,99 @@ Complete monitoring for AWS RDS PostgreSQL with OpenTelemetry - 57 metrics expor
 
 Choose your deployment method:
 
+### Historical blocker evidence, plans and trace links
+
+Use `config/otel-evidence-config.yaml` with Collector **0.162.0**. This adds retained
+`db.server.query_sample`, `db.server.top_query`, `db.server.query_plan` and
+`db.server.blocking_snapshot` logs alongside metrics; no separate DBM agent is needed.
+The older Quick Setup paths below collect metrics and must use their existing config.
+
+1. Copy `.env.example` to `.env`. Set `PG_DATABASE` to one application database and
+   `PG_EXCLUDE_DATABASES` to a YAML array containing **every other database** (including
+   `rdsadmin`). Native logs use this exclusion list, not the metrics database list.
+2. Grant the monitoring role `pg_monitor`. Enable `pg_stat_statements` in the RDS
+   parameter group, reboot if required, and install the extension in the `postgres`
+   bootstrap database as well as the selected application database. Collector 0.162.0
+   reads top-query statistics through `postgres` even when its database list selects
+   another database; exclusions filter the emitted rows. Have the database owner
+   approve that bootstrap extension change first. Plans also need scoped SELECT
+   access to the relations being explained.
+3. Download the RDS CA and start the supplied collector:
+
+   ```bash
+   curl --fail --silent --show-error https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+     -o config/rds-combined-ca-bundle.pem
+   docker compose up --build -d otel-collector
+   ```
+
+For ECS, build this Dockerfile for `linux/amd64` (the template uses X86_64) and
+publish it to your existing ECR repository. The
+image packages the evidence config, CA bundle and Collector 0.162.0 with
+`receiver.postgresql.useOTelSemconv` enabled. Use the existing
+`cloudformation/postgresql-collector.yaml` template with `CollectorImage` set to that
+image, `PGExcludedDatabases` set to the complete exclusion array, and an existing
+`DBCredentialsSecretArn` containing `host`, `dbname`, `username` and `password`.
+`CaptureQueryText` defaults to `false`. The existing task receives credentials from
+Secrets Manager and uses its existing VPC/security groups; verify private RDS
+connectivity and outbound OTLP access before starting it.
+
+The existing CDK stack also accepts `-c collectorImage=<your-evidence-image>` and
+`-c 'excludedDatabases=["postgres","rdsadmin","template0","template1"]'`.
+Set `-c captureQueryText=true` only after approving SQL visibility. Keep the selected
+application database out of the exclusion array. These commands supplement the
+required VPC, endpoint, instance and secret context values described below.
+
+**What to verify:** In Last9 logs, filter `event.name` to the four event names above.
+Create a controlled blocking transaction in a test database, capture it, release it,
+then verify both sessions remain visible in the selected historical time range.
+Check that metrics and logs share `server.address`, `server.port` and `db.system.name`.
+The metric `server_address`/`server_port` labels mirror that identity.
+
+**Evidence limits:** Samples and blocker captures run every 5 seconds. Top queries
+run every 30 seconds; only 20 are emitted, with at most two EXPLAIN attempts per
+interval and a 100-plan cache lasting 15 minutes. Plans are estimated generic plans
+using null parameters, without EXPLAIN ANALYZE or actual execution timing. Missing
+plans can result from unsupported SQL or insufficient relation privileges.
+
+Blocker logs contain body `schema_version: 1`, `snapshot_id`, `captured_at`,
+`rows_limit`, `rows_total`, `rows_captured`, `truncated`, `complete` and a
+`relationships` array. Each relationship holds `blocked` and `holder` PID,
+`backend_start`, database, query ID, state, transaction start and application name,
+plus lock wait details. A single bounded capture retains both identities without
+relying on an independent holder sample. It is a sampled capture of changing
+PostgreSQL views, not an atomic or exhaustive history. Missing holders, restricted
+query access, redacted/truncated SQL and more than 100 relationships mark it
+incomplete; an empty capture does not prove that no blocking occurred between polls.
+
+**SQL privacy:** Native query SQL is obfuscated by the receiver. Blocker SQL is
+omitted by default (`PG_CAPTURE_QUERY_TEXT=false`); enabling it captures up to 4096
+characters and may expose literals, comments or personal information. Approve log
+access and retention before enabling it. Avoid debug exporters and debug-level
+collector logging for production SQL evidence.
+Receiver diagnostic errors can include raw/prepared SQL even when blocker SQL is
+disabled; restrict access and retention for collector/CloudWatch logs as well.
+
+**Optional trace links:** On the connection executing the query, set
+`application_name` to the valid W3C traceparent for that query. Inside an existing
+transaction, use parameterized `set_config('application_name', traceparent, true)`
+so commit/rollback restores it. For session-scoped/autocommit use, restore the
+original application name in `finally`; discard the pooled connection if restoration
+fails. Never leave another request's trace context on a pooled connection. Existing
+application names remain in place unless propagation is explicitly enabled. No
+trace context means no query-to-trace link; the prospect's driver instrumentation
+must be validated separately.
+
+The optional `scripts/validate-query-traces.py` is a Python/psycopg **validation
+application**, not a recommendation for the prospect's unknown application stack.
+Install `scripts/requirements-trace-validation.txt` in a disposable virtualenv and
+run it only against an isolated `fde372_` database, with `PG_CA_FILE` and an explicit
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (plus standard OTLP authentication headers).
+It creates six genuine SDK spans and checks concurrent trace context plus connection
+reuse after success, query failure and cancellation. Its wrapper owns an idle
+autocommit connection's transaction; it rejects an outer transaction. Verify the
+exported spans and matching query-sample trace IDs in Last9 separately: local span
+checks and export flushing alone do not establish ingestion or product acceptance.
+
 ### Option 1: Quick Setup (Recommended - CloudFormation)
 
 **Automated deployment in 5 steps (~10 minutes):**
