@@ -85,7 +85,13 @@ collector logging for production SQL evidence.
 Receiver diagnostic errors can include raw/prepared SQL even when blocker SQL is
 disabled; restrict access and retention for collector/CloudWatch logs as well.
 
-**Optional trace links:** On the connection executing the query, set
+**Optional trace links:**
+The logs transform also retains the receiver's nonzero OTLP IDs in
+`db.server.trace_id` and `db.server.span_id`, because log query responses may omit
+the top-level span ID. These attributes identify captured context; they do not
+infer a trace from SQL or timestamps.
+
+On the connection executing the query, set
 `application_name` to the valid W3C traceparent for that query. Inside an existing
 transaction, use parameterized `set_config('application_name', traceparent, true)`
 so commit/rollback restores it. For session-scoped/autocommit use, restore the

@@ -136,6 +136,8 @@ processors:
       - context: log
         statements:
           - set(attributes["event.name"], event_name) where event_name != ""
+          - set(attributes["db.server.trace_id"], trace_id.string) where trace_id.string != "00000000000000000000000000000000"
+          - set(attributes["db.server.span_id"], span_id.string) where span_id.string != "0000000000000000"
           - set(body, ParseJSON(body)) where instrumentation_scope.name == "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sqlqueryreceiver"
           - set(attributes["event.name"], "db.server.blocking_snapshot") where instrumentation_scope.name == "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sqlqueryreceiver"
           - set(attributes["db.namespace"], "${env:PG_DATABASE}") where instrumentation_scope.name == "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sqlqueryreceiver"
