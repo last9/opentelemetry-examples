@@ -24,8 +24,10 @@ def query(connection, tracer, sql, parameters=None, cancel=False):
     try:
         with tracer.start_as_current_span(
             "postgresql.query", kind=trace.SpanKind.CLIENT,
-            attributes={"db.system.name": "postgresql", "db.namespace": connection.info.dbname,
-                        "server.address": connection.info.host, "server.port": connection.info.port,
+            attributes={"db.system.name": "postgresql", "db.system": "postgresql",
+                        "db.namespace": connection.info.dbname,
+                        "server.address": connection.info.host, "net.peer.name": connection.info.host,
+                        "server.port": connection.info.port,
                         "db.query.text": sql},
         ):
             carrier = {}
