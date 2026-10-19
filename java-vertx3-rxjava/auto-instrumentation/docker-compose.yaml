@@ -116,6 +116,9 @@ services:
       AEROSPIKE_HOST: aerospike
       AEROSPIKE_PORT: "3000"
       AEROSPIKE_NAMESPACE: test
+      VERTX_OTEL_BODY_CAPTURE_ENABLED: "true"
+      VERTX_OTEL_BODY_CAPTURE_REQUEST: "true"
+      VERTX_OTEL_BODY_CAPTURE_RESPONSE: "true"
     ports:
       - "8080:8080"
     depends_on:

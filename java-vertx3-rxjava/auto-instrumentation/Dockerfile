@@ -4,7 +4,9 @@ FROM maven:3.9-eclipse-temurin-11 AS build
 WORKDIR /app
 
 # Install Last9 auto-configure JARs into local Maven repo.
-COPY lib/ /tmp/lib/
+# agent JAR excluded — only needed at runtime, not compile time
+COPY lib/vertx-otel-core.jar /tmp/lib/vertx-otel-core.jar
+COPY lib/vertx3-rxjava2-otel-autoconfigure.jar /tmp/lib/vertx3-rxjava2-otel-autoconfigure.jar
 RUN mvn install:install-file \
     -Dfile=/tmp/lib/vertx-otel-core.jar \
     -DgroupId=io.last9 \
