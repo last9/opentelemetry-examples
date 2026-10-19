@@ -1,0 +1,28 @@
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Go dependencies
+/vendor/
+
+# Build artifacts
+bootstrap
+bootstrap.zip
+coverage.out
+coverage.html
+
+# SAM build artifacts
+.aws-sam/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
