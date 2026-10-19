@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+*.gem
+Gemfile.lock
+.bundle/
+vendor/bundle/
