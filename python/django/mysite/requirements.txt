@@ -3,7 +3,7 @@ asgiref==3.8.1
 aws-opentelemetry-distro==0.6.0
 billiard==4.2.1
 celery==5.3.6
-certifi==2024.8.30
+certifi==2026.10.19
 charset-normalizer==3.4.0
 click==8.1.8
 click-didyoumean==0.3.1
