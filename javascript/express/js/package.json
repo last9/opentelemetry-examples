@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "start:db-examples": "node src/db-examples.js"
+    "start:db-examples": "node src/db-examples.js",
+    "test": "jasmine"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
