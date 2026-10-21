@@ -118,6 +118,7 @@ npm run start:db-examples
 
 The server starts even when a database is unreachable; its routes return 500
 and record the error on the span. The endpoints are listed on startup.
+`npm test` checks that contract against unreachable databases.
 
 ## Tail-based sampling with the Collector
 

@@ -28,6 +28,16 @@ function getTraceId() {
   return null;
 }
 
+// Roll back without masking the original error: a failed ROLLBACK (e.g. the
+// connection dropped mid-transaction) is logged instead of thrown.
+async function rollback(run) {
+  try {
+    await run();
+  } catch (err) {
+    console.error('Rollback failed:', err.message);
+  }
+}
+
 // ============================================
 // POSTGRESQL EXAMPLES
 // ============================================
@@ -77,9 +87,10 @@ app.post('/api/pg/users', async (req, res) => {
   const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('pg.create_user');
 
-  const client = await pgPool.connect();
-
+  // Acquire inside the try: an Express 4 handler that rejects crashes the process.
+  let client;
   try {
+    client = await pgPool.connect();
     await client.query('BEGIN');
 
     const insertQuery = 'INSERT INTO users(name, email, created_at) VALUES($1, $2, NOW()) RETURNING id, name, email';
@@ -100,7 +111,7 @@ app.post('/api/pg/users', async (req, res) => {
       traceId: getTraceId(),
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) await rollback(() => client.query('ROLLBACK'));
     span.recordException(error);
     span.setStatus({
       code: opentelemetry.SpanStatusCode.ERROR,
@@ -108,7 +119,7 @@ app.post('/api/pg/users', async (req, res) => {
     });
     res.status(500).json({ error: error.message, traceId: getTraceId() });
   } finally {
-    client.release();
+    client?.release();
     span.end();
   }
 });
@@ -172,11 +183,12 @@ app.post('/api/mysql/products/bulk', async (req, res) => {
   const { products } = req.body; // Array of {name, price, stock}
   const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('mysql.bulk_insert_products');
-  span.setAttribute('products.count', products.length);
 
-  const connection = await mysqlPool.getConnection();
-
+  let connection;
   try {
+    span.setAttribute('products.count', products.length);
+
+    connection = await mysqlPool.getConnection();
     await connection.beginTransaction();
 
     const insertQuery = 'INSERT INTO products (name, price, stock, created_at) VALUES ?';
@@ -194,7 +206,7 @@ app.post('/api/mysql/products/bulk', async (req, res) => {
       traceId: getTraceId(),
     });
   } catch (error) {
-    await connection.rollback();
+    if (connection) await rollback(() => connection.rollback());
     span.recordException(error);
     span.setStatus({
       code: opentelemetry.SpanStatusCode.ERROR,
@@ -202,7 +214,7 @@ app.post('/api/mysql/products/bulk', async (req, res) => {
     });
     res.status(500).json({ error: error.message, traceId: getTraceId() });
   } finally {
-    connection.release();
+    connection?.release();
     span.end();
   }
 });
@@ -645,11 +657,13 @@ app.post('/api/orders/process', async (req, res) => {
   const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('order.process_complete_workflow');
   span.setAttribute('user.id', userId);
-  span.setAttribute('items.count', items.length);
 
-  const pgClient = await pgPool.connect();
-
+  let pgClient;
+  let mysqlConn;
   try {
+    span.setAttribute('items.count', items.length);
+
+    pgClient = await pgPool.connect();
     await pgClient.query('BEGIN');
 
     // 1. Check user exists (PostgreSQL)
@@ -681,7 +695,7 @@ app.post('/api/orders/process', async (req, res) => {
     const orderId = orderResult.rows[0].id;
 
     // 4. Update inventory (MySQL)
-    const mysqlConn = await mysqlPool.getConnection();
+    mysqlConn = await mysqlPool.getConnection();
     await mysqlConn.beginTransaction();
 
     for (const item of items) {
@@ -693,6 +707,7 @@ app.post('/api/orders/process', async (req, res) => {
 
     await mysqlConn.commit();
     mysqlConn.release();
+    mysqlConn = undefined;
 
     // 5. Store order details in MongoDB
     const db = await connectMongo();
@@ -735,7 +750,8 @@ app.post('/api/orders/process', async (req, res) => {
       traceId: getTraceId(),
     });
   } catch (error) {
-    await pgClient.query('ROLLBACK');
+    if (mysqlConn) await rollback(() => mysqlConn.rollback());
+    if (pgClient) await rollback(() => pgClient.query('ROLLBACK'));
 
     span.setAttribute('order.status', 'failed');
     span.recordException(error);
@@ -749,7 +765,8 @@ app.post('/api/orders/process', async (req, res) => {
       traceId: getTraceId()
     });
   } finally {
-    pgClient.release();
+    mysqlConn?.release();
+    pgClient?.release();
     span.end();
   }
 });
