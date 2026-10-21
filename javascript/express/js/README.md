@@ -136,7 +136,7 @@ export LAST9_AUTH_HEADER="Basic <your-token>"
 docker run --rm -p 4317:4317 -p 4318:4318 \
   -e LAST9_OTLP_ENDPOINT -e LAST9_AUTH_HEADER \
   -v "$PWD/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml" \
-  otel/opentelemetry-collector-contrib:0.144.0
+  otel/opentelemetry-collector-contrib:0.163.2
 
 # Point the app at the Collector
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
