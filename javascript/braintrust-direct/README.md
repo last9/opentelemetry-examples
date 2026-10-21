@@ -11,7 +11,7 @@ Both backends see identical traces with matching trace/span IDs.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24.22.1+ (or 22.23.4+)
 - A [Last9 account](https://app.last9.io) with OTLP credentials (Integrations → OpenTelemetry)
 - A [Braintrust account](https://www.braintrust.dev) with an API key
 - An OpenAI API key

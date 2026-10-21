@@ -4,7 +4,7 @@ This example demonstrates how to integrate OpenTelemetry with an Express applica
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24.22.1+ (or 22.23.4+)
 - Google Cloud SDK (`gcloud`)
 - [Last9](https://app.last9.io) account with OTLP credentials
 

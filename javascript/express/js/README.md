@@ -1,7 +1,7 @@
 # Auto instrumenting Express application with OpenTelemetry
 
 This example demonstrates how to auto-instrument an Express application with
-OpenTelemetry. This example is tested with **Node.js v18**, **Node.js v20**, **Node.jsv22**.
+OpenTelemetry. Make sure you have **Node.js v24.22.1** (or v22.23.4) or higher.
 
 **OpenTelemetry package versions used in this example:**
 
