@@ -56,7 +56,7 @@ application database out of the exclusion array. These commands supplement the
 required VPC, endpoint, instance and secret context values described below.
 
 **What to verify:** In Last9 logs, filter `event.name` to the four event names above.
-In Database details, open **Query Activity** and select a row to open its
+In Database details, open **Queries** › **Query Activity** and select a row to open its
 details. Activity types appear as **Query sample**, **Query metrics**, **Explain
 plan** and **Blocking activity**. Raw event names remain in **Recorded Details**.
 **Waiting & Blocking Sessions** shows the paired sessions and the last query
