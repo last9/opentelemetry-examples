@@ -57,7 +57,7 @@ processors:
 
 exporters:
   # Export to Last9
-  otlp/last9:
+  otlp_grpc/last9:
     endpoint: ${env:LAST9_OTLP_ENDPOINT}
     headers:
       Authorization: ${env:LAST9_AUTH_HEADER}
@@ -75,4 +75,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, tail_sampling, batch]
-      exporters: [otlp/last9, debug]
+      exporters: [otlp_grpc/last9, debug]

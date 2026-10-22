@@ -78,7 +78,7 @@ function structuredLog(level, message, extra = {}) {
  * HTTP Function: Hello World
  * A simple HTTP function that demonstrates basic tracing
  *
- * Deploy with: gcloud functions deploy helloHttp --gen2 --runtime=nodejs20 ...
+ * Deploy with: gcloud functions deploy helloHttp --gen2 --runtime=nodejs24 ...
  */
 functions.http('helloHttp', async (req, res) => {
   const startTime = Date.now();
@@ -143,7 +143,7 @@ functions.http('helloHttp', async (req, res) => {
  * HTTP Function: Process Data
  * Demonstrates more complex processing with multiple spans
  *
- * Deploy with: gcloud functions deploy processData --gen2 --runtime=nodejs20 ...
+ * Deploy with: gcloud functions deploy processData --gen2 --runtime=nodejs24 ...
  */
 functions.http('processData', async (req, res) => {
   const startTime = Date.now();
@@ -253,7 +253,7 @@ functions.http('processData', async (req, res) => {
  * Triggered by Pub/Sub messages via CloudEvents
  *
  * Deploy with:
- * gcloud functions deploy handlePubSub --gen2 --runtime=nodejs20 \
+ * gcloud functions deploy handlePubSub --gen2 --runtime=nodejs24 \
  *   --trigger-topic=YOUR_TOPIC ...
  */
 functions.cloudEvent('handlePubSub', async (cloudEvent) => {
@@ -340,7 +340,7 @@ functions.cloudEvent('handlePubSub', async (cloudEvent) => {
  * Triggered when objects are created/deleted in a bucket
  *
  * Deploy with:
- * gcloud functions deploy handleStorage --gen2 --runtime=nodejs20 \
+ * gcloud functions deploy handleStorage --gen2 --runtime=nodejs24 \
  *   --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
  *   --trigger-event-filters="bucket=YOUR_BUCKET" ...
  */

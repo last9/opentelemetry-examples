@@ -1,6 +1,6 @@
 # Auto instrumenting Nest.js application with OpenTelemetry
 
-This example demonstrates how to auto-instrument a Nest.js application with OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your machine.
+This example demonstrates how to auto-instrument a Nest.js application with OpenTelemetry. Make sure you have **Node.js v24.22.1** (or v22.23.4) or higher installed on your machine.
 
 **OpenTelemetry package versions used in this example:**
 

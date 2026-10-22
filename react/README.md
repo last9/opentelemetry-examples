@@ -13,7 +13,7 @@ A complete reference example showing how to instrument a React application with 
 
 ## 📋 Prerequisites
 
-- Node.js 14+ and npm
+- Node.js 24.22.1+ (or 22.23.4+) and npm
 - A Last9 account with access to Client Monitoring tokens
 - Basic knowledge of React and OpenTelemetry concepts
 

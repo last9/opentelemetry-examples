@@ -47,7 +47,7 @@ npm install \
 
 ## Prerequisites
 
-- Node.js 14 or later
+- Node.js 24.22.1 (or 22.23.4) or later
 - An account with Last9
 
 ## Project Structure

@@ -1,7 +1,7 @@
 # Auto instrumenting Hono application with OpenTelemetry
 
 This example demonstrates how to auto-instrument a Hono application with
-OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your
+OpenTelemetry. Make sure you have **Node.js v24.22.1** (or v22.23.4) or higher installed on your
 machine.
 
 ## Setup and running the example

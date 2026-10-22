@@ -4,7 +4,7 @@ This example demonstrates how to integrate OpenTelemetry with Google Cloud Run F
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24.22.1+ (or 22.23.4+)
 - Google Cloud SDK (`gcloud`)
 - [Last9](https://app.last9.io) account with OTLP credentials
 
@@ -67,7 +67,7 @@ gcloud secrets add-iam-policy-binding last9-auth-header \
 ```bash
 gcloud functions deploy helloHttp \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=helloHttp \
@@ -88,7 +88,7 @@ gcloud pubsub topics create my-topic
 # Deploy function
 gcloud functions deploy handlePubSub \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=handlePubSub \
@@ -104,7 +104,7 @@ gcloud functions deploy handlePubSub \
 ```bash
 gcloud functions deploy handleStorage \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=handleStorage \

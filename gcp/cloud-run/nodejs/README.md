@@ -68,7 +68,7 @@ npm install
 
 gcloud functions deploy my-function \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=helloHttp \
@@ -117,7 +117,7 @@ gcloud run deploy service-b \
 # Deploy Function A as a Cloud Function (set SERVICE_B_URL to the URL from step above)
 cd ../function-a && npm install
 gcloud functions deploy startFlow \
-  --gen2 --runtime=nodejs20 --region=asia-south1 \
+  --gen2 --runtime=nodejs24 --region=asia-south1 \
   --source=. --entry-point=startFlow --trigger-http --allow-unauthenticated \
   --set-env-vars "OTEL_SERVICE_NAME=function-a,OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>,SERVICE_B_URL=<service-b-url>" \
   --set-secrets="OTEL_EXPORTER_OTLP_HEADERS=last9-auth-header:latest"

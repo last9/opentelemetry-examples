@@ -1,7 +1,7 @@
 # Auto instrumenting NextJS application with OpenTelemetry
 
 This example demonstrates how to auto-instrument an NextJS application with
-OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your
+OpenTelemetry. Make sure you have **Node.js v24.22.1** (or v22.23.4) or higher installed on your
 machine.
 
 1. To clone this example run the following command:

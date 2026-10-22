@@ -6,7 +6,7 @@ Node.js Express service with OpenTelemetry auto-instrumentation for distributed 
 
 - Google Cloud CLI (`gcloud`)
 - Docker
-- Node.js 18+
+- Node.js 24.22.1+ (or 22.23.4+)
 
 ## Quick Start
 

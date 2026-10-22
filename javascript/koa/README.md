@@ -1,12 +1,12 @@
 # Auto instrumenting Koa application with OpenTelemetry
 
 This example demonstrates how to auto-instrument a [Koa](https://koajs.com/) application with
-OpenTelemetry. Make sure you have **Node.js v18** or higher installed on your
+OpenTelemetry. Make sure you have **Node.js v24.22.1** (or v22.23.4) or higher installed on your
 machine.
 
 ## Prerequisites
 
-- Node.js v18 or higher
+- Node.js v24.22.1 (or v22.23.4) or higher
 - Last9 account
 - Koa application
 

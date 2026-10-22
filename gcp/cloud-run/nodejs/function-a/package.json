@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "functions-framework --target=startFlow --port=8080",
-    "deploy": "gcloud functions deploy startFlow --gen2 --runtime=nodejs20 --region=asia-south1 --source=. --entry-point=startFlow --trigger-http --allow-unauthenticated"
+    "deploy": "gcloud functions deploy startFlow --gen2 --runtime=nodejs24 --region=asia-south1 --source=. --entry-point=startFlow --trigger-http --allow-unauthenticated"
   },
   "dependencies": {
     "axios": "^1.6.2",
@@ -25,6 +25,6 @@
     "@opentelemetry/semantic-conventions": "^1.27.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
   }
 }

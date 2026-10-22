@@ -1,7 +1,7 @@
 # Auto instrumenting Express application with OpenTelemetry
 
 This example demonstrates how to auto-instrument an Express application with
-OpenTelemetry. This example is tested with **Node.js v18**, **Node.js v20**, **Node.jsv22**.
+OpenTelemetry. Make sure you have **Node.js v24.22.1** (or v22.23.4) or higher.
 
 **OpenTelemetry package versions used in this example:**
 
@@ -99,6 +99,50 @@ endpoints are:
    dashboard to see the traces in action.
 
 ![Traces](./traces.png)
+
+## Database and HTTP client spans
+
+`src/db-examples.js` is a second server that wraps PostgreSQL, MySQL, MongoDB,
+Redis and axios calls in manual spans on top of auto-instrumentation: error
+recording, span attributes, cache-aside, rate limiting, parallel HTTP calls and
+a multi-step order workflow. Each route returns its `traceId`.
+
+```bash
+# Connection settings default to localhost; override as needed
+export PG_HOST=localhost PG_DATABASE=testdb PG_USER=postgres PG_PASSWORD=password
+export MYSQL_HOST=localhost MYSQL_DATABASE=testdb
+export MONGO_URI=mongodb://localhost:27017 MONGO_DB=testdb
+export REDIS_HOST=localhost REDIS_PORT=6379
+npm run start:db-examples
+```
+
+The server starts even when a database is unreachable; its routes return 500
+and record the error on the span. The endpoints are listed on startup.
+`npm test` checks that contract against unreachable databases.
+
+## Tail-based sampling with the Collector
+
+Head-based sampling is set on the SDK with environment variables, for example
+`OTEL_TRACES_SAMPLER=parentbased_traceidratio` and `OTEL_TRACES_SAMPLER_ARG=0.1`.
+It decides at span creation, so it cannot keep errors or slow traces
+selectively.
+
+`otel-collector-config.yaml` decides after a trace completes and keeps 100% of
+traces with errors, 100% of traces slower than 2s, and 10% of the rest:
+
+```bash
+export LAST9_OTLP_ENDPOINT=https://<your-last9-endpoint>
+export LAST9_AUTH_HEADER="Basic <your-token>"
+docker run --rm -p 4317:4317 -p 4318:4318 \
+  -e LAST9_OTLP_ENDPOINT -e LAST9_AUTH_HEADER \
+  -v "$PWD/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml" \
+  otel/opentelemetry-collector-contrib:0.163.2
+
+# Point the app at the Collector
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_TRACES_SAMPLER=always_on
+npm start
+```
 
 ## Optional: Using OpenTelemetry Resource Detectors
 

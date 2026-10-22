@@ -1,8 +1,12 @@
+// db-examples.js
+// Manual spans around PostgreSQL, MySQL, MongoDB, Redis and HTTP client calls,
+// layered on top of the auto-instrumentation set up in ./instrumentation.
+require('./instrumentation');
+
+require('dotenv').config();
+
 const express = require('express');
 const opentelemetry = require('@opentelemetry/api');
-
-// Database client imports (install separately)
-// npm install pg mysql2 mongodb redis axios
 
 const { Pool } = require('pg');
 const mysql = require('mysql2/promise');
@@ -17,11 +21,21 @@ app.use(express.json());
 
 // Helper function to get current trace ID
 function getTraceId() {
-  const span = opentelemetry.trace.getSpan(opentelemetry.context.active());
+  const span = opentelemetry.trace.getActiveSpan();
   if (span) {
     return span.spanContext().traceId;
   }
   return null;
+}
+
+// Roll back without masking the original error: a failed ROLLBACK (e.g. the
+// connection dropped mid-transaction) is logged instead of thrown.
+async function rollback(run) {
+  try {
+    await run();
+  } catch (err) {
+    console.error('Rollback failed:', err.message);
+  }
 }
 
 // ============================================
@@ -41,7 +55,7 @@ const pgPool = new Pool({
 
 // 1. PostgreSQL - Simple SELECT query
 app.get('/api/pg/users', async (req, res) => {
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('pg.get_all_users');
 
   try {
@@ -70,12 +84,13 @@ app.get('/api/pg/users', async (req, res) => {
 // 2. PostgreSQL - Parameterized query with transaction
 app.post('/api/pg/users', async (req, res) => {
   const { name, email } = req.body;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('pg.create_user');
 
-  const client = await pgPool.connect();
-
+  // Acquire inside the try: an Express 4 handler that rejects crashes the process.
+  let client;
   try {
+    client = await pgPool.connect();
     await client.query('BEGIN');
 
     const insertQuery = 'INSERT INTO users(name, email, created_at) VALUES($1, $2, NOW()) RETURNING id, name, email';
@@ -96,7 +111,7 @@ app.post('/api/pg/users', async (req, res) => {
       traceId: getTraceId(),
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) await rollback(() => client.query('ROLLBACK'));
     span.recordException(error);
     span.setStatus({
       code: opentelemetry.SpanStatusCode.ERROR,
@@ -104,7 +119,7 @@ app.post('/api/pg/users', async (req, res) => {
     });
     res.status(500).json({ error: error.message, traceId: getTraceId() });
   } finally {
-    client.release();
+    client?.release();
     span.end();
   }
 });
@@ -127,7 +142,7 @@ const mysqlPool = mysql.createPool({
 // 3. MySQL - SELECT with JOIN
 app.get('/api/mysql/orders/:userId', async (req, res) => {
   const { userId } = req.params;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('mysql.get_user_orders');
   span.setAttribute('user.id', userId);
 
@@ -166,13 +181,14 @@ app.get('/api/mysql/orders/:userId', async (req, res) => {
 // 4. MySQL - Batch INSERT
 app.post('/api/mysql/products/bulk', async (req, res) => {
   const { products } = req.body; // Array of {name, price, stock}
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('mysql.bulk_insert_products');
-  span.setAttribute('products.count', products.length);
 
-  const connection = await mysqlPool.getConnection();
-
+  let connection;
   try {
+    span.setAttribute('products.count', products.length);
+
+    connection = await mysqlPool.getConnection();
     await connection.beginTransaction();
 
     const insertQuery = 'INSERT INTO products (name, price, stock, created_at) VALUES ?';
@@ -190,7 +206,7 @@ app.post('/api/mysql/products/bulk', async (req, res) => {
       traceId: getTraceId(),
     });
   } catch (error) {
-    await connection.rollback();
+    if (connection) await rollback(() => connection.rollback());
     span.recordException(error);
     span.setStatus({
       code: opentelemetry.SpanStatusCode.ERROR,
@@ -198,7 +214,7 @@ app.post('/api/mysql/products/bulk', async (req, res) => {
     });
     res.status(500).json({ error: error.message, traceId: getTraceId() });
   } finally {
-    connection.release();
+    connection?.release();
     span.end();
   }
 });
@@ -224,7 +240,7 @@ async function connectMongo() {
 // 5. MongoDB - Find with filter and projection
 app.get('/api/mongo/products', async (req, res) => {
   const { category, minPrice, maxPrice } = req.query;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('mongo.find_products');
 
   try {
@@ -270,7 +286,7 @@ app.get('/api/mongo/products', async (req, res) => {
 
 // 6. MongoDB - Aggregation pipeline
 app.get('/api/mongo/sales-report', async (req, res) => {
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('mongo.sales_aggregation');
 
   try {
@@ -321,7 +337,7 @@ app.get('/api/mongo/sales-report', async (req, res) => {
 app.put('/api/mongo/cart/:userId', async (req, res) => {
   const { userId } = req.params;
   const { items } = req.body;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('mongo.update_cart');
   span.setAttribute('user.id', userId);
 
@@ -371,22 +387,22 @@ app.put('/api/mongo/cart/:userId', async (req, res) => {
 
 // Redis client
 const redisClient = redis.createClient({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
+  socket: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: Number(process.env.REDIS_PORT) || 6379,
+  },
   password: process.env.REDIS_PASSWORD || undefined,
 });
 
 redisClient.on('error', (err) => console.error('Redis Client Error', err));
 
-// Connect Redis (async)
-(async () => {
-  await redisClient.connect();
-})();
+// Connect Redis in the background; log rather than crash if Redis is not running
+redisClient.connect().catch((err) => console.error('Redis connect failed', err.message));
 
 // 8. Redis - Cache-aside pattern
 app.get('/api/cache/user/:id', async (req, res) => {
   const { id } = req.params;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('cache.get_user');
   span.setAttribute('user.id', id);
 
@@ -449,7 +465,7 @@ app.get('/api/cache/user/:id', async (req, res) => {
 // 9. Redis - Rate limiting
 app.get('/api/rate-limited/resource', async (req, res) => {
   const clientIp = req.ip;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('rate_limit.check');
   span.setAttribute('client.ip', clientIp);
 
@@ -518,7 +534,7 @@ app.get('/api/rate-limited/resource', async (req, res) => {
 // 10. Axios - Multiple parallel API calls
 app.get('/api/external/user-dashboard/:userId', async (req, res) => {
   const { userId } = req.params;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('external.fetch_user_dashboard');
   span.setAttribute('user.id', userId);
 
@@ -566,7 +582,7 @@ app.get('/api/external/user-dashboard/:userId', async (req, res) => {
 // 11. Axios - POST request with retry logic
 app.post('/api/external/notify', async (req, res) => {
   const { message, recipient } = req.body;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('external.send_notification');
   span.setAttribute('recipient', recipient);
 
@@ -638,14 +654,16 @@ app.post('/api/external/notify', async (req, res) => {
 // 12. Complex workflow - Order processing with multiple DB operations
 app.post('/api/orders/process', async (req, res) => {
   const { userId, items } = req.body;
-  const tracer = opentelemetry.trace.getTracer('node10-express-example');
+  const tracer = opentelemetry.trace.getTracer('express-db-examples');
   const span = tracer.startSpan('order.process_complete_workflow');
   span.setAttribute('user.id', userId);
-  span.setAttribute('items.count', items.length);
 
-  const pgClient = await pgPool.connect();
-
+  let pgClient;
+  let mysqlConn;
   try {
+    span.setAttribute('items.count', items.length);
+
+    pgClient = await pgPool.connect();
     await pgClient.query('BEGIN');
 
     // 1. Check user exists (PostgreSQL)
@@ -677,7 +695,7 @@ app.post('/api/orders/process', async (req, res) => {
     const orderId = orderResult.rows[0].id;
 
     // 4. Update inventory (MySQL)
-    const mysqlConn = await mysqlPool.getConnection();
+    mysqlConn = await mysqlPool.getConnection();
     await mysqlConn.beginTransaction();
 
     for (const item of items) {
@@ -689,6 +707,7 @@ app.post('/api/orders/process', async (req, res) => {
 
     await mysqlConn.commit();
     mysqlConn.release();
+    mysqlConn = undefined;
 
     // 5. Store order details in MongoDB
     const db = await connectMongo();
@@ -731,7 +750,8 @@ app.post('/api/orders/process', async (req, res) => {
       traceId: getTraceId(),
     });
   } catch (error) {
-    await pgClient.query('ROLLBACK');
+    if (mysqlConn) await rollback(() => mysqlConn.rollback());
+    if (pgClient) await rollback(() => pgClient.query('ROLLBACK'));
 
     span.setAttribute('order.status', 'failed');
     span.recordException(error);
@@ -745,7 +765,8 @@ app.post('/api/orders/process', async (req, res) => {
       traceId: getTraceId()
     });
   } finally {
-    pgClient.release();
+    mysqlConn?.release();
+    pgClient?.release();
     span.end();
   }
 });
@@ -762,7 +783,7 @@ app.get('/health', (req, res) => {
 // Start server
 app.listen(port, () => {
   console.log('========================================');
-  console.log(`Node 14 Database Examples Server`);
+  console.log(`Express Database Examples Server`);
   console.log('========================================');
   console.log(`Server running on http://localhost:${port}`);
   console.log('');
