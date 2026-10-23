@@ -32,6 +32,8 @@ npm run dev
 # 3. Open http://localhost:3001 and click the buttons
 ```
 
+The status line shows the result of `L9RUM.sendTestEvent()`, so you know telemetry reaches Last9 before you click anything.
+
 If the browser loads a cached SDK older than v2.14.0, the status line asks you to hard-refresh and the span buttons stay disabled.
 
 ## Configuration

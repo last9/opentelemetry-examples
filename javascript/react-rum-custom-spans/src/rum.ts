@@ -16,6 +16,11 @@ export const rumReady: Promise<void> = window.L9RUM.init({
 // of the stable script; a hard refresh loads the current one.
 export const customSpansSupported = typeof window.L9RUM.recordSpan === "function";
 
+// The status line. sendTestEvent() confirms that telemetry reaches Last9 before you click anything.
 export const rumStatus: Promise<string> = customSpansSupported
-  ? rumReady.then(() => "SDK ready")
+  ? rumReady
+      .then(() => window.L9RUM.sendTestEvent())
+      .then((r) =>
+        r.ok ? `SDK ready (test event ok, status ${r.status})` : `Test event failed: status ${r.status}, error ${r.error}`,
+      )
   : Promise.resolve("This app needs Last9 RUM SDK v2.14.0 or later. Hard-refresh to load the current stable SDK.");
