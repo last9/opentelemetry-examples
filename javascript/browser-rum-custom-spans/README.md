@@ -1,7 +1,7 @@
 # Last9 RUM Custom Spans (Browser)
 
 A no-build browser page showing how to create custom OpenTelemetry spans with the
-[Last9 browser RUM SDK](https://www.npmjs.com/package/@last9/rum) (`@last9/rum`, v2).
+Last9 browser RUM SDK (v2).
 The SDK is loaded from the Last9 CDN and `@opentelemetry/api` from jsDelivr, so there is nothing to install.
 
 Three buttons create spans:
@@ -10,12 +10,12 @@ Three buttons create spans:
 - **Parent span + fetch** - `demo.checkout` with a nested `demo.checkout.validate` child and a `fetch` call. The SDK records the `fetch` as its own network span (`GET /delay/?`) under the page view trace, not under `demo.checkout`.
 - **Error span** - `demo.error`, with a recorded exception and ERROR status.
 
-The SDK registers its tracer provider globally, and any `@opentelemetry/api` 1.x copy finds it through
+The SDK registers its tracer provider globally, and an `@opentelemetry/api` copy at the same version (1.9.0) finds it through
 `Symbol.for("opentelemetry.js.api.1")`. Spans from `trace.getTracer(...)` therefore go out through the SDK's exporter.
 
 ## Prerequisites
 
-- A Last9 RUM client token from the [RUM integration page](https://app.last9.io/integrations?integration=RUM)
+- Your org's RUM endpoint and a RUM client token: copy both from the [RUM integration page](https://app.last9.io/integrations?integration=RUM) in Last9
 - The token's allowed origins must include `http://localhost:3000`
 - Node.js (only for `npx serve`; any static file server works)
 
@@ -39,7 +39,7 @@ npx serve -l 3000 .
 
 | Key | Description | Example |
 |-----|-------------|---------|
-| `baseUrl` | Last9 RUM OTLP endpoint | `https://otlp-ext-<region>.last9.io/v1/otlp/organizations/<your-org-slug>` |
+| `baseUrl` | Your org's RUM endpoint, copied from the RUM integration page | `<your-org-rum-endpoint>` |
 | `clientToken` | RUM client token | `<your-rum-client-token>` |
 | `serviceName` | Service name shown in Last9 | `browser-rum-custom-spans` |
 | `deploymentEnvironment` | Environment label | `local` |
@@ -60,7 +60,7 @@ snippet from the Last9 RUM integration page uses `defer` and a `load` listener:
 <script>
   window.addEventListener('load', () => {
     L9RUM.init({
-      baseUrl: 'https://otlp-ext-<region>.last9.io/v1/otlp/organizations/<your-org-slug>',
+      baseUrl: '<your-org-rum-endpoint>',
       headers: { clientToken: '<your-rum-client-token>' },
       resourceAttributes: { serviceName: 'your-app-name', deploymentEnvironment: 'production' }
     });
@@ -70,24 +70,30 @@ snippet from the Last9 RUM integration page uses `defer` and a `load` listener:
 
 Deferred and module scripts run in document order, so keep the SDK `<script>` tag first.
 
-## Using npm instead of CDN
+## Using a bundler (React, Vite, etc.)
+
+> **Caution:** Pin `@opentelemetry/api` to `1.9.0`, the version the SDK bundles. A newer minor (for example 1.10.0) silently
+> gets a no-op tracer, so custom spans are dropped with no error, even though exports still return 200.
+
+`@last9/rum` is not published on npm. Keep loading the SDK from the CDN script tag in your `index.html`
+(it sets `window.L9RUM`), and install `@opentelemetry/api` yourself to create custom spans:
 
 ```bash
-npm i @last9/rum @opentelemetry/api
+npm i @opentelemetry/api@1.9.0 --save-exact
 ```
 
-Install `@opentelemetry/api` yourself rather than relying on it as a transitive dependency, because pnpm and
-Yarn PnP block access to undeclared dependencies.
+Install it directly rather than relying on a transitive dependency, because pnpm and Yarn PnP block access
+to undeclared dependencies.
 
 ```js
-import L9RUM from "@last9/rum";
-import { trace, SpanStatusCode } from "@opentelemetry/api";
+import { trace } from "@opentelemetry/api";
 
-await L9RUM.init({ /* same options as above */ });
+await window.L9RUM.init({ /* same options as above */ });
 
 const tracer = trace.getTracer("my-app");
 const span = tracer.startSpan("my.operation");
 span.end();
 ```
 
-Spans created before `L9RUM.init()` resolves are no-ops, so `await` it first.
+Spans created before `L9RUM.init()` resolves are no-ops, so `await` it first. See
+[`../react-rum-custom-spans`](../react-rum-custom-spans) for a complete Vite + React example.
