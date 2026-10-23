@@ -19,12 +19,12 @@ COPY *.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server .
 
 # Production stage
-FROM alpine:3.19
+FROM alpine:3.22
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS
-RUN apk add --no-cache ca-certificates
+# Install ca-certificates for HTTPS; --upgrade pulls the CA bundle newer than the base image ships
+RUN apk add --no-cache --upgrade ca-certificates ca-certificates-bundle
 
 # Copy the binary
 COPY --from=builder /app/server .
