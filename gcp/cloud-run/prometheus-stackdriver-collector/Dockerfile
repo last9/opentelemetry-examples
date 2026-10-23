@@ -13,7 +13,8 @@ WORKDIR /build/stackdriver_exporter
 RUN go build -o stackdriver_exporter
 
 # Main image
-FROM prom/prometheus:v3.0.1
+# v3.15.1+ ships CA certificates that distrust the compromised eMudhra intermediates
+FROM prom/prometheus:v3.15.1
 
 # Switch to root to install files
 USER root
