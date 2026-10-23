@@ -1,11 +1,13 @@
-FROM eclipse-temurin:17-jre-jammy AS java
+FROM eclipse-temurin:17-jre-alpine AS java
 FROM otel/opentelemetry-collector-contrib:0.144.0 AS otelcol
 
-# Use a Debian slim base so the Temurin JRE (Ubuntu glibc) links correctly.
-# The distroless otelcol base lacks some runtime libraries the JRE needs.
-FROM debian:12-slim
+# Alpine base with the musl Temurin JRE: Debian 12's ca-certificates still
+# trusts the roots behind the compromised eMudhra intermediates, and the
+# distroless otelcol base lacks a shell and the libraries the JRE needs.
+FROM alpine:3.22
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+# --upgrade pulls the CA bundle newer than the base image ships
+RUN apk add --no-cache --upgrade ca-certificates ca-certificates-bundle
 
 COPY --from=otelcol /otelcol-contrib /otelcol-contrib
 COPY --from=java /opt/java/openjdk /opt/java/openjdk
