@@ -10,8 +10,8 @@ WORKDIR /src/l9_otel_examples/go/gorm
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/app .
 
-FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+FROM alpine:3.22
+RUN apk add --no-cache --upgrade ca-certificates ca-certificates-bundle
 COPY --from=build /out/app /usr/local/bin/app
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/app"]

@@ -17,10 +17,10 @@ COPY . .
 RUN CGO_ENABLED=1 GOOS=linux go build -o /app/server .
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.22
 
-# Install ca-certificates and SQLite runtime
-RUN apk --no-cache add ca-certificates
+# --upgrade pulls the CA bundle newer than the base image ships
+RUN apk add --no-cache --upgrade ca-certificates ca-certificates-bundle
 
 WORKDIR /app
 
