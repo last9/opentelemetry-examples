@@ -1,17 +1,15 @@
 # Last9 RUM Custom Spans (Browser)
 
-A no-build browser page showing how to create custom OpenTelemetry spans with the
-Last9 browser RUM SDK (v2).
-The SDK is loaded from the Last9 CDN and `@opentelemetry/api` from jsDelivr, so there is nothing to install.
+A no-build browser page showing how to create custom spans with the Last9 browser RUM SDK (v2.14.0+).
+The SDK is loaded from the Last9 CDN, so there is nothing to install and no `@opentelemetry/api` dependency.
 
-Three buttons create spans:
+Three buttons:
 
-- **Simple span** - `demo.simple`, with attributes and a ~200ms duration.
-- **Parent span + fetch** - `demo.checkout` with a nested `demo.checkout.validate` child and a `fetch` call. The SDK records the `fetch` as its own network span (`GET /delay/?`) under the page view trace, not under `demo.checkout`.
-- **Error span** - `demo.error`, with a recorded exception and ERROR status.
+- **Recorded span** - `L9RUM.recordSpan("demo.recorded", { durationMs: 200, attributes })`: one finished span.
+- **Timed span + fetch** - `L9RUM.startSpan("demo.checkout")` ... `L9RUM.endSpan(handle)` around a `fetch` call. The SDK records the `fetch` as its own network span (`GET /delay/?`) under the same page view, next to `demo.checkout`.
+- **Handled error** - `L9RUM.captureError(error, attributes)`: a handled error in Error Tracking.
 
-The SDK registers its tracer provider globally, and an `@opentelemetry/api` copy at the same version (1.9.0) finds it through
-`Symbol.for("opentelemetry.js.api.1")`. Spans from `trace.getTracer(...)` therefore go out through the SDK's exporter.
+Custom spans are children of the current page view and carry `view.id` and `l9.span.category=custom`.
 
 ## Prerequisites
 
@@ -33,6 +31,8 @@ npx serve -l 3000 .
 # 3. Open http://localhost:3000 and click the buttons
 ```
 
+The status line shows the result of `L9RUM.sendTestEvent()`, so you know telemetry reaches Last9 before you click anything.
+
 ## Configuration
 
 `config.js` sets `window.L9_CONFIG`:
@@ -48,52 +48,41 @@ npx serve -l 3000 .
 
 1. Open **Traces** in Last9.
 2. Filter by service `browser-rum-custom-spans`.
-3. Look for the span names `demo.simple`, `demo.checkout` (with child `demo.checkout.validate`), and `demo.error`.
+3. Look for the span names `demo.recorded` and `demo.checkout`, and the `View` span they belong to.
 
-## Standard CDN setup
+## Custom span API
 
-This example calls `L9RUM.init()` inside a module script so it can run before creating spans. The standard
-snippet from the Last9 RUM integration page uses `defer` and a `load` listener:
+```js
+// A finished span: ends now, started 250 ms ago
+L9RUM.recordSpan("checkout.validate", { durationMs: 250, attributes: { items: 3 } });
 
-```html
-<script defer src="https://cdn.last9.io/rum-sdk/builds/stable/v2/l9.umd.js"></script>
-<script>
-  window.addEventListener('load', () => {
-    L9RUM.init({
-      baseUrl: '<your-org-rum-endpoint>',
-      headers: { clientToken: '<your-rum-client-token>' },
-      resourceAttributes: { serviceName: 'your-app-name', deploymentEnvironment: 'production' }
-    });
-  });
-</script>
+// Or with explicit epoch-ms times
+L9RUM.recordSpan("sync", { startTimeMs: t0, endTimeMs: t1, kind: "client" });
+
+// A span you end yourself
+const handle = L9RUM.startSpan("upload", { attributes: { "file.type": "png" } });
+// ... later
+L9RUM.endSpan(handle);
 ```
 
-Deferred and module scripts run in document order, so keep the SDK `<script>` tag first.
+- Call these after `await L9RUM.init(...)`. Before init, or in a session that is not sampled, they log a warning and return `false` / `null`.
+- `kind` is `"internal"` (default), `"client"`, `"server"`, `"producer"` or `"consumer"`.
+- Attributes keep strings, booleans, finite numbers and string arrays; other values are dropped.
+- A span not ended within 5 minutes, or still open on page exit, is ended with ERROR status.
+
+See [Custom Spans](https://last9.io/docs/real-user-monitoring/web/#custom-spans) in the Web RUM SDK docs.
 
 ## Using a bundler (React, Vite, etc.)
 
-> **Caution:** Pin `@opentelemetry/api` to `1.9.0`, the version the SDK bundles. A newer minor (for example 1.10.0) silently
-> gets a no-op tracer, so custom spans are dropped with no error, even though exports still return 200.
+`@last9/rum` is not published on npm. Load the SDK from the CDN script tag in your `index.html` (it sets
+`window.L9RUM`) and call the same methods. No `@opentelemetry/api` install is needed. See
+[`../react-rum-custom-spans`](../react-rum-custom-spans) for a complete Vite + React + TypeScript example.
 
-`@last9/rum` is not published on npm. Keep loading the SDK from the CDN script tag in your `index.html`
-(it sets `window.L9RUM`), and install `@opentelemetry/api` yourself to create custom spans:
+> **Do not create spans with your own `@opentelemetry/api`.** The SDK bundles `@opentelemetry/api` 1.9.0, and an app
+> copy with a newer minor version (for example 1.10.0) gets a silent no-op tracer: no custom spans, while exports
+> still return 200. Use the `L9RUM` methods instead.
 
-```bash
-npm i @opentelemetry/api@1.9.0 --save-exact
-```
+## Troubleshooting
 
-Install it directly rather than relying on a transitive dependency, because pnpm and Yarn PnP block access
-to undeclared dependencies.
-
-```js
-import { trace } from "@opentelemetry/api";
-
-await window.L9RUM.init({ /* same options as above */ });
-
-const tracer = trace.getTracer("my-app");
-const span = tracer.startSpan("my.operation");
-span.end();
-```
-
-Spans created before `L9RUM.init()` resolves are no-ops, so `await` it first. See
-[`../react-rum-custom-spans`](../react-rum-custom-spans) for a complete Vite + React example.
+- **Status says the SDK is older than v2.14.0**: your browser has an older cached copy of the stable script. Hard-refresh the page.
+- **`recordSpan` returns `false`**: it was called before `init` resolved, the session is not sampled (this example uses `sampleRate: 100`), or the options are invalid (both `durationMs` and `startTimeMs`/`endTimeMs`, a negative duration, or `end < start`).

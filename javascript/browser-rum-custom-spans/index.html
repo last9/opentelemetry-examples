@@ -13,9 +13,9 @@
   <h1>Custom spans with Last9 RUM</h1>
   <p id="status">Initializing SDK...</p>
   <p>
-    <button id="simple">Simple span</button>
-    <button id="checkout">Parent span + fetch</button>
-    <button id="error">Error span</button>
+    <button id="recorded">Recorded span</button>
+    <button id="checkout">Timed span + fetch</button>
+    <button id="error">Handled error</button>
   </p>
   <pre id="log"></pre>
 
@@ -23,9 +23,20 @@
   <script src="https://cdn.last9.io/rum-sdk/builds/stable/v2/l9.umd.js"></script>
   <script src="./config.js"></script>
   <script type="module">
-    import { trace, SpanStatusCode } from "https://cdn.jsdelivr.net/npm/@opentelemetry/api@1.9.0/+esm";
+    const statusEl = document.getElementById("status");
+    const logEl = document.getElementById("log");
+    const log = (msg) => {
+      logEl.textContent += `${new Date().toISOString()} ${msg}\n`;
+    };
 
-    // Await init: it registers the tracer provider asynchronously, and spans created before that are no-ops.
+    // recordSpan/startSpan/endSpan exist from SDK v2.14.0. A browser can keep an older
+    // cached copy of the stable script; a hard refresh loads the current one.
+    if (typeof L9RUM.recordSpan !== "function") {
+      statusEl.textContent = "This page needs Last9 RUM SDK v2.14.0 or later. Hard-refresh to load the current stable SDK.";
+      throw new Error("L9RUM.recordSpan is not available");
+    }
+
+    // Await init: custom span calls made before it resolves return false/null and emit nothing.
     await L9RUM.init({
       baseUrl: L9_CONFIG.baseUrl,
       headers: { clientToken: L9_CONFIG.clientToken },
@@ -38,69 +49,44 @@
       debug: true,
     });
 
-    // The SDK registers its tracer provider globally (provider.register()). Any
-    // @opentelemetry/api 1.x copy finds it via Symbol.for("opentelemetry.js.api.1"),
-    // so these spans use the SDK's exporter with no extra setup.
-    const tracer = trace.getTracer("custom-spans-demo");
+    // Confirms that telemetry reaches Last9 before you click anything.
+    const r = await L9RUM.sendTestEvent();
+    statusEl.textContent = r.ok
+      ? `SDK ready (test event ok, status ${r.status})`
+      : `Test event failed: status ${r.status}, error ${r.error}`;
 
-    const logEl = document.getElementById("log");
-    const log = (msg) => {
-      logEl.textContent += `${new Date().toISOString()} ${msg}\n`;
-    };
-
-    // sendTestEvent() exists from SDK v2.13.0. Older builds skip the connection check.
-    const statusEl = document.getElementById("status");
-    if (typeof L9RUM.sendTestEvent === "function") {
-      const r = await L9RUM.sendTestEvent();
-      statusEl.textContent = r.ok
-        ? `SDK ready (test event ok, status ${r.status})`
-        : `Test event failed: status ${r.status}, error ${r.error}`;
-    } else {
-      statusEl.textContent = "SDK ready (sendTestEvent needs SDK v2.13.0+)";
-    }
-
-    document.getElementById("simple").onclick = () => {
-      const span = tracer.startSpan("demo.simple");
-      span.setAttribute("demo.button", "simple");
-      span.setAttribute("demo.step", 1);
-      log("demo.simple started");
-      setTimeout(() => {
-        span.end();
-        log("demo.simple ended");
-      }, 200);
-    };
-
-    document.getElementById("checkout").onclick = () => {
-      tracer.startActiveSpan("demo.checkout", async (span) => {
-        try {
-          span.setAttribute("demo.button", "checkout");
-          log("demo.checkout started");
-          await tracer.startActiveSpan("demo.checkout.validate", async (child) => {
-            await new Promise((res) => setTimeout(res, 100));
-            child.end();
-            log("demo.checkout.validate ended");
-          });
-          const res = await fetch("https://httpbin.org/delay/1");
-          span.setAttribute("http.status_code", res.status);
-          log(`fetch done: ${res.status}`);
-        } catch (err) {
-          span.recordException(err);
-          span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
-          log(`demo.checkout failed: ${err}`);
-        } finally {
-          span.end();
-          log("demo.checkout ended");
-        }
+    // A finished span: ends now, started durationMs ago.
+    document.getElementById("recorded").onclick = () => {
+      const ok = L9RUM.recordSpan("demo.recorded", {
+        durationMs: 200,
+        attributes: { "demo.button": "recorded", "demo.step": 1 },
       });
+      log(`demo.recorded sent: ${ok}`);
     };
 
+    // A span you end yourself. The fetch is recorded by the SDK as its own network span
+    // (GET /delay/?) under the same page view, next to demo.checkout.
+    document.getElementById("checkout").onclick = async () => {
+      const handle = L9RUM.startSpan("demo.checkout", {
+        kind: "client",
+        attributes: { "demo.button": "checkout" },
+      });
+      log("demo.checkout started");
+      try {
+        const res = await fetch("https://httpbin.org/delay/1");
+        log(`fetch done: ${res.status}`);
+      } catch (err) {
+        L9RUM.captureError(err, { handled: true, operation: "demo.checkout" });
+        log(`fetch failed: ${err}`);
+      } finally {
+        log(`demo.checkout ended: ${L9RUM.endSpan(handle)}`);
+      }
+    };
+
+    // Report a handled error. It shows up in Error Tracking with your attributes.
     document.getElementById("error").onclick = () => {
-      const span = tracer.startSpan("demo.error");
-      const err = new Error("demo failure");
-      span.recordException(err);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: "demo failure" });
-      span.end();
-      log("demo.error ended with ERROR status");
+      L9RUM.captureError(new Error("demo failure"), { handled: true, "demo.button": "error" });
+      log("demo failure captured");
     };
   </script>
 </body>
