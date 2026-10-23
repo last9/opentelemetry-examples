@@ -119,6 +119,7 @@ Getting OpenTelemetry instrumentation right can be tricky. This repository provi
 |-----------|-----------|-------------|
 | `react/` | React | SPA instrumentation |
 | `angular/` | Angular | SPA instrumentation |
+| `javascript/browser-rum-custom-spans/` | Browser (no build) | Custom spans with the Last9 RUM SDK |
 
 ### Mobile RUM (Real User Monitoring)
 
