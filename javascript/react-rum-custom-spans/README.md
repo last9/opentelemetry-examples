@@ -1,20 +1,15 @@
 # Last9 RUM Custom Spans (React + Vite)
 
-A minimal Vite + React + TypeScript app showing how to create custom OpenTelemetry spans with the
-Last9 browser RUM SDK (v2). The SDK is loaded from the Last9 CDN script tag in `index.html` (it sets
-`window.L9RUM`); `@opentelemetry/api` comes from npm.
+A minimal Vite + React + TypeScript app showing how to create custom spans with the Last9 browser RUM SDK
+(v2.14.0+). The SDK is loaded from the Last9 CDN script tag in `index.html` (it sets `window.L9RUM`).
+There is no `@opentelemetry/api` dependency.
 
-> **Caution:** Pin `@opentelemetry/api` to `1.9.0`, the version the SDK bundles. A newer minor (for example 1.10.0) silently
-> gets a no-op tracer, so custom spans are dropped with no error, even though exports still return 200.
+Spans and errors created:
 
-Install it with `npm i @opentelemetry/api@1.9.0 --save-exact`.
-
-Spans created:
-
-- `react.app.mounted` - a component-mount span, guarded with a ref so StrictMode does not create it twice.
-- `react.simple` - attributes and a ~200ms duration.
-- `react.checkout` - a parent span with a nested `react.checkout.validate` child and a `fetch` call.
-- `react.error` - a recorded exception and ERROR status.
+- `react.app.mounted` - `recordSpan` with `startTimeMs` / `endTimeMs` for a component mount, guarded with a ref so StrictMode does not create it twice.
+- `react.recorded` - `recordSpan` with `durationMs: 200` and attributes.
+- `react.checkout` - `startSpan` / `endSpan` around a `fetch` call.
+- A handled error - `captureError(error, attributes)`, shown in Error Tracking.
 
 ## Prerequisites
 
@@ -50,16 +45,25 @@ npm run dev
 
 1. Open **Traces** in Last9.
 2. Filter by service `react-rum-custom-spans`.
-3. Look for `react.app.mounted`, `react.simple`, `react.checkout` (with child `react.checkout.validate`), and `react.error`.
+3. Look for `react.app.mounted`, `react.recorded` and `react.checkout`, under the page's `View` span.
+
+## How to add this to your app
+
+1. Load the SDK in `index.html` before your app bundle:
+
+   ```html
+   <script src="https://cdn.last9.io/rum-sdk/builds/stable/v2/l9.umd.js"></script>
+   ```
+
+2. Copy [`src/l9rum.d.ts`](src/l9rum.d.ts) so TypeScript knows `window.L9RUM`.
+3. Initialize once at module level, as in [`src/rum.ts`](src/rum.ts), and export the promise.
+4. `await rumReady` before you call `recordSpan`, `startSpan` or `endSpan`.
 
 ## Notes
 
-- **Init once, outside components.** `src/rum.ts` calls `window.L9RUM.init()` at module level. Calling it from a
-  `useEffect` would run it twice under `<StrictMode>` in development.
-- **`init()` is async.** Spans started before its promise resolves are dropped, so each handler does
-  `await rumReady` first. Rendering is not blocked on init.
-- **Install `@opentelemetry/api` yourself.** `@last9/rum` is not published on npm, and relying on a transitive
-  copy of `@opentelemetry/api` breaks under pnpm and Yarn PnP. A copy at the same version (1.9.0) finds the SDK's tracer provider
-  through `Symbol.for("opentelemetry.js.api.1")`.
-- **fetch nesting.** The SDK records the `fetch` as its own network span under the page view trace, not under
-  `react.checkout`.
+- **Init once, outside components.** `src/rum.ts` calls `window.L9RUM.init()` at module level, so rendering is not blocked on it.
+- **`init()` is async.** Custom span calls made before its promise resolves return `false` / `null` and emit nothing, so each handler does `await rumReady` first.
+- **Parenting.** Custom spans are children of the current page view and carry `view.id` and `l9.span.category=custom`. The SDK records the `fetch` as its own network span under the same view, not under `react.checkout`.
+- **Do not create spans with your own `@opentelemetry/api`.** An app copy with a newer minor version than the SDK's bundled 1.9.0 gets a silent no-op tracer. Use the `L9RUM` methods instead.
+
+See [Custom Spans](https://last9.io/docs/real-user-monitoring/web/#custom-spans) in the Web RUM SDK docs.
