@@ -11,3 +11,11 @@ export const rumReady: Promise<void> = window.L9RUM.init({
   sampleRate: 100,
   debug: true,
 });
+
+// recordSpan/startSpan/endSpan exist from SDK v2.14.0. A browser can keep an older cached copy
+// of the stable script; a hard refresh loads the current one.
+export const customSpansSupported = typeof window.L9RUM.recordSpan === "function";
+
+export const rumStatus: Promise<string> = customSpansSupported
+  ? rumReady.then(() => "SDK ready")
+  : Promise.resolve("This app needs Last9 RUM SDK v2.14.0 or later. Hard-refresh to load the current stable SDK.");

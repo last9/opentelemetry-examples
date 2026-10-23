@@ -32,6 +32,8 @@ npm run dev
 # 3. Open http://localhost:3001 and click the buttons
 ```
 
+If the browser loads a cached SDK older than v2.14.0, the status line asks you to hard-refresh and the span buttons stay disabled.
+
 ## Configuration
 
 | Variable | Description | Default |
@@ -58,6 +60,7 @@ npm run dev
 2. Copy [`src/l9rum.d.ts`](src/l9rum.d.ts) so TypeScript knows `window.L9RUM`.
 3. Initialize once at module level, as in [`src/rum.ts`](src/rum.ts), and export the promise.
 4. `await rumReady` before you call `recordSpan`, `startSpan` or `endSpan`.
+5. Check `customSpansSupported` (also in `src/rum.ts`) before calling them, so a cached pre-2.14.0 SDK shows a recovery message instead of throwing.
 
 ## Notes
 

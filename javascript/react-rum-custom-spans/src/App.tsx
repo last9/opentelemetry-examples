@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 
-import { rumReady } from "./rum";
+import { customSpansSupported, rumReady, rumStatus } from "./rum";
 
 export default function App() {
+  const [status, setStatus] = useState("Initializing SDK...");
   const [lines, setLines] = useState<string[]>([]);
   const log = (msg: string) => setLines((l) => [...l, `${new Date().toISOString()} ${msg}`]);
+
+  useEffect(() => {
+    rumStatus.then(setStatus);
+  }, []);
 
   // React-idiomatic pattern: a span for a component mount. The ref guard stops StrictMode's
   // double-invoked effect from creating two spans.
   const mounted = useRef(false);
   useEffect(() => {
-    if (mounted.current) return;
+    if (mounted.current || !customSpansSupported) return;
     mounted.current = true;
     const start = Date.now();
     rumReady.then(() => {
@@ -59,9 +64,14 @@ export default function App() {
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", maxWidth: 640, margin: "2rem auto" }}>
       <h1>Custom spans with Last9 RUM (React)</h1>
+      <p>{status}</p>
       <p>
-        <button onClick={recorded}>Recorded span</button>{" "}
-        <button onClick={checkout}>Timed span + fetch</button>{" "}
+        <button onClick={recorded} disabled={!customSpansSupported}>
+          Recorded span
+        </button>{" "}
+        <button onClick={checkout} disabled={!customSpansSupported}>
+          Timed span + fetch
+        </button>{" "}
         <button onClick={error}>Handled error</button>
       </p>
       <pre style={{ background: "#f4f4f4", padding: 12, minHeight: 128, overflow: "auto" }}>
