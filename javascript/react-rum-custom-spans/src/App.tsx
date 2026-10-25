@@ -1,83 +1,78 @@
-import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { useEffect, useRef, useState } from "react";
 
-import { rumReady } from "./rum";
-
-// The SDK registers its tracer provider globally; any @opentelemetry/api 1.x copy finds it via
-// Symbol.for("opentelemetry.js.api.1"), so these spans go out through the SDK's exporter.
-const tracer = trace.getTracer("react-custom-spans-demo");
-
-const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+import { customSpansSupported, rumReady, rumStatus } from "./rum";
 
 export default function App() {
+  const [status, setStatus] = useState("Initializing SDK...");
   const [lines, setLines] = useState<string[]>([]);
   const log = (msg: string) => setLines((l) => [...l, `${new Date().toISOString()} ${msg}`]);
+
+  useEffect(() => {
+    rumStatus.then(setStatus);
+  }, []);
 
   // React-idiomatic pattern: a span for a component mount. The ref guard stops StrictMode's
   // double-invoked effect from creating two spans.
   const mounted = useRef(false);
   useEffect(() => {
-    if (mounted.current) return;
+    if (mounted.current || !customSpansSupported) return;
     mounted.current = true;
+    const start = Date.now();
     rumReady.then(() => {
-      const span = tracer.startSpan("react.app.mounted");
-      span.end();
-      setLines((l) => [...l, "react.app.mounted ended"]);
+      const ok = window.L9RUM.recordSpan("react.app.mounted", { startTimeMs: start, endTimeMs: Date.now() });
+      setLines((l) => [...l, `react.app.mounted sent: ${ok}`]);
     });
   }, []);
 
-  const simple = async () => {
+  // A finished span: ends now, started durationMs ago.
+  const recorded = async () => {
     await rumReady;
-    const span = tracer.startSpan("react.simple");
-    span.setAttribute("demo.button", "simple");
-    span.setAttribute("demo.step", 1);
-    log("react.simple started");
-    await sleep(200);
-    span.end();
-    log("react.simple ended");
+    const ok = window.L9RUM.recordSpan("react.recorded", {
+      durationMs: 200,
+      attributes: { "demo.button": "recorded", "demo.step": 1 },
+    });
+    log(`react.recorded sent: ${ok}`);
   };
 
+  // A span you end yourself. The SDK records the fetch as its own network span under the same
+  // page view, next to react.checkout.
   const checkout = async () => {
     await rumReady;
-    await tracer.startActiveSpan("react.checkout", async (span) => {
-      try {
-        span.setAttribute("demo.button", "checkout");
-        log("react.checkout started");
-        await tracer.startActiveSpan("react.checkout.validate", async (child) => {
-          await sleep(100);
-          child.end();
-          log("react.checkout.validate ended");
-        });
-        const res = await fetch("https://httpbin.org/delay/1");
-        span.setAttribute("http.status_code", res.status);
-        log(`fetch done: ${res.status}`);
-      } catch (err) {
-        span.recordException(err as Error);
-        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
-        log(`react.checkout failed: ${err}`);
-      } finally {
-        span.end();
-        log("react.checkout ended");
-      }
+    const handle = window.L9RUM.startSpan("react.checkout", {
+      kind: "client",
+      attributes: { "demo.button": "checkout" },
     });
+    log("react.checkout started");
+    try {
+      const res = await fetch("https://httpbin.org/delay/1");
+      log(`fetch done: ${res.status}`);
+    } catch (err) {
+      window.L9RUM.captureError(err, { handled: true, operation: "react.checkout" });
+      log(`fetch failed: ${err}`);
+    } finally {
+      log(`react.checkout ended: ${window.L9RUM.endSpan(handle)}`);
+    }
   };
 
+  // Report a handled error. It shows up in Error Tracking with your attributes.
   const error = async () => {
     await rumReady;
-    const span = tracer.startSpan("react.error");
-    span.recordException(new Error("demo failure"));
-    span.setStatus({ code: SpanStatusCode.ERROR, message: "demo failure" });
-    span.end();
-    log("react.error ended with ERROR status");
+    window.L9RUM.captureError(new Error("demo failure"), { handled: true, "demo.button": "error" });
+    log("demo failure captured");
   };
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", maxWidth: 640, margin: "2rem auto" }}>
       <h1>Custom spans with Last9 RUM (React)</h1>
+      <p>{status}</p>
       <p>
-        <button onClick={simple}>Simple span</button>{" "}
-        <button onClick={checkout}>Parent span + fetch</button>{" "}
-        <button onClick={error}>Error span</button>
+        <button onClick={recorded} disabled={!customSpansSupported}>
+          Recorded span
+        </button>{" "}
+        <button onClick={checkout} disabled={!customSpansSupported}>
+          Timed span + fetch
+        </button>{" "}
+        <button onClick={error}>Handled error</button>
       </p>
       <pre style={{ background: "#f4f4f4", padding: 12, minHeight: 128, overflow: "auto" }}>
         {lines.join("\n")}
