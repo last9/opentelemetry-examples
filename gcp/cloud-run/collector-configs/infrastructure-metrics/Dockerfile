@@ -1,6 +1,7 @@
 # Use official OTEL Collector Contrib (includes googlecloudmonitoring receiver)
-# Version 0.142.0 includes monitoring filter support (PR #37264)
-FROM otel/opentelemetry-collector-contrib:0.142.0
+# metric_descriptor_filter needs 0.142.0+ (PR #37264); 0.163.2+ ships Go and CA
+# bundle updates that distrust the compromised eMudhra intermediates
+FROM otel/opentelemetry-collector-contrib:0.163.2
 
 # Copy configuration
 COPY collector-config.yaml /etc/otelcol-contrib/config.yaml

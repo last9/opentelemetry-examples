@@ -5,6 +5,7 @@ RUN go mod download
 COPY main.go .
 RUN CGO_ENABLED=0 go build -o generator .
 
-FROM alpine:3.20
+FROM alpine:3.22
+RUN apk add --no-cache --upgrade ca-certificates ca-certificates-bundle
 COPY --from=builder /app/generator /generator
 ENTRYPOINT ["/generator"]

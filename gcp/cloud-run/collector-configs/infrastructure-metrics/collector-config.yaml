@@ -39,7 +39,7 @@ processors:
 
 exporters:
   # Send to Last9 via OTLP (same endpoint as application)
-  otlp/http:
+  otlp_grpc/last9:
     endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
     headers:
       Authorization: ${OTEL_EXPORTER_OTLP_HEADERS}
@@ -71,8 +71,8 @@ service:
     metrics:
       receivers: [googlecloudmonitoring]
       processors: [memory_limiter, resource, batch]
-      exporters: [otlp/http]
-      # exporters: [otlp/http, debug]  # Uncomment for debugging
+      exporters: [otlp_grpc/last9]
+      # exporters: [otlp_grpc/last9, debug]  # Uncomment for debugging
 
   telemetry:
     logs:
